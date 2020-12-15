@@ -104,10 +104,10 @@ func (p *SecretsManagerPlugin) PutX509SVID(ctx context.Context, req *svidstore.P
 		return nil, status.Errorf(codes.Internal, err.Error())
 	}
 
-	data := svidstore.ParseSelectors(req.Selectors, "aws")
+	data := svidstore.ParseSelectors(req.Selectors)
 
 	// ARN or name can be used as ID
-	name := data["name"]
+	name := data["secretname"]
 	secretID := name
 	if secretID == "" {
 		secretID = data["arn"]
@@ -131,7 +131,7 @@ func (p *SecretsManagerPlugin) PutX509SVID(ctx context.Context, req *svidstore.P
 			if err != nil {
 				return nil, err
 			}
-			p.log.With("version_id", aws.StringValue(resp.VersionId)).With("aws_arn", aws.StringValue(resp.ARN)).Debug("Secret created")
+			p.log.With("version_id", aws.StringValue(resp.VersionId)).With("arn", aws.StringValue(resp.ARN)).With("name", aws.StringValue(resp.Name)).Debug("Secret created")
 
 			return &svidstore.PutX509SVIDResponse{}, nil
 		default:
@@ -158,7 +158,7 @@ func (p *SecretsManagerPlugin) PutX509SVID(ctx context.Context, req *svidstore.P
 		return nil, status.Errorf(codes.Internal, "failed to put secret: %v", err)
 	}
 
-	p.log.With("version_id", aws.StringValue(putResp.VersionId)).With("aws_arn", aws.StringValue(putResp.ARN)).Debug("Secret value updated")
+	p.log.With("version_id", aws.StringValue(putResp.VersionId)).With("arn", aws.StringValue(putResp.ARN)).With("name", aws.StringValue(putResp.Name)).Debug("Secret value updated")
 
 	return &svidstore.PutX509SVIDResponse{}, nil
 }
