@@ -27,7 +27,7 @@ const (
 var (
 	accessKeyID     = os.Getenv("AWS_ACCESS_KEY_ID")
 	secretAccessKey = os.Getenv("AWS_SECRET_ACCESS_KEY")
-	regions         = []string{os.Getenv("AWS_REGION")}
+	regions         = []string{}
 )
 
 func BuiltIn() catalog.Plugin {
