@@ -100,7 +100,7 @@ func (p *store) run(ctx context.Context) error {
 			}
 
 			if _, err := svidStore.PutX509SVID(ctx, req); err != nil {
-				log.Errorf("Failed to put X509SVID to %q: %v", pluginName, err)
+				log.Errorf("Failed to put X509-SVID to %q: %v", pluginName, err)
 			}
 		case <-ctx.Done():
 			return nil
