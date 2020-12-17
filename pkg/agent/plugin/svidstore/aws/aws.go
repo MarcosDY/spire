@@ -111,6 +111,10 @@ func (p *SecretsManagerPlugin) PutX509SVID(ctx context.Context, req *svidstore.P
 		return nil, status.Error(codes.InvalidArgument, "secret name or ARN are required")
 	}
 
+	if len(regions) == 0 {
+		return nil, status.Error(codes.InvalidArgument, "at least one region is required")
+	}
+
 	for _, region := range regions {
 		if err := p.putX509SVID(ctx, secretID, region, data["kmskeyid"], req); err != nil {
 			return nil, err

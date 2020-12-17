@@ -116,7 +116,6 @@ func getPluginName(selectors []*common.Selector) (string, error) {
 			if len(splitted) > 1 && splitted[0] == typeSelector {
 				return splitted[1], nil
 			}
-			return "", errors.New("store type not found in selectors")
 		}
 	}
 	return "", errors.New("store information not found in selectors")
