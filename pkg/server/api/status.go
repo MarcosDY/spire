@@ -37,6 +37,7 @@ func MakeStatus(log logrus.FieldLogger, code codes.Code, msg string, err error) 
 // MakeErr logs and returns an error composed of: msg, err and code.
 // Errors are treated differently according to its gRPC code.
 func MakeErr(log logrus.FieldLogger, code codes.Code, msg string, err error) error {
+	log = log.WithField("status", "error")
 	errMsg := msg
 	switch code {
 	case codes.OK:
@@ -57,7 +58,6 @@ func MakeErr(log logrus.FieldLogger, code codes.Code, msg string, err error) err
 
 	case codes.NotFound:
 		// Do not log nor return the inner error for NotFound errors
-		log.Error(capitalize(msg))
 		return status.Error(code, errMsg)
 
 	default:

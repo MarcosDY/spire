@@ -5,6 +5,7 @@ import (
 
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/spiffe/spire/pkg/common/idutil"
+	"github.com/spiffe/spire/pkg/common/peertracker"
 	"github.com/spiffe/spire/pkg/server/api/rpccontext"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
@@ -22,7 +23,7 @@ func callerContextFromContext(ctx context.Context) (context.Context, error) {
 
 	switch p.Addr.Network() {
 	case "unix", "unixgram", "unixpacket":
-		return rpccontext.WithLocalCaller(ctx), nil
+		return udsCallerContext(ctx)
 	case "tcp", "tcp4", "tcp6":
 		return tcpCallerContextFromPeer(ctx, p)
 	default:
@@ -71,5 +72,16 @@ func tcpCallerContextFromPeer(ctx context.Context, p *peer.Peer) (context.Contex
 
 	ctx = rpccontext.WithCallerID(ctx, id)
 	ctx = rpccontext.WithCallerX509SVID(ctx, x509SVID)
+	return ctx, nil
+}
+
+func udsCallerContext(ctx context.Context) (context.Context, error) {
+	callerInfo, ok := peertracker.CallerFromContext(ctx)
+	if !ok {
+		return ctx, nil
+	}
+
+	ctx = rpccontext.WithLocalCaller(ctx, callerInfo)
+
 	return ctx, nil
 }

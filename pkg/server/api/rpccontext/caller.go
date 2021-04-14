@@ -7,6 +7,7 @@ import (
 
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/spiffe/spire-api-sdk/proto/spire/api/types"
+	"github.com/spiffe/spire/pkg/common/peertracker"
 )
 
 type callerAddrKey struct{}
@@ -86,14 +87,20 @@ func CallerIsAdmin(ctx context.Context) bool {
 }
 
 // WithLocalCaller returns a context whether the caller is tagged as local.
-func WithLocalCaller(ctx context.Context) context.Context {
-	return context.WithValue(ctx, callerLocalTagKey{}, struct{}{})
+func WithLocalCaller(ctx context.Context, info peertracker.CallerInfo) context.Context {
+	return context.WithValue(ctx, callerLocalTagKey{}, info)
 }
 
 // CallerIsLocal returns true if the caller is local.
 func CallerIsLocal(ctx context.Context) bool {
-	_, ok := ctx.Value(callerLocalTagKey{}).(struct{})
+	_, ok := ctx.Value(callerLocalTagKey{}).(peertracker.CallerInfo)
 	return ok
+}
+
+// CallerIsLocal returns true if the caller is local.
+func GetLocalCaller(ctx context.Context) peertracker.CallerInfo {
+	info, _ := ctx.Value(callerLocalTagKey{}).(peertracker.CallerInfo)
+	return info
 }
 
 // WithAgentCaller returns a context whether the caller is tagged as an agent.
