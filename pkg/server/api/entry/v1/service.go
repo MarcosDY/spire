@@ -3,6 +3,8 @@ package entry
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 
 	"github.com/sirupsen/logrus"
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
@@ -241,9 +243,16 @@ func (s *Service) createEntry(ctx context.Context, e *types.Entry, outputMask *t
 func (s *Service) BatchUpdateEntry(ctx context.Context, req *entryv1.BatchUpdateEntryRequest) (*entryv1.BatchUpdateEntryResponse, error) {
 	var results []*entryv1.BatchUpdateEntryResponse_Result
 
+	auditLog := rpccontext.AuditLog(ctx)
+
 	for _, eachEntry := range req.Entries {
-		e := s.updateEntry(ctx, eachEntry, req.InputMask, req.OutputMask)
-		results = append(results, e)
+		r := s.updateEntry(ctx, eachEntry, req.InputMask, req.OutputMask)
+		results = append(results, r)
+
+		// Add audit log
+		auditLog = auditLog.WithStatus(r.Status)
+		auditLog = auditLog.WithFields(fieldsFromEntry(s.td, eachEntry, req.InputMask))
+		auditLog.Send()
 	}
 
 	return &entryv1.BatchUpdateEntryResponse{
@@ -410,26 +419,24 @@ func (s *Service) updateEntry(ctx context.Context, e *types.Entry, inputMask *ty
 			Status: api.MakeStatus(log, codes.InvalidArgument, "failed to convert entry", err),
 		}
 	}
-
-	var resp *datastore.UpdateRegistrationEntryResponse
+	var mask *common.RegistrationEntryMask
 	if inputMask != nil {
-		resp, err = s.ds.UpdateRegistrationEntry(ctx, &datastore.UpdateRegistrationEntryRequest{
-			Entry: convEntry,
-			Mask: &common.RegistrationEntryMask{
-				SpiffeId:      inputMask.SpiffeId,
-				ParentId:      inputMask.ParentId,
-				Ttl:           inputMask.Ttl,
-				FederatesWith: inputMask.FederatesWith,
-				Admin:         inputMask.Admin,
-				Downstream:    inputMask.Downstream,
-				EntryExpiry:   inputMask.ExpiresAt,
-				DnsNames:      inputMask.DnsNames,
-				Selectors:     inputMask.Selectors,
-			}})
-	} else {
-		resp, err = s.ds.UpdateRegistrationEntry(ctx, &datastore.UpdateRegistrationEntryRequest{Entry: convEntry})
+		mask = &common.RegistrationEntryMask{
+			SpiffeId:      inputMask.SpiffeId,
+			ParentId:      inputMask.ParentId,
+			Ttl:           inputMask.Ttl,
+			FederatesWith: inputMask.FederatesWith,
+			Admin:         inputMask.Admin,
+			Downstream:    inputMask.Downstream,
+			EntryExpiry:   inputMask.ExpiresAt,
+			DnsNames:      inputMask.DnsNames,
+			Selectors:     inputMask.Selectors,
+		}
 	}
-
+	resp, err := s.ds.UpdateRegistrationEntry(ctx, &datastore.UpdateRegistrationEntryRequest{
+		Entry: convEntry,
+		Mask:  mask,
+	})
 	if err != nil {
 		return &entryv1.BatchUpdateEntryResponse_Result{
 			Status: api.MakeStatus(log, codes.Internal, "failed to update entry", err),
@@ -449,4 +456,62 @@ func (s *Service) updateEntry(ctx context.Context, e *types.Entry, inputMask *ty
 		Status: api.OK(),
 		Entry:  tEntry,
 	}
+}
+
+func fieldsFromEntry(td spiffeid.TrustDomain, entry *types.Entry, inputMask *types.EntryMask) logrus.Fields {
+	fields := logrus.Fields{
+		"entry_id": entry.Id,
+	}
+
+	if inputMask == nil || inputMask.Admin {
+		fields["admin"] = entry.Admin
+	}
+
+	if inputMask == nil || inputMask.DnsNames {
+		fields["dns_names"] = strings.Join(entry.DnsNames, ",")
+	}
+
+	if inputMask == nil || inputMask.Downstream {
+		fields["downstream"] = entry.Downstream
+	}
+
+	if inputMask == nil || inputMask.ExpiresAt {
+		fields["expires_at"] = entry.ExpiresAt
+	}
+
+	if inputMask == nil || inputMask.FederatesWith {
+		fields["federates_with"] = strings.Join(entry.FederatesWith, ",")
+	}
+
+	if inputMask == nil || inputMask.ParentId {
+		parentID, err := api.TrustDomainMemberIDFromProto(td, entry.ParentId)
+		if err == nil {
+			fields["parent_id"] = parentID.String()
+		}
+	}
+
+	if inputMask == nil || inputMask.RevisionNumber {
+		fields["revision_number"] = entry.RevisionNumber
+	}
+
+	if inputMask == nil || inputMask.Selectors {
+		selectors := []string{}
+		for _, s := range entry.Selectors {
+			selectors = append(selectors, fmt.Sprintf("%s:%s", s.Type, s.Value))
+		}
+		fields["selectors"] = strings.Join(selectors, ",")
+	}
+
+	if inputMask == nil || inputMask.SpiffeId {
+		spiffeID, err := api.TrustDomainWorkloadIDFromProto(td, entry.SpiffeId)
+		if err == nil {
+			fields["spiffe_id"] = spiffeID.String()
+		}
+	}
+
+	if inputMask == nil || inputMask.Ttl {
+		fields["ttl"] = entry.Ttl
+	}
+
+	return fields
 }

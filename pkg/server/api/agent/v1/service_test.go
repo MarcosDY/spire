@@ -19,6 +19,7 @@ import (
 	"github.com/spiffe/spire/pkg/common/x509util"
 	"github.com/spiffe/spire/pkg/server/api"
 	"github.com/spiffe/spire/pkg/server/api/agent/v1"
+	"github.com/spiffe/spire/pkg/server/api/audit"
 	"github.com/spiffe/spire/pkg/server/api/rpccontext"
 	"github.com/spiffe/spire/pkg/server/plugin/datastore"
 	"github.com/spiffe/spire/proto/spire/common"
@@ -289,6 +290,17 @@ func TestListAgents(t *testing.T) {
 					{Id: api.ProtoFromID(node3ID), AttestationType: "t3"},
 				},
 			},
+			expectLogs: []spiretest.LogEntry{
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"status":     "success",
+						"page_size":  "0",
+						"page_token": "",
+					},
+				},
+			},
 		},
 		{
 			name: "no mask",
@@ -326,6 +338,17 @@ func TestListAgents(t *testing.T) {
 					},
 				},
 			},
+			expectLogs: []spiretest.LogEntry{
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"status":     "success",
+						"page_size":  "0",
+						"page_token": "",
+					},
+				},
+			},
 		},
 		{
 			name: "mask all false",
@@ -337,6 +360,17 @@ func TestListAgents(t *testing.T) {
 					{Id: api.ProtoFromID(node1ID)},
 					{Id: api.ProtoFromID(node2ID)},
 					{Id: api.ProtoFromID(node3ID)},
+				},
+			},
+			expectLogs: []spiretest.LogEntry{
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"status":     "success",
+						"page_size":  "0",
+						"page_token": "",
+					},
 				},
 			},
 		},
@@ -353,6 +387,18 @@ func TestListAgents(t *testing.T) {
 					{Id: api.ProtoFromID(node1ID)},
 				},
 			},
+			expectLogs: []spiretest.LogEntry{
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"status":                     "success",
+						"page_size":                  "0",
+						"page_token":                 "",
+						"filter_by_attestation_type": "t1",
+					},
+				},
+			},
 		},
 		{
 			name: "by banned true",
@@ -365,6 +411,18 @@ func TestListAgents(t *testing.T) {
 			expectResp: &agentv1.ListAgentsResponse{
 				Agents: []*types.Agent{
 					{Id: api.ProtoFromID(node3ID)},
+				},
+			},
+			expectLogs: []spiretest.LogEntry{
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"status":           "success",
+						"page_size":        "0",
+						"page_token":       "",
+						"filter_by_banned": "true",
+					},
 				},
 			},
 		},
@@ -380,6 +438,18 @@ func TestListAgents(t *testing.T) {
 				Agents: []*types.Agent{
 					{Id: api.ProtoFromID(node1ID)},
 					{Id: api.ProtoFromID(node2ID)},
+				},
+			},
+			expectLogs: []spiretest.LogEntry{
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"status":           "success",
+						"page_size":        "0",
+						"page_token":       "",
+						"filter_by_banned": "false",
+					},
 				},
 			},
 		},
@@ -402,6 +472,18 @@ func TestListAgents(t *testing.T) {
 					{Id: api.ProtoFromID(node1ID)},
 				},
 			},
+			expectLogs: []spiretest.LogEntry{
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"status":                   "success",
+						"page_size":                "0",
+						"page_token":               "",
+						"filter_by_selector_match": "selectors:{type:\"a\"  value:\"1\"}  selectors:{type:\"b\"  value:\"2\"}",
+					},
+				},
+			},
 		},
 		{
 			name: "with pagination",
@@ -415,6 +497,17 @@ func TestListAgents(t *testing.T) {
 					{Id: api.ProtoFromID(node2ID)},
 				},
 				NextPageToken: "2",
+			},
+			expectLogs: []spiretest.LogEntry{
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"status":     "success",
+						"page_size":  "2",
+						"page_token": "",
+					},
+				},
 			},
 		},
 		{
@@ -436,6 +529,18 @@ func TestListAgents(t *testing.T) {
 						logrus.ErrorKey: "missing selector type",
 					},
 				},
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"status":                   "error",
+						"status_code":              "InvalidArgument",
+						"page_size":                "0",
+						"page_token":               "",
+						"filter_by_selector_match": "selectors:{value:\"1\"}",
+						"status_message":           "failed to parse selectors: missing selector type",
+					},
+				},
 			},
 		},
 		{
@@ -450,6 +555,17 @@ func TestListAgents(t *testing.T) {
 					Message: "Failed to list agents",
 					Data: logrus.Fields{
 						logrus.ErrorKey: "some error",
+					},
+				},
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"status":         "error",
+						"status_code":    "Internal",
+						"page_size":      "0",
+						"page_token":     "",
+						"status_message": "failed to list agents: some error",
 					},
 				},
 			},
@@ -1876,6 +1992,9 @@ func setupServiceTest(t *testing.T) *serviceTest {
 		if test.withCallerID {
 			ctx = rpccontext.WithCallerID(ctx, agentID)
 		}
+		auditLog := audit.New(log)
+		ctx = rpccontext.WithAuditLog(ctx, auditLog)
+
 		return ctx
 	}
 

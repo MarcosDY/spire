@@ -3,6 +3,7 @@ package middleware
 import (
 	"context"
 
+	"github.com/gofrs/uuid"
 	"github.com/sirupsen/logrus"
 	"github.com/spiffe/spire/pkg/common/api/middleware"
 	"github.com/spiffe/spire/pkg/server/api/rpccontext"
@@ -46,6 +47,13 @@ func (m *authorizationMiddleware) Preprocess(ctx context.Context, methodName str
 	if id, ok := rpccontext.CallerID(ctx); ok {
 		fields["caller-id"] = id.String()
 	}
+	// Add request ID to logger, it simplify debugging when calling batch endpints
+	requestID, err := uuid.NewV4()
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to create request ID: %v", err)
+	}
+	fields["request-id"] = requestID.String()
+
 	if len(fields) > 0 {
 		ctx = rpccontext.WithLogger(ctx, rpccontext.Logger(ctx).WithFields(fields))
 	}
