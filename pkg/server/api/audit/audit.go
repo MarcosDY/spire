@@ -14,9 +14,9 @@ import (
 )
 
 type Log struct {
-	requestID string
-	fields    logrus.Fields
-	log       logrus.FieldLogger
+	RequestID string
+	// fields    logrus.Fields
+	log logrus.FieldLogger
 }
 
 func New(ctx context.Context) (Log, error) {
@@ -26,59 +26,70 @@ func New(ctx context.Context) (Log, error) {
 	}
 
 	log := Log{
-		requestID: requestID.String(),
+		RequestID: requestID.String(),
+		log:       rpccontext.Logger(ctx),
 	}
 
+	fields := logrus.Fields{
+		"request-id": requestID.String(),
+		"type":       "audit",
+		"status":     "success",
+	}
 	// Logger contains all caller information for remote callers.
 	// It is done on Preprocess
 	if rpccontext.CallerIsLocal(ctx) {
-		log.fields = fieldsFromContext(ctx)
+		fields = fieldsFromContext(ctx)
 	}
-	log.fields["type"] = "audit"
 
-	log.log = rpccontext.Logger(ctx)
+	log = log.WithFields(fields)
 
 	return log, nil
 }
 
 func (l Log) WithFields(fields logrus.Fields) Log {
-	for key, value := range fields {
-		l.fields[key] = value
-	}
-
+	l.log = l.log.WithFields(fields)
 	return l
 }
 
 func (l Log) WithField(key string, value interface{}) Log {
-	l.log.WithField(key, value)
+	l.log = l.log.WithField(key, value)
 	return l
 }
 
 func (l Log) WithError(err error) Log {
+	fields := logrus.Fields{}
 	statusErr, ok := status.FromError(err)
 	switch {
-	case ok:
-		l.fields["status"] = "success"
+	case !ok:
+		fields["status"] = "success"
 	case statusErr.Code() == codes.OK:
-		l.fields["status"] = "success"
+		fields["status"] = "success"
 	default:
-		l.fields["status"] = "error"
-		l.fields["status-code"] = statusErr.Code()
-		l.fields["status-message"] = statusErr.Message()
+		fields["status"] = "error"
+		fields["status-code"] = statusErr.Code()
+		fields["status-message"] = statusErr.Message()
 	}
 
+	l.log = l.log.WithFields(fields)
 	return l
 }
 
-func (l Log) Send(req ...proto.Message) {
+func (l Log) WithRequestBody(req ...proto.Message) Log {
 	reqBody := ""
 	for _, m := range req {
 		reqBody += fmt.Sprintf("{%s}", proto.CompactTextString(m))
 	}
 
-	l.fields["req-body"] = reqBody
+	if reqBody != "" {
+		return l.WithField("request-body", reqBody)
+	}
 
-	l.log.WithFields(l.fields).Info("audit log")
+	return l
+
+}
+
+func (l Log) Send(req ...proto.Message) {
+	l.log.Info("audit log")
 }
 
 // addCallerFields add all local caller fields
