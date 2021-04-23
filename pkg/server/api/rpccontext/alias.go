@@ -16,13 +16,6 @@ func Logger(ctx context.Context) logrus.FieldLogger {
 	return rpccontext.Logger(ctx)
 }
 
-func AuditLogger(ctx context.Context, requestID string) logrus.FieldLogger {
-	return rpccontext.Logger(ctx).WithFields(logrus.Fields{
-		"type":       "audit",
-		"request-id": requestID,
-	})
-}
-
 func WithCallCounter(ctx context.Context, counter api.CallCounter) context.Context {
 	return rpccontext.WithCallCounter(ctx, counter)
 }

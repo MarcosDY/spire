@@ -19,6 +19,7 @@ import (
 	"github.com/spiffe/spire/pkg/common/telemetry"
 	"github.com/spiffe/spire/pkg/common/x509util"
 	"github.com/spiffe/spire/pkg/server/api"
+	"github.com/spiffe/spire/pkg/server/api/audit"
 	"github.com/spiffe/spire/pkg/server/api/rpccontext"
 	"github.com/spiffe/spire/pkg/server/ca"
 	"github.com/spiffe/spire/pkg/server/catalog"
@@ -402,7 +403,16 @@ func (s *Service) RenewAgent(ctx context.Context, req *agentv1.RenewAgentRequest
 }
 
 // CreateJoinToken returns a new JoinToken for an agent.
-func (s *Service) CreateJoinToken(ctx context.Context, req *agentv1.CreateJoinTokenRequest) (*types.JoinToken, error) {
+func (s *Service) CreateJoinToken(ctx context.Context, req *agentv1.CreateJoinTokenRequest) (_ *types.JoinToken, err error) {
+	defer func() {
+		requestBody := req
+		requestBody.Token = ""
+		fields := logrus.Fields{
+			"request-body": requestBody.String(),
+		}
+		audit.Send(ctx, fields, err, "Update Entry")
+	}()
+
 	log := rpccontext.Logger(ctx)
 
 	if req.Ttl < 1 {
@@ -411,7 +421,6 @@ func (s *Service) CreateJoinToken(ctx context.Context, req *agentv1.CreateJoinTo
 
 	// If provided, check that the AgentID is valid BEFORE creating the join token so we can fail early
 	var agentID spiffeid.ID
-	var err error
 	if req.AgentId != nil {
 		agentID, err = api.TrustDomainWorkloadIDFromProto(s.td, req.AgentId)
 		if err != nil {

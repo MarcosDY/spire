@@ -11,6 +11,7 @@ import (
 	"github.com/spiffe/spire-api-sdk/proto/spire/api/types"
 	"github.com/spiffe/spire/pkg/common/telemetry"
 	"github.com/spiffe/spire/pkg/server/api"
+	"github.com/spiffe/spire/pkg/server/api/audit"
 	"github.com/spiffe/spire/pkg/server/api/rpccontext"
 	"github.com/spiffe/spire/pkg/server/plugin/datastore"
 	"github.com/spiffe/spire/proto/spire/common"
@@ -252,8 +253,17 @@ func (s *Service) BatchUpdateEntry(ctx context.Context, req *entryv1.BatchUpdate
 		return nil, status.Errorf(codes.Internal, "failed to create request ID: %v", err)
 	}
 	for _, eachEntry := range req.Entries {
-		e := s.updateEntry(ctx, requestID.String(), eachEntry, req.InputMask, req.OutputMask)
-		results = append(results, e)
+		r := s.updateEntry(ctx, eachEntry, req.InputMask, req.OutputMask)
+		results = append(results, r)
+
+		// Add audit log
+		err := status.Error(codes.Code(r.Status.Code), r.Status.Message)
+		// Create audit log
+		audit.Send(ctx, logrus.Fields{
+			"request-id":             requestID,
+			telemetry.RegistrationID: eachEntry.Id,
+			"request-body":           eachEntry.String(),
+		}, err, "Update Entry")
 	}
 
 	return &entryv1.BatchUpdateEntryResponse{
@@ -412,8 +422,8 @@ func (s *Service) getExistingEntry(ctx context.Context, e *common.RegistrationEn
 	return nil, nil
 }
 
-func (s *Service) updateEntry(ctx context.Context, requestID string, e *types.Entry, inputMask *types.EntryMask, outputMask *types.EntryMask) *entryv1.BatchUpdateEntryResponse_Result {
-	log := rpccontext.AuditLogger(ctx, requestID)
+func (s *Service) updateEntry(ctx context.Context, e *types.Entry, inputMask *types.EntryMask, outputMask *types.EntryMask) *entryv1.BatchUpdateEntryResponse_Result {
+	log := rpccontext.Logger(ctx)
 	log = log.WithField(telemetry.RegistrationID, e.Id)
 
 	convEntry, err := api.ProtoToRegistrationEntryWithMask(s.td, e, inputMask)
@@ -437,8 +447,8 @@ func (s *Service) updateEntry(ctx context.Context, requestID string, e *types.En
 		}
 	}
 	resp, err := s.ds.UpdateRegistrationEntry(ctx, &datastore.UpdateRegistrationEntryRequest{
-		Entry:     convEntry,
-		Mask:      mask,
+		Entry: convEntry,
+		Mask:  mask,
 	})
 	if err != nil {
 		return &entryv1.BatchUpdateEntryResponse_Result{
@@ -456,6 +466,7 @@ func (s *Service) updateEntry(ctx context.Context, requestID string, e *types.En
 	applyMask(tEntry, outputMask)
 
 	log.WithField("status", "success").Info("Entry updated")
+
 	return &entryv1.BatchUpdateEntryResponse_Result{
 		Status: api.OK(),
 		Entry:  tEntry,

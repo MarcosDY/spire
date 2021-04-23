@@ -9,7 +9,6 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// TODO: It is only a POC I'll create a new package to get all inforamtion without usin peertracker
 func getCallerInfo(fd uintptr) (CallerInfo, error) {
 	result, err := unix.GetsockoptInt(int(fd), 0, 0x002) //getsockopt(fd, SOL_LOCAL, LOCAL_PEERPID)
 	if err != nil {
@@ -35,10 +34,10 @@ func getCallerInfo(fd uintptr) (CallerInfo, error) {
 	addr, _ := getAddr(p)
 
 	info := CallerInfo{
-		PID: int32(result),
-		UID: uint32(uID),
-		GID: uint32(gID),
-		Exe: addr,
+		PID:        int32(result),
+		UID:        uint32(uID),
+		GID:        uint32(gID),
+		BinaryAddr: addr,
 	}
 
 	return info, nil

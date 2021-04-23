@@ -40,21 +40,7 @@ func (m *authorizationMiddleware) Preprocess(ctx context.Context, methodName str
 	}
 
 	fields := make(logrus.Fields)
-	if rpccontext.CallerIsLocal(ctx) {
-		callerInfo := rpccontext.GetLocalCaller(ctx)
-		if callerInfo.UID != 0 {
-			fields["caller-uid"] = callerInfo.UID
-		}
-		if callerInfo.GID != 0 {
-			fields["caller-gid"] = callerInfo.GID
-		}
-		if callerInfo.PID != 0 {
-			fields["caller-pid"] = callerInfo.PID
-		}
-		if callerInfo.Exe != "" {
-			fields["caller-addr"] = callerInfo.Exe
-		}
-	} else {
+	if !rpccontext.CallerIsLocal(ctx) {
 		fields["caller-addr"] = rpccontext.CallerAddr(ctx).String()
 	}
 	if id, ok := rpccontext.CallerID(ctx); ok {

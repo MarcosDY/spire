@@ -9,11 +9,11 @@ const (
 )
 
 type CallerInfo struct {
-	Addr net.Addr
-	PID  int32
-	UID  uint32
-	GID  uint32
-	Exe  string
+	Addr       net.Addr
+	PID        int32
+	UID        uint32
+	GID        uint32
+	BinaryAddr string
 }
 
 type AuthInfo struct {
