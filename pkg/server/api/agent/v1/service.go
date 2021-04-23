@@ -405,9 +405,14 @@ func (s *Service) RenewAgent(ctx context.Context, req *agentv1.RenewAgentRequest
 // CreateJoinToken returns a new JoinToken for an agent.
 func (s *Service) CreateJoinToken(ctx context.Context, req *agentv1.CreateJoinTokenRequest) (_ *types.JoinToken, err error) {
 	defer func() {
+		fields := logrus.Fields{}
+		if requestID, err := uuid.NewV4(); err == nil {
+			fields["request-id"] = requestID.String()
+		}
+
 		requestBody := req
 		requestBody.Token = ""
-		audit.Send(ctx, logrus.Fields{}, err, "Update Entry", requestBody)
+		audit.Send(ctx, fields, err, "Update Entry", requestBody)
 	}()
 
 	log := rpccontext.Logger(ctx)
