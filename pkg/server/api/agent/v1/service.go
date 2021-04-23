@@ -407,10 +407,7 @@ func (s *Service) CreateJoinToken(ctx context.Context, req *agentv1.CreateJoinTo
 	defer func() {
 		requestBody := req
 		requestBody.Token = ""
-		fields := logrus.Fields{
-			"request-body": requestBody.String(),
-		}
-		audit.Send(ctx, fields, err, "Update Entry")
+		audit.Send(ctx, logrus.Fields{}, err, "Update Entry", requestBody)
 	}()
 
 	log := rpccontext.Logger(ctx)

@@ -262,8 +262,7 @@ func (s *Service) BatchUpdateEntry(ctx context.Context, req *entryv1.BatchUpdate
 		audit.Send(ctx, logrus.Fields{
 			"request-id":             requestID,
 			telemetry.RegistrationID: eachEntry.Id,
-			"request-body":           eachEntry.String(),
-		}, err, "Update Entry")
+		}, err, "Update Entry", eachEntry, req.InputMask)
 	}
 
 	return &entryv1.BatchUpdateEntryResponse{

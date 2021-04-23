@@ -2,7 +2,9 @@ package audit
 
 import (
 	"context"
+	"fmt"
 
+	"github.com/golang/protobuf/proto"
 	"github.com/sirupsen/logrus"
 	"github.com/spiffe/spire/pkg/common/peertracker"
 	"github.com/spiffe/spire/pkg/server/api/rpccontext"
@@ -10,7 +12,7 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-func Send(ctx context.Context, fields logrus.Fields, err error, msg string) {
+func Send(ctx context.Context, fields logrus.Fields, err error, msg string, req ...proto.Message) {
 	statusErr, ok := status.FromError(err)
 	switch {
 	case ok:
@@ -23,6 +25,15 @@ func Send(ctx context.Context, fields logrus.Fields, err error, msg string) {
 		fields["status-message"] = statusErr.Message()
 	}
 	fields["type"] = "audit"
+
+	reqBody := ""
+	for _, m := range req {
+		if m != nil {
+			reqBody += fmt.Sprintf("{%s}", proto.CompactTextString(m))
+		}
+	}
+
+	fields["req-body"] = reqBody
 
 	// Logger contains all caller information for remote callers.
 	// It is done on Preprocess
