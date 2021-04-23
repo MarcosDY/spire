@@ -404,18 +404,17 @@ func (s *Service) RenewAgent(ctx context.Context, req *agentv1.RenewAgentRequest
 
 // CreateJoinToken returns a new JoinToken for an agent.
 func (s *Service) CreateJoinToken(ctx context.Context, req *agentv1.CreateJoinTokenRequest) (_ *types.JoinToken, err error) {
-	defer func() {
-		fields := logrus.Fields{}
-		if requestID, err := uuid.NewV4(); err == nil {
-			fields["request-id"] = requestID.String()
-		}
+	log := rpccontext.Logger(ctx)
 
+	defer func() {
+		auditLog, err := audit.New(ctx)
+		if err != nil {
+			log.WithError(err).Warn("Failed to create audit log")
+		}
 		requestBody := req
 		requestBody.Token = ""
-		audit.Send(ctx, fields, err, "Update Entry", requestBody)
+		auditLog.WithError(err).Send(requestBody)
 	}()
-
-	log := rpccontext.Logger(ctx)
 
 	if req.Ttl < 1 {
 		return nil, api.MakeErr(log, codes.InvalidArgument, "ttl is required, you must provide one", nil)

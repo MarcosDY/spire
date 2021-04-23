@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 
-	"github.com/gofrs/uuid"
 	"github.com/sirupsen/logrus"
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	entryv1 "github.com/spiffe/spire-api-sdk/proto/spire/api/server/entry/v1"
@@ -248,10 +247,12 @@ func (s *Service) createEntry(ctx context.Context, e *types.Entry, outputMask *t
 func (s *Service) BatchUpdateEntry(ctx context.Context, req *entryv1.BatchUpdateEntryRequest) (*entryv1.BatchUpdateEntryResponse, error) {
 	var results []*entryv1.BatchUpdateEntryResponse_Result
 
-	requestID, err := uuid.NewV4()
+	auditLog, err := audit.New(ctx)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to create request ID: %v", err)
+		logs := rpccontext.Logger(ctx)
+		return nil, api.MakeErr(logs, codes.Internal, "failed to create audit log", err)
 	}
+
 	for _, eachEntry := range req.Entries {
 		r := s.updateEntry(ctx, eachEntry, req.InputMask, req.OutputMask)
 		results = append(results, r)
@@ -259,10 +260,7 @@ func (s *Service) BatchUpdateEntry(ctx context.Context, req *entryv1.BatchUpdate
 		// Add audit log
 		err := status.Error(codes.Code(r.Status.Code), r.Status.Message)
 		// Create audit log
-		audit.Send(ctx, logrus.Fields{
-			"request-id":             requestID,
-			telemetry.RegistrationID: eachEntry.Id,
-		}, err, "Update Entry", eachEntry, req.InputMask)
+		auditLog.WithField(telemetry.RegistrationID, eachEntry.Id).WithError(err).Send(eachEntry, req.InputMask)
 	}
 
 	return &entryv1.BatchUpdateEntryResponse{
