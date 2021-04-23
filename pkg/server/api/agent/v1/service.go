@@ -413,7 +413,7 @@ func (s *Service) CreateJoinToken(ctx context.Context, req *agentv1.CreateJoinTo
 		}
 		requestBody := req
 		requestBody.Token = ""
-		auditLog.WithError(err).Send(requestBody)
+		auditLog.WithError(err).WithRequestBody(requestBody).Send()
 	}()
 
 	if req.Ttl < 1 {

@@ -88,8 +88,8 @@ func (l Log) WithRequestBody(req ...proto.Message) Log {
 
 }
 
-func (l Log) Send(req ...proto.Message) {
-	l.log.Info("audit log")
+func (l Log) Send() {
+	l.log.Info("Audit log")
 }
 
 // addCallerFields add all local caller fields

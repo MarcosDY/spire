@@ -260,7 +260,7 @@ func (s *Service) BatchUpdateEntry(ctx context.Context, req *entryv1.BatchUpdate
 		// Add audit log
 		err := status.Error(codes.Code(r.Status.Code), r.Status.Message)
 		// Create audit log
-		auditLog.WithField(telemetry.RegistrationID, eachEntry.Id).WithError(err).Send(eachEntry, req.InputMask)
+		auditLog.WithField(telemetry.RegistrationID, eachEntry.Id).WithError(err).WithRequestBody(eachEntry, req.InputMask).Send()
 	}
 
 	return &entryv1.BatchUpdateEntryResponse{
