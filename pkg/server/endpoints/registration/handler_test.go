@@ -356,7 +356,6 @@ func (s *HandlerSuite) TestCreateEntryAndCreateEntryIfNotExists() {
 		s.Require().NotNil(storedEntry)
 		s.T().Logf("actual=%+v expected=%+v", storedEntry.Entry, entry)
 		s.Require().True(proto.Equal(storedEntry.Entry, entry))
-		s.RequireProtoEqual()
 	}
 
 	for _, testCase := range testCases {

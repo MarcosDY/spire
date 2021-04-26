@@ -5,18 +5,17 @@ import (
 	"fmt"
 
 	"github.com/gofrs/uuid"
-	"github.com/golang/protobuf/proto"
 	"github.com/sirupsen/logrus"
 	"github.com/spiffe/spire/pkg/common/peertracker"
 	"github.com/spiffe/spire/pkg/server/api/rpccontext"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 )
 
 type Log struct {
 	RequestID string
-	// fields    logrus.Fields
-	log logrus.FieldLogger
+	log       logrus.FieldLogger
 }
 
 func New(ctx context.Context) (Log, error) {
@@ -77,7 +76,7 @@ func (l Log) WithError(err error) Log {
 func (l Log) WithRequestBody(req ...proto.Message) Log {
 	reqBody := ""
 	for _, m := range req {
-		reqBody += fmt.Sprintf("{%s}", proto.CompactTextString(m))
+		reqBody += fmt.Sprintf("%+v", m)
 	}
 
 	if reqBody != "" {
@@ -85,14 +84,13 @@ func (l Log) WithRequestBody(req ...proto.Message) Log {
 	}
 
 	return l
-
 }
 
 func (l Log) Send() {
 	l.log.Info("Audit log")
 }
 
-// addCallerFields add all local caller fields
+// fieldsFromContext get caller fields from context
 func fieldsFromContext(ctx context.Context) logrus.Fields {
 	fields := logrus.Fields{}
 	callerInfo, ok := peertracker.CallerFromContext(ctx)

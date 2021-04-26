@@ -462,8 +462,6 @@ func (s *Service) updateEntry(ctx context.Context, e *types.Entry, inputMask *ty
 
 	applyMask(tEntry, outputMask)
 
-	log.WithField("status", "success").Info("Entry updated")
-
 	return &entryv1.BatchUpdateEntryResponse_Result{
 		Status: api.OK(),
 		Entry:  tEntry,

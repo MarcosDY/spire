@@ -410,6 +410,7 @@ func (s *Service) CreateJoinToken(ctx context.Context, req *agentv1.CreateJoinTo
 		auditLog, err := audit.New(ctx)
 		if err != nil {
 			log.WithError(err).Warn("Failed to create audit log")
+			return
 		}
 		requestBody := req
 		requestBody.Token = ""
