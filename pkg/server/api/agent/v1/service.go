@@ -10,6 +10,7 @@ import (
 
 	"github.com/andres-erbsen/clock"
 	"github.com/gofrs/uuid"
+	"github.com/golang/protobuf/proto"
 	"github.com/sirupsen/logrus"
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	agentv1 "github.com/spiffe/spire-api-sdk/proto/spire/api/server/agent/v1"
@@ -405,11 +406,9 @@ func (s *Service) RenewAgent(ctx context.Context, req *agentv1.RenewAgentRequest
 func (s *Service) CreateJoinToken(ctx context.Context, req *agentv1.CreateJoinTokenRequest) (_ *types.JoinToken, err error) {
 	log := rpccontext.Logger(ctx)
 
-	defer func() {
-		requestBody := req
-		requestBody.Token = ""
-		rpccontext.AddAuditLogEvent(ctx, logrus.Fields{}, err, requestBody)
-	}()
+	requestBody := proto.Clone(req).(*agentv1.CreateJoinTokenRequest)
+	requestBody.Token = ""
+	rpccontext.AddAuditLogEvent(ctx, logrus.Fields{}, nil, requestBody)
 
 	if req.Ttl < 1 {
 		return nil, api.MakeErr(log, codes.InvalidArgument, "ttl is required, you must provide one", nil)

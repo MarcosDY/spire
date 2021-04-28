@@ -75,11 +75,18 @@ func appendFields(fields logrus.Fields, newFields logrus.Fields) {
 	}
 }
 
-func (l *log) Send(log logrus.FieldLogger, err error) {
+func (l *log) Send(log logrus.FieldLogger, rpcErr error) {
 	for _, e := range l.events {
 		fields := e.fields
 		appendFields(fields, l.fields)
-		appendError(fields, err)
+
+		switch {
+		case e.err != nil:
+			appendError(fields, e.err)
+		case rpcErr != nil:
+			appendError(fields, rpcErr)
+
+		}
 		appendRequestBody(fields, e.request)
 
 		eLog := log.WithFields(e.fields)
