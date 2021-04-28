@@ -19,7 +19,6 @@ import (
 	"github.com/spiffe/spire/pkg/common/telemetry"
 	"github.com/spiffe/spire/pkg/common/x509util"
 	"github.com/spiffe/spire/pkg/server/api"
-	"github.com/spiffe/spire/pkg/server/api/audit"
 	"github.com/spiffe/spire/pkg/server/api/rpccontext"
 	"github.com/spiffe/spire/pkg/server/ca"
 	"github.com/spiffe/spire/pkg/server/catalog"
@@ -407,14 +406,9 @@ func (s *Service) CreateJoinToken(ctx context.Context, req *agentv1.CreateJoinTo
 	log := rpccontext.Logger(ctx)
 
 	defer func() {
-		auditLog, err := audit.New(ctx)
-		if err != nil {
-			log.WithError(err).Warn("Failed to create audit log")
-			return
-		}
 		requestBody := req
 		requestBody.Token = ""
-		auditLog.WithError(err).WithRequestBody(requestBody).Send()
+		rpccontext.AddAuditLogEvent(ctx, logrus.Fields{}, err, requestBody)
 	}()
 
 	if req.Ttl < 1 {

@@ -1,62 +1,49 @@
 package audit
 
 import (
-	"context"
 	"fmt"
 
-	"github.com/gofrs/uuid"
 	"github.com/sirupsen/logrus"
-	"github.com/spiffe/spire/pkg/common/peertracker"
-	"github.com/spiffe/spire/pkg/server/api/rpccontext"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 )
 
-type Log struct {
-	RequestID string
-	log       logrus.FieldLogger
+type Log interface {
+	AddEvent(fields logrus.Fields, err error, requests ...proto.Message)
+	Send(log logrus.FieldLogger, err error)
 }
 
-func New(ctx context.Context) (Log, error) {
-	requestID, err := uuid.NewV4()
-	if err != nil {
-		return Log{}, err
-	}
-
-	log := Log{
-		RequestID: requestID.String(),
-		log:       rpccontext.Logger(ctx),
-	}
-
-	fields := logrus.Fields{
-		"request-id": requestID.String(),
-		"type":       "audit",
-		"status":     "success",
-	}
-	// Logger contains all caller information for remote callers.
-	// It is done on Preprocess
-	if rpccontext.CallerIsLocal(ctx) {
-		fields = fieldsFromContext(ctx)
-	}
-
-	log = log.WithFields(fields)
-
-	return log, nil
+type event struct {
+	fields  logrus.Fields
+	request []proto.Message
+	err     error
 }
 
-func (l Log) WithFields(fields logrus.Fields) Log {
-	l.log = l.log.WithFields(fields)
-	return l
+func New(fields logrus.Fields) Log {
+	fields["type"] = "audit"
+	log := &log{
+		fields: fields,
+	}
+
+	return log
 }
 
-func (l Log) WithField(key string, value interface{}) Log {
-	l.log = l.log.WithField(key, value)
-	return l
+type log struct {
+	fields logrus.Fields
+	events []*event
 }
 
-func (l Log) WithError(err error) Log {
-	fields := logrus.Fields{}
+func (l *log) AddEvent(fields logrus.Fields, err error, requests ...proto.Message) {
+	event := &event{
+		fields:  fields,
+		request: requests,
+		err:     err,
+	}
+	l.events = append(l.events, event)
+}
+
+func appendError(fields logrus.Fields, err error) {
 	statusErr, ok := status.FromError(err)
 	switch {
 	case !ok:
@@ -68,45 +55,34 @@ func (l Log) WithError(err error) Log {
 		fields["status-code"] = statusErr.Code()
 		fields["status-message"] = statusErr.Message()
 	}
-
-	l.log = l.log.WithFields(fields)
-	return l
 }
 
-func (l Log) WithRequestBody(req ...proto.Message) Log {
+func appendRequestBody(fields logrus.Fields, req []proto.Message) {
+	if len(req) == 0 {
+		return
+	}
 	reqBody := ""
 	for _, m := range req {
 		reqBody += fmt.Sprintf("%+v", m)
 	}
 
-	if reqBody != "" {
-		return l.WithField("request-body", reqBody)
-	}
-
-	return l
+	fields["request-body"] = reqBody
 }
 
-func (l Log) Send() {
-	l.log.Info("Audit log")
+func appendFields(fields logrus.Fields, newFields logrus.Fields) {
+	for key, value := range newFields {
+		fields[key] = value
+	}
 }
 
-// fieldsFromContext get caller fields from context
-func fieldsFromContext(ctx context.Context) logrus.Fields {
-	fields := logrus.Fields{}
-	callerInfo, ok := peertracker.CallerFromContext(ctx)
-	if !ok {
-		return fields
-	}
+func (l *log) Send(log logrus.FieldLogger, err error) {
+	for _, e := range l.events {
+		fields := e.fields
+		appendFields(fields, l.fields)
+		appendError(fields, err)
+		appendRequestBody(fields, e.request)
 
-	if callerInfo.UID != 0 {
-		fields["caller-uid"] = callerInfo.UID
+		eLog := log.WithFields(e.fields)
+		eLog.Info("Audit log")
 	}
-	if callerInfo.GID != 0 {
-		fields["caller-gid"] = callerInfo.GID
-	}
-	if callerInfo.BinaryAddr != "" {
-		fields["caller-addr"] = callerInfo.BinaryAddr
-	}
-
-	return fields
 }

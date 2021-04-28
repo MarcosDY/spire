@@ -10,7 +10,6 @@ import (
 	"github.com/spiffe/spire-api-sdk/proto/spire/api/types"
 	"github.com/spiffe/spire/pkg/common/telemetry"
 	"github.com/spiffe/spire/pkg/server/api"
-	"github.com/spiffe/spire/pkg/server/api/audit"
 	"github.com/spiffe/spire/pkg/server/api/rpccontext"
 	"github.com/spiffe/spire/pkg/server/plugin/datastore"
 	"github.com/spiffe/spire/proto/spire/common"
@@ -247,20 +246,15 @@ func (s *Service) createEntry(ctx context.Context, e *types.Entry, outputMask *t
 func (s *Service) BatchUpdateEntry(ctx context.Context, req *entryv1.BatchUpdateEntryRequest) (*entryv1.BatchUpdateEntryResponse, error) {
 	var results []*entryv1.BatchUpdateEntryResponse_Result
 
-	auditLog, err := audit.New(ctx)
-	if err != nil {
-		logs := rpccontext.Logger(ctx)
-		return nil, api.MakeErr(logs, codes.Internal, "failed to create audit log", err)
-	}
-
 	for _, eachEntry := range req.Entries {
 		r := s.updateEntry(ctx, eachEntry, req.InputMask, req.OutputMask)
 		results = append(results, r)
 
 		// Add audit log
 		err := status.Error(codes.Code(r.Status.Code), r.Status.Message)
-		// Create audit log
-		auditLog.WithField(telemetry.RegistrationID, eachEntry.Id).WithError(err).WithRequestBody(eachEntry, req.InputMask).Send()
+		rpccontext.AddAuditLogEvent(ctx, logrus.Fields{
+			telemetry.RegistrationID: eachEntry.ParentId,
+		}, err, eachEntry, req.InputMask)
 	}
 
 	return &entryv1.BatchUpdateEntryResponse{

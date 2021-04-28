@@ -28,6 +28,7 @@ func Middleware(log logrus.FieldLogger, metrics telemetry.Metrics, ds datastore.
 		middleware.WithMetrics(metrics),
 		middleware.WithAuthorization(Authorization(log, ds, clk)),
 		middleware.WithRateLimits(RateLimits(rlConf)),
+		middleware.WithAuditLog(),
 	)
 }
 
