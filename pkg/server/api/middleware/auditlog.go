@@ -9,7 +9,6 @@ import (
 	"github.com/spiffe/spire/pkg/server/api/rpccontext"
 )
 
-// TODO: add interface for audit.Log
 func WithAuditLog() Middleware {
 	return auditlogMiddleware{}
 }
@@ -36,12 +35,6 @@ func (m auditlogMiddleware) Postprocess(ctx context.Context, fullMethod string, 
 	auditLog := rpccontext.AuditLog(ctx)
 	log := rpccontext.Logger(ctx)
 	auditLog.Send(log, rpcErr)
-	// log := rpccontext.Logger(ctx).WithFields(m.fields)
-
-	// events := rpccontext.AuditEvents()
-	// for _, event := range m.events {
-
-	// }
 }
 
 // fieldsFromContext get caller fields from context

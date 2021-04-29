@@ -182,7 +182,12 @@ func (s *Service) GetEntry(ctx context.Context, req *entryv1.GetEntryRequest) (*
 func (s *Service) BatchCreateEntry(ctx context.Context, req *entryv1.BatchCreateEntryRequest) (*entryv1.BatchCreateEntryResponse, error) {
 	var results []*entryv1.BatchCreateEntryResponse_Result
 	for _, eachEntry := range req.Entries {
-		results = append(results, s.createEntry(ctx, eachEntry, req.OutputMask))
+		resp := s.createEntry(ctx, eachEntry, req.OutputMask)
+		results = append(results, resp)
+		respErr := status.Error(codes.Code(resp.Status.Code), resp.Status.Message)
+		rpccontext.AddAuditLogEvent(ctx, logrus.Fields{
+			telemetry.RegistrationID: eachEntry.Id,
+		}, respErr, req)
 	}
 
 	return &entryv1.BatchCreateEntryResponse{
@@ -266,7 +271,12 @@ func (s *Service) BatchUpdateEntry(ctx context.Context, req *entryv1.BatchUpdate
 func (s *Service) BatchDeleteEntry(ctx context.Context, req *entryv1.BatchDeleteEntryRequest) (*entryv1.BatchDeleteEntryResponse, error) {
 	var results []*entryv1.BatchDeleteEntryResponse_Result
 	for _, id := range req.Ids {
-		results = append(results, s.deleteEntry(ctx, id))
+		resp := s.deleteEntry(ctx, id)
+		results = append(results, resp)
+		respErr := status.Error(codes.Code(resp.Status.Code), resp.Status.Message)
+		rpccontext.AddAuditLogEvent(ctx, logrus.Fields{
+			telemetry.Entry: id,
+		}, respErr, req)
 	}
 
 	return &entryv1.BatchDeleteEntryResponse{

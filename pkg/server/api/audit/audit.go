@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/sirupsen/logrus"
+	agentv1 "github.com/spiffe/spire-api-sdk/proto/spire/api/server/agent/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
@@ -63,7 +64,14 @@ func appendRequestBody(fields logrus.Fields, req []proto.Message) {
 	}
 	reqBody := ""
 	for _, m := range req {
-		reqBody += fmt.Sprintf("%+v", m)
+		switch m.(type) {
+		case *agentv1.CreateJoinTokenRequest:
+			message := proto.Clone(m).(*agentv1.CreateJoinTokenRequest)
+			message.Token = ""
+			reqBody += fmt.Sprintf("%+v", message)
+		default:
+			reqBody += fmt.Sprintf("%+v", m)
+		}
 	}
 
 	fields["request-body"] = reqBody
@@ -85,7 +93,6 @@ func (l *log) Send(log logrus.FieldLogger, rpcErr error) {
 			appendError(fields, e.err)
 		case rpcErr != nil:
 			appendError(fields, rpcErr)
-
 		}
 		appendRequestBody(fields, e.request)
 

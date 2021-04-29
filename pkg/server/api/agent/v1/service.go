@@ -10,7 +10,6 @@ import (
 
 	"github.com/andres-erbsen/clock"
 	"github.com/gofrs/uuid"
-	"github.com/golang/protobuf/proto"
 	"github.com/sirupsen/logrus"
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	agentv1 "github.com/spiffe/spire-api-sdk/proto/spire/api/server/agent/v1"
@@ -178,6 +177,10 @@ func (s *Service) GetAgent(ctx context.Context, req *agentv1.GetAgentRequest) (*
 
 // DeleteAgent removes the agent with the given SpiffeID.
 func (s *Service) DeleteAgent(ctx context.Context, req *agentv1.DeleteAgentRequest) (*emptypb.Empty, error) {
+	rpccontext.AddAuditLogEvent(ctx, logrus.Fields{
+		telemetry.SPIFFEID: req.Id.String(),
+	}, nil, req)
+
 	log := rpccontext.Logger(ctx)
 
 	id, err := api.TrustDomainAgentIDFromProto(s.td, req.Id)
@@ -203,6 +206,10 @@ func (s *Service) DeleteAgent(ctx context.Context, req *agentv1.DeleteAgentReque
 
 // BanAgent sets the agent with the given SpiffeID to the banned state.
 func (s *Service) BanAgent(ctx context.Context, req *agentv1.BanAgentRequest) (*emptypb.Empty, error) {
+	rpccontext.AddAuditLogEvent(ctx, logrus.Fields{
+		telemetry.SPIFFEID: req.Id.String(),
+	}, nil, req)
+
 	log := rpccontext.Logger(ctx)
 
 	id, err := api.TrustDomainAgentIDFromProto(s.td, req.Id)
@@ -252,6 +259,10 @@ func (s *Service) AttestAgent(stream agentv1.Agent_AttestAgentServer) error {
 	if err := validateAttestAgentParams(params); err != nil {
 		return api.MakeErr(log, codes.InvalidArgument, "malformed param", err)
 	}
+
+	rpccontext.AddAuditLogEvent(ctx, logrus.Fields{
+		telemetry.NodeAttestorType: params.Data.Type,
+	}, nil, params)
 
 	log = log.WithField(telemetry.NodeAttestorType, params.Data.Type)
 
@@ -360,6 +371,7 @@ func (s *Service) RenewAgent(ctx context.Context, req *agentv1.RenewAgentRequest
 	if err := rpccontext.RateLimit(ctx, 1); err != nil {
 		return nil, api.MakeErr(log, status.Code(err), "rejecting request due to renew agent rate limiting", err)
 	}
+	rpccontext.AddAuditLogEvent(ctx, logrus.Fields{}, nil, req)
 
 	callerID, ok := rpccontext.CallerID(ctx)
 	if !ok {
@@ -406,9 +418,7 @@ func (s *Service) RenewAgent(ctx context.Context, req *agentv1.RenewAgentRequest
 func (s *Service) CreateJoinToken(ctx context.Context, req *agentv1.CreateJoinTokenRequest) (_ *types.JoinToken, err error) {
 	log := rpccontext.Logger(ctx)
 
-	requestBody := proto.Clone(req).(*agentv1.CreateJoinTokenRequest)
-	requestBody.Token = ""
-	rpccontext.AddAuditLogEvent(ctx, logrus.Fields{}, nil, requestBody)
+	rpccontext.AddAuditLogEvent(ctx, logrus.Fields{}, nil, req)
 
 	if req.Ttl < 1 {
 		return nil, api.MakeErr(log, codes.InvalidArgument, "ttl is required, you must provide one", nil)

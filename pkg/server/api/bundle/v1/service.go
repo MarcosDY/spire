@@ -101,6 +101,10 @@ func (s *Service) GetBundle(ctx context.Context, req *bundlev1.GetBundleRequest)
 func (s *Service) AppendBundle(ctx context.Context, req *bundlev1.AppendBundleRequest) (*types.Bundle, error) {
 	log := rpccontext.Logger(ctx)
 
+	rpccontext.AddAuditLogEvent(ctx, logrus.Fields{
+		telemetry.TrustDomainID: s.td.String(),
+	}, nil, req)
+
 	if len(req.JwtAuthorities) == 0 && len(req.X509Authorities) == 0 {
 		return nil, api.MakeErr(log, codes.InvalidArgument, "no authorities to append", nil)
 	}
@@ -144,6 +148,10 @@ func (s *Service) PublishJWTAuthority(ctx context.Context, req *bundlev1.Publish
 	if err := rpccontext.RateLimit(ctx, 1); err != nil {
 		return nil, api.MakeErr(log, status.Code(err), "rejecting request due to key publishing rate limiting", err)
 	}
+
+	rpccontext.AddAuditLogEvent(ctx, logrus.Fields{
+		telemetry.TrustDomainID: s.td.String(),
+	}, nil, req)
 
 	if req.JwtAuthority == nil {
 		return nil, api.MakeErr(log, codes.InvalidArgument, "missing JWT authority", nil)
@@ -250,7 +258,13 @@ func (s *Service) GetFederatedBundle(ctx context.Context, req *bundlev1.GetFeder
 func (s *Service) BatchCreateFederatedBundle(ctx context.Context, req *bundlev1.BatchCreateFederatedBundleRequest) (*bundlev1.BatchCreateFederatedBundleResponse, error) {
 	var results []*bundlev1.BatchCreateFederatedBundleResponse_Result
 	for _, b := range req.Bundle {
-		results = append(results, s.createFederatedBundle(ctx, b, req.OutputMask))
+		resp := s.createFederatedBundle(ctx, b, req.OutputMask)
+		results = append(results, resp)
+
+		respErr := status.Error(codes.Code(resp.Status.Code), resp.Status.Message)
+		rpccontext.AddAuditLogEvent(ctx, logrus.Fields{
+			telemetry.TrustDomainID: b.TrustDomain,
+		}, respErr, req)
 	}
 
 	return &bundlev1.BatchCreateFederatedBundleResponse{
@@ -363,7 +377,12 @@ func (s *Service) setFederatedBundle(ctx context.Context, b *types.Bundle, outpu
 func (s *Service) BatchUpdateFederatedBundle(ctx context.Context, req *bundlev1.BatchUpdateFederatedBundleRequest) (*bundlev1.BatchUpdateFederatedBundleResponse, error) {
 	var results []*bundlev1.BatchUpdateFederatedBundleResponse_Result
 	for _, b := range req.Bundle {
-		results = append(results, s.updateFederatedBundle(ctx, b, req.InputMask, req.OutputMask))
+		resp := s.updateFederatedBundle(ctx, b, req.InputMask, req.OutputMask)
+		results = append(results, resp)
+		respErr := status.Error(codes.Code(resp.Status.Code), resp.Status.Message)
+		rpccontext.AddAuditLogEvent(ctx, logrus.Fields{
+			telemetry.TrustDomainID: b.TrustDomain,
+		}, respErr, req)
 	}
 
 	return &bundlev1.BatchUpdateFederatedBundleResponse{
@@ -430,7 +449,12 @@ func (s *Service) updateFederatedBundle(ctx context.Context, b *types.Bundle, in
 func (s *Service) BatchSetFederatedBundle(ctx context.Context, req *bundlev1.BatchSetFederatedBundleRequest) (*bundlev1.BatchSetFederatedBundleResponse, error) {
 	var results []*bundlev1.BatchSetFederatedBundleResponse_Result
 	for _, b := range req.Bundle {
-		results = append(results, s.setFederatedBundle(ctx, b, req.OutputMask))
+		resp := s.setFederatedBundle(ctx, b, req.OutputMask)
+		results = append(results, resp)
+		respErr := status.Error(codes.Code(resp.Status.Code), resp.Status.Message)
+		rpccontext.AddAuditLogEvent(ctx, logrus.Fields{
+			telemetry.TrustDomainID: b.TrustDomain,
+		}, respErr, req)
 	}
 
 	return &bundlev1.BatchSetFederatedBundleResponse{
@@ -449,7 +473,12 @@ func (s *Service) BatchDeleteFederatedBundle(ctx context.Context, req *bundlev1.
 
 	var results []*bundlev1.BatchDeleteFederatedBundleResponse_Result
 	for _, trustDomain := range req.TrustDomains {
-		results = append(results, s.deleteFederatedBundle(ctx, log, trustDomain, mode))
+		resp := s.deleteFederatedBundle(ctx, log, trustDomain, mode)
+		results = append(results, resp)
+		respErr := status.Error(codes.Code(resp.Status.Code), resp.Status.Message)
+		rpccontext.AddAuditLogEvent(ctx, logrus.Fields{
+			telemetry.TrustDomainID: trustDomain,
+		}, respErr, req)
 	}
 
 	return &bundlev1.BatchDeleteFederatedBundleResponse{
