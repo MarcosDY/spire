@@ -32,6 +32,9 @@ func (m auditLogMiddleware) Preprocess(ctx context.Context, fullMethod string) (
 }
 
 func (m auditLogMiddleware) Postprocess(ctx context.Context, fullMethod string, handlerInvoked bool, rpcErr error) {
+	if rpcErr != nil {
+		rpccontext.AuditLog(ctx).EmitError(rpcErr)
+	}
 }
 
 // fieldsFromContext get caller fields from context

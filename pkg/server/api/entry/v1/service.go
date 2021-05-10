@@ -243,16 +243,12 @@ func (s *Service) createEntry(ctx context.Context, e *types.Entry, outputMask *t
 func (s *Service) BatchUpdateEntry(ctx context.Context, req *entryv1.BatchUpdateEntryRequest) (*entryv1.BatchUpdateEntryResponse, error) {
 	var results []*entryv1.BatchUpdateEntryResponse_Result
 
-	auditLog := rpccontext.AuditLog(ctx)
-
 	for _, eachEntry := range req.Entries {
 		r := s.updateEntry(ctx, eachEntry, req.InputMask, req.OutputMask)
 		results = append(results, r)
 
 		// Add audit log
-		auditLog = auditLog.WithStatus(r.Status)
-		auditLog = auditLog.WithFields(fieldsFromEntry(s.td, eachEntry, req.InputMask))
-		auditLog.Send()
+		rpccontext.EmitBatchRPCAudit(ctx, r.Status, fieldsFromEntry(s.td, eachEntry, req.InputMask))
 	}
 
 	return &entryv1.BatchUpdateEntryResponse{

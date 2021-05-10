@@ -19,11 +19,11 @@ import (
 	"github.com/spiffe/spire/pkg/common/x509util"
 	"github.com/spiffe/spire/pkg/server/api"
 	"github.com/spiffe/spire/pkg/server/api/agent/v1"
-	"github.com/spiffe/spire/pkg/server/api/audit"
 	"github.com/spiffe/spire/pkg/server/api/rpccontext"
 	"github.com/spiffe/spire/pkg/server/plugin/datastore"
 	"github.com/spiffe/spire/proto/spire/common"
 	"github.com/spiffe/spire/test/clock"
+	"github.com/spiffe/spire/test/fakes/fakeauditlog"
 	"github.com/spiffe/spire/test/fakes/fakedatastore"
 	"github.com/spiffe/spire/test/fakes/fakenoderesolver"
 	"github.com/spiffe/spire/test/fakes/fakeserverca"
@@ -271,12 +271,13 @@ func TestListAgents(t *testing.T) {
 	for _, tt := range []struct {
 		name string
 
-		code       codes.Code
-		dsError    error
-		err        string
-		expectLogs []spiretest.LogEntry
-		expectResp *agentv1.ListAgentsResponse
-		req        *agentv1.ListAgentsRequest
+		code              codes.Code
+		dsError           error
+		err               string
+		expectLogs        []spiretest.LogEntry
+		expectResp        *agentv1.ListAgentsResponse
+		req               *agentv1.ListAgentsRequest
+		expectAuditFields map[string]string
 	}{
 		{
 			name: "success",
@@ -290,16 +291,9 @@ func TestListAgents(t *testing.T) {
 					{Id: api.ProtoFromID(node3ID), AttestationType: "t3"},
 				},
 			},
-			expectLogs: []spiretest.LogEntry{
-				{
-					Level:   logrus.InfoLevel,
-					Message: "Audit log",
-					Data: logrus.Fields{
-						"status":     "success",
-						"page_size":  "0",
-						"page_token": "",
-					},
-				},
+			expectAuditFields: map[string]string{
+				"page_size":  "0",
+				"page_token": "",
 			},
 		},
 		{
@@ -338,16 +332,9 @@ func TestListAgents(t *testing.T) {
 					},
 				},
 			},
-			expectLogs: []spiretest.LogEntry{
-				{
-					Level:   logrus.InfoLevel,
-					Message: "Audit log",
-					Data: logrus.Fields{
-						"status":     "success",
-						"page_size":  "0",
-						"page_token": "",
-					},
-				},
+			expectAuditFields: map[string]string{
+				"page_size":  "0",
+				"page_token": "",
 			},
 		},
 		{
@@ -362,16 +349,9 @@ func TestListAgents(t *testing.T) {
 					{Id: api.ProtoFromID(node3ID)},
 				},
 			},
-			expectLogs: []spiretest.LogEntry{
-				{
-					Level:   logrus.InfoLevel,
-					Message: "Audit log",
-					Data: logrus.Fields{
-						"status":     "success",
-						"page_size":  "0",
-						"page_token": "",
-					},
-				},
+			expectAuditFields: map[string]string{
+				"page_size":  "0",
+				"page_token": "",
 			},
 		},
 		{
@@ -387,17 +367,10 @@ func TestListAgents(t *testing.T) {
 					{Id: api.ProtoFromID(node1ID)},
 				},
 			},
-			expectLogs: []spiretest.LogEntry{
-				{
-					Level:   logrus.InfoLevel,
-					Message: "Audit log",
-					Data: logrus.Fields{
-						"status":                     "success",
-						"page_size":                  "0",
-						"page_token":                 "",
-						"filter_by_attestation_type": "t1",
-					},
-				},
+			expectAuditFields: map[string]string{
+				"page_size":                  "0",
+				"page_token":                 "",
+				"filter_by_attestation_type": "t1",
 			},
 		},
 		{
@@ -413,17 +386,10 @@ func TestListAgents(t *testing.T) {
 					{Id: api.ProtoFromID(node3ID)},
 				},
 			},
-			expectLogs: []spiretest.LogEntry{
-				{
-					Level:   logrus.InfoLevel,
-					Message: "Audit log",
-					Data: logrus.Fields{
-						"status":           "success",
-						"page_size":        "0",
-						"page_token":       "",
-						"filter_by_banned": "true",
-					},
-				},
+			expectAuditFields: map[string]string{
+				"page_size":        "0",
+				"page_token":       "",
+				"filter_by_banned": "true",
 			},
 		},
 		{
@@ -440,17 +406,10 @@ func TestListAgents(t *testing.T) {
 					{Id: api.ProtoFromID(node2ID)},
 				},
 			},
-			expectLogs: []spiretest.LogEntry{
-				{
-					Level:   logrus.InfoLevel,
-					Message: "Audit log",
-					Data: logrus.Fields{
-						"status":           "success",
-						"page_size":        "0",
-						"page_token":       "",
-						"filter_by_banned": "false",
-					},
-				},
+			expectAuditFields: map[string]string{
+				"page_size":        "0",
+				"page_token":       "",
+				"filter_by_banned": "false",
 			},
 		},
 		{
@@ -472,17 +431,10 @@ func TestListAgents(t *testing.T) {
 					{Id: api.ProtoFromID(node1ID)},
 				},
 			},
-			expectLogs: []spiretest.LogEntry{
-				{
-					Level:   logrus.InfoLevel,
-					Message: "Audit log",
-					Data: logrus.Fields{
-						"status":                   "success",
-						"page_size":                "0",
-						"page_token":               "",
-						"filter_by_selector_match": "selectors:{type:\"a\"  value:\"1\"}  selectors:{type:\"b\"  value:\"2\"}",
-					},
-				},
+			expectAuditFields: map[string]string{
+				"page_size":                "0",
+				"page_token":               "",
+				"filter_by_selector_match": "selectors:{type:\"a\" value:\"1\"}  selectors:{type:\"b\"  value:\"2\"}",
 			},
 		},
 		{
@@ -498,16 +450,9 @@ func TestListAgents(t *testing.T) {
 				},
 				NextPageToken: "2",
 			},
-			expectLogs: []spiretest.LogEntry{
-				{
-					Level:   logrus.InfoLevel,
-					Message: "Audit log",
-					Data: logrus.Fields{
-						"status":     "success",
-						"page_size":  "2",
-						"page_token": "",
-					},
-				},
+			expectAuditFields: map[string]string{
+				"page_size":  "2",
+				"page_token": "",
 			},
 		},
 		{
@@ -529,18 +474,11 @@ func TestListAgents(t *testing.T) {
 						logrus.ErrorKey: "missing selector type",
 					},
 				},
-				{
-					Level:   logrus.InfoLevel,
-					Message: "Audit log",
-					Data: logrus.Fields{
-						"status":                   "error",
-						"status_code":              "InvalidArgument",
-						"page_size":                "0",
-						"page_token":               "",
-						"filter_by_selector_match": "selectors:{value:\"1\"}",
-						"status_message":           "failed to parse selectors: missing selector type",
-					},
-				},
+			},
+			expectAuditFields: map[string]string{
+				"page_size":                "0",
+				"page_token":               "",
+				"filter_by_selector_match": "selectors:{value:\"1\"}",
 			},
 		},
 		{
@@ -557,17 +495,10 @@ func TestListAgents(t *testing.T) {
 						logrus.ErrorKey: "some error",
 					},
 				},
-				{
-					Level:   logrus.InfoLevel,
-					Message: "Audit log",
-					Data: logrus.Fields{
-						"status":         "error",
-						"status_code":    "Internal",
-						"page_size":      "0",
-						"page_token":     "",
-						"status_message": "failed to list agents: some error",
-					},
-				},
+			},
+			expectAuditFields: map[string]string{
+				"page_size":  "0",
+				"page_token": "",
 			},
 		},
 	} {
@@ -579,6 +510,7 @@ func TestListAgents(t *testing.T) {
 			resp, err := test.client.ListAgents(ctx, tt.req)
 
 			spiretest.AssertLogs(t, test.logHook.AllEntries(), tt.expectLogs)
+			require.Equal(t, tt.expectAuditFields, test.auditLog.GetEmitedFields())
 			if tt.err != "" {
 				spiretest.RequireGRPCStatusContains(t, err, tt.code, tt.err)
 				require.Nil(t, resp)
@@ -1936,6 +1868,7 @@ func TestAttestAgent(t *testing.T) {
 }
 
 type serviceTest struct {
+	auditLog     *fakeauditlog.AuditLog
 	client       agentv1.AgentClient
 	done         func()
 	ds           *fakedatastore.DataStore
@@ -1976,6 +1909,7 @@ func setupServiceTest(t *testing.T) *serviceTest {
 	}
 
 	rateLimiter := &fakeRateLimiter{}
+	auditLog := fakeauditlog.New()
 
 	test := &serviceTest{
 		ca:          ca,
@@ -1984,6 +1918,7 @@ func setupServiceTest(t *testing.T) *serviceTest {
 		clk:         clk,
 		logHook:     logHook,
 		rateLimiter: rateLimiter,
+		auditLog:    auditLog,
 	}
 
 	contextFn := func(ctx context.Context) context.Context {
@@ -1992,7 +1927,6 @@ func setupServiceTest(t *testing.T) *serviceTest {
 		if test.withCallerID {
 			ctx = rpccontext.WithCallerID(ctx, agentID)
 		}
-		auditLog := audit.New(log)
 		ctx = rpccontext.WithAuditLog(ctx, auditLog)
 
 		return ctx

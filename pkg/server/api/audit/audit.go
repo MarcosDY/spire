@@ -5,42 +5,61 @@ import (
 	"github.com/spiffe/spire-api-sdk/proto/spire/api/types"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
-type Log struct {
-	log logrus.FieldLogger
+type Log interface {
+	AddFields(logrus.Fields)
+	Emit(logrus.Fields)
+	EmitBatch(*types.Status, logrus.Fields)
+	EmitError(error)
 }
 
-func New(log logrus.FieldLogger) Log {
-	log = log.WithField("type", "audit")
-	return Log{
-		log: log,
+type log struct {
+	fields logrus.Fields
+	log    logrus.FieldLogger
+}
+
+func New(l logrus.FieldLogger) Log {
+	return &log{
+		log: l.WithFields(logrus.Fields{
+			"type": "audit",
+			// It is success by default, erros must change it
+			"status": "success",
+		}),
+		fields: logrus.Fields{},
 	}
 }
 
-func (l Log) WithFields(fields logrus.Fields) Log {
-	l.log = l.log.WithFields(fields)
-	return l
+func (l *log) AddFields(fields logrus.Fields) {
+	for key, value := range fields {
+		l.fields[key] = value
+	}
 }
 
-func (l Log) WithField(key string, value interface{}) Log {
-	l.log = l.log.WithField(key, value)
-	return l
+func (l *log) Emit(fields logrus.Fields) {
+	l.log.WithFields(l.fields).WithFields(fields).Info("Audit log")
 }
 
-func (l Log) WithStatus(s *types.Status) Log {
+func (l *log) EmitError(err error) {
+	fields := fieldsFromError(err)
+	l.log.WithFields(l.fields).WithFields(fields).Info("Audit log")
+}
+
+func (l *log) EmitBatch(s *types.Status, fields logrus.Fields) {
+	statusFields := fieldsFromStatus(s)
+	l.log.WithFields(statusFields).WithFields(fields).Info("Audit log")
+}
+
+func fieldsFromStatus(s *types.Status) logrus.Fields {
 	err := status.Error(codes.Code(s.Code), s.Message)
-	return l.WithError(err)
+	return fieldsFromError(err)
 }
 
-func (l Log) WithError(err error) Log {
+func fieldsFromError(err error) logrus.Fields {
 	fields := logrus.Fields{}
-	statusErr, ok := status.FromError(err)
+	// Unknown status is returned for non proto status
+	statusErr, _ := status.FromError(err)
 	switch {
-	case !ok:
-		fields["status"] = "success"
 	case statusErr.Code() == codes.OK:
 		fields["status"] = "success"
 	default:
@@ -49,29 +68,5 @@ func (l Log) WithError(err error) Log {
 		fields["status_message"] = statusErr.Message()
 	}
 
-	l.log = l.log.WithFields(fields)
-	return l
-}
-
-// TODO: Experimental there are issues when trying to get a proper string,
-// and it may resulst in very complex code to solve it
-func (l Log) WithRequestBody(m proto.Message, attrs map[string]bool) Log {
-	fields := logrus.Fields{}
-
-	pr := m.ProtoReflect()
-	pr.Range(func(d protoreflect.FieldDescriptor, v protoreflect.Value) bool {
-		if ok := attrs[d.TextName()]; ok {
-			key := "request_" + d.TextName()
-			fields[key] = v.String()
-		}
-
-		return true
-	})
-
-	l.log = l.log.WithFields(fields)
-	return l
-}
-
-func (l Log) Send() {
-	l.log.Info("Audit log")
+	return fields
 }

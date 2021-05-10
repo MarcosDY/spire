@@ -80,31 +80,8 @@ func (s *Service) CountAgents(ctx context.Context, req *agentv1.CountAgentsReque
 }
 
 // ListAgents returns an optionally filtered and/or paginated list of agents.
-func (s *Service) ListAgents(ctx context.Context, req *agentv1.ListAgentsRequest) (_ *agentv1.ListAgentsResponse, err error) {
-	// TODO: adding auditlog to api.MakeErr will simplify code removing defer
-	defer func() {
-		auditLog := rpccontext.AuditLog(ctx)
-		fields := logrus.Fields{
-			"page_token": req.PageToken,
-			"page_size":  req.PageSize,
-		}
-
-		if req.Filter != nil {
-			if req.Filter.ByAttestationType != "" {
-				fields["filter_by_attestation_type"] = req.Filter.ByAttestationType
-			}
-
-			if req.Filter.ByBanned != nil {
-				fields["filter_by_banned"] = req.Filter.ByBanned.Value
-			}
-
-			if req.Filter.BySelectorMatch != nil {
-				fields["filter_by_selector_match"] = req.Filter.BySelectorMatch
-			}
-		}
-
-		auditLog.WithError(err).WithFields(fields).Send()
-	}()
+func (s *Service) ListAgents(ctx context.Context, req *agentv1.ListAgentsRequest) (*agentv1.ListAgentsResponse, error) {
+	rpccontext.AddRPCAuditFields(ctx, requestFieldsFromListAgentsRequest(req))
 
 	log := rpccontext.Logger(ctx)
 
@@ -162,7 +139,31 @@ func (s *Service) ListAgents(ctx context.Context, req *agentv1.ListAgentsRequest
 		resp.Agents = append(resp.Agents, a)
 	}
 
+	rpccontext.EmitRPCAudit(ctx, logrus.Fields{})
 	return resp, nil
+}
+
+func requestFieldsFromListAgentsRequest(req *agentv1.ListAgentsRequest) logrus.Fields {
+	fields := logrus.Fields{
+		"page_token": req.PageToken,
+		"page_size":  req.PageSize,
+	}
+
+	if req.Filter != nil {
+		if req.Filter.ByAttestationType != "" {
+			fields["filter_by_attestation_type"] = req.Filter.ByAttestationType
+		}
+
+		if req.Filter.ByBanned != nil {
+			fields["filter_by_banned"] = req.Filter.ByBanned.Value
+		}
+
+		if req.Filter.BySelectorMatch != nil {
+			fields["filter_by_selector_match"] = req.Filter.BySelectorMatch
+		}
+	}
+
+	return fields
 }
 
 // GetAgent returns the agent associated with the given SpiffeID.
@@ -422,15 +423,6 @@ func (s *Service) RenewAgent(ctx context.Context, req *agentv1.RenewAgentRequest
 // CreateJoinToken returns a new JoinToken for an agent.
 func (s *Service) CreateJoinToken(ctx context.Context, req *agentv1.CreateJoinTokenRequest) (_ *types.JoinToken, err error) {
 	log := rpccontext.Logger(ctx)
-
-	defer func() {
-		auditLog := rpccontext.AuditLog(ctx)
-
-		auditLog.WithError(err).WithFields(logrus.Fields{
-			"agent_id": req.AgentId,
-			"ttl":      req.Ttl,
-		}).Send()
-	}()
 
 	if req.Ttl < 1 {
 		return nil, api.MakeErr(log, codes.InvalidArgument, "ttl is required, you must provide one", nil)

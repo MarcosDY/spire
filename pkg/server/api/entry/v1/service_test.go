@@ -14,11 +14,11 @@ import (
 	"github.com/spiffe/spire-api-sdk/proto/spire/api/types"
 	"github.com/spiffe/spire/pkg/common/telemetry"
 	"github.com/spiffe/spire/pkg/server/api"
-	"github.com/spiffe/spire/pkg/server/api/audit"
 	"github.com/spiffe/spire/pkg/server/api/entry/v1"
 	"github.com/spiffe/spire/pkg/server/api/rpccontext"
 	"github.com/spiffe/spire/pkg/server/plugin/datastore"
 	"github.com/spiffe/spire/proto/spire/common"
+	"github.com/spiffe/spire/test/fakes/fakeauditlog"
 	"github.com/spiffe/spire/test/fakes/fakedatastore"
 	"github.com/spiffe/spire/test/spiretest"
 	"github.com/stretchr/testify/assert"
@@ -1469,6 +1469,7 @@ func createTestEntries(t *testing.T, ds datastore.DataStore, entry ...*common.Re
 }
 
 type serviceTest struct {
+	auditLog     *fakeauditlog.AuditLog
 	client       entryv1.EntryClient
 	ef           *entryFetcher
 	done         func()
@@ -1494,10 +1495,13 @@ func setupServiceTest(t *testing.T, ds datastore.DataStore) *serviceTest {
 		entry.RegisterService(s, service)
 	}
 
+	auditLog := fakeauditlog.New()
+
 	test := &serviceTest{
-		ds:      ds,
-		logHook: logHook,
-		ef:      ef,
+		ds:       ds,
+		logHook:  logHook,
+		ef:       ef,
+		auditLog: auditLog,
 	}
 
 	contextFn := func(ctx context.Context) context.Context {
@@ -1506,7 +1510,6 @@ func setupServiceTest(t *testing.T, ds datastore.DataStore) *serviceTest {
 			ctx = rpccontext.WithCallerID(ctx, agentID)
 		}
 
-		auditLog := audit.New(log)
 		ctx = rpccontext.WithAuditLog(ctx, auditLog)
 		return ctx
 	}
@@ -1552,18 +1555,19 @@ func TestBatchUpdateEntry(t *testing.T) {
 		Downstream:    false,
 	}
 	for _, tt := range []struct {
-		name            string
-		code            codes.Code
-		dsError         error
-		err             string
-		expectDsEntries func(m string) []*types.Entry
-		expectLogs      func(map[string]string) []spiretest.LogEntry
-		expectStatus    *types.Status
-		inputMask       *types.EntryMask
-		outputMask      *types.EntryMask
-		initialEntries  []*types.Entry
-		updateEntries   []*types.Entry
-		expectResults   []*entryv1.BatchUpdateEntryResponse_Result
+		name              string
+		code              codes.Code
+		dsError           error
+		err               string
+		expectDsEntries   func(m string) []*types.Entry
+		expectLogs        func(map[string]string) []spiretest.LogEntry
+		expectStatus      *types.Status
+		inputMask         *types.EntryMask
+		outputMask        *types.EntryMask
+		initialEntries    []*types.Entry
+		updateEntries     []*types.Entry
+		expectResults     []*entryv1.BatchUpdateEntryResponse_Result
+		expectAuditFields func(map[string]string) map[string]string
 	}{
 		{
 			name:           "Success Update Parent Id",
@@ -1593,18 +1597,10 @@ func TestBatchUpdateEntry(t *testing.T) {
 						ParentId: &types.SPIFFEID{TrustDomain: "example.org", Path: "/parentUpdated"}},
 				},
 			},
-			expectLogs: func(m map[string]string) []spiretest.LogEntry {
-				return []spiretest.LogEntry{
-					{
-						Level:   logrus.InfoLevel,
-						Message: "Audit log",
-						Data: logrus.Fields{
-							"type":      "audit",
-							"entry_id":  m[entry1SpiffeID.Path],
-							"parent_id": "spiffe://example.org/parentUpdated",
-							"status":    "success",
-						},
-					},
+			expectAuditFields: func(m map[string]string) map[string]string {
+				return map[string]string{
+					"entry_id":  m[entry1SpiffeID.Path],
+					"parent_id": "spiffe://example.org/parentUpdated",
 				}
 			},
 		},
@@ -1636,18 +1632,10 @@ func TestBatchUpdateEntry(t *testing.T) {
 						SpiffeId: &types.SPIFFEID{TrustDomain: "example.org", Path: "/workloadUpdated"}},
 				},
 			},
-			expectLogs: func(m map[string]string) []spiretest.LogEntry {
-				return []spiretest.LogEntry{
-					{
-						Level:   logrus.InfoLevel,
-						Message: "Audit log",
-						Data: logrus.Fields{
-							"type":      "audit",
-							"entry_id":  m[entry1SpiffeID.Path],
-							"spiffe_id": "spiffe://example.org/workloadUpdated",
-							"status":    "success",
-						},
-					},
+			expectAuditFields: func(m map[string]string) map[string]string {
+				return map[string]string{
+					"entry_id":  m[entry1SpiffeID.Path],
+					"spiffe_id": "spiffe://example.org/workloadUpdated",
 				}
 			},
 		},
@@ -1691,18 +1679,10 @@ func TestBatchUpdateEntry(t *testing.T) {
 					},
 				},
 			},
-			expectLogs: func(m map[string]string) []spiretest.LogEntry {
-				return []spiretest.LogEntry{
-					{
-						Level:   logrus.InfoLevel,
-						Message: "Audit log",
-						Data: logrus.Fields{
-							"selectors": "unix:uid:2000",
-							"type":      "audit",
-							"entry_id":  m[entry1SpiffeID.Path],
-							"status":    "success",
-						},
-					},
+			expectAuditFields: func(m map[string]string) map[string]string {
+				return map[string]string{
+					"selectors": "unix:uid:2000",
+					"entry_id":  m[entry1SpiffeID.Path],
 				}
 			},
 		},
@@ -1734,18 +1714,10 @@ func TestBatchUpdateEntry(t *testing.T) {
 					},
 				},
 			},
-			expectLogs: func(m map[string]string) []spiretest.LogEntry {
-				return []spiretest.LogEntry{
-					{
-						Level:   logrus.InfoLevel,
-						Message: "Audit log",
-						Data: logrus.Fields{
-							"selectors": "unix:uid:2000,unix:gid:2000",
-							"type":      "audit",
-							"entry_id":  m[entry1SpiffeID.Path],
-							"status":    "success",
-						},
-					},
+			expectAuditFields: func(m map[string]string) map[string]string {
+				return map[string]string{
+					"selectors": "unix:uid:2000,unix:gid:2000",
+					"entry_id":  m[entry1SpiffeID.Path],
 				}
 			},
 		},
@@ -1778,18 +1750,10 @@ func TestBatchUpdateEntry(t *testing.T) {
 					},
 				},
 			},
-			expectLogs: func(m map[string]string) []spiretest.LogEntry {
-				return []spiretest.LogEntry{
-					{
-						Level:   logrus.InfoLevel,
-						Message: "Audit log",
-						Data: logrus.Fields{
-							"ttl":      "1000",
-							"type":     "audit",
-							"entry_id": m[entry1SpiffeID.Path],
-							"status":   "success",
-						},
-					},
+			expectAuditFields: func(m map[string]string) map[string]string {
+				return map[string]string{
+					"ttl":      "1000",
+					"entry_id": m[entry1SpiffeID.Path],
 				}
 			},
 		},
@@ -1822,18 +1786,10 @@ func TestBatchUpdateEntry(t *testing.T) {
 					},
 				},
 			},
-			expectLogs: func(m map[string]string) []spiretest.LogEntry {
-				return []spiretest.LogEntry{
-					{
-						Level:   logrus.InfoLevel,
-						Message: "Audit log",
-						Data: logrus.Fields{
-							"federates_with": "",
-							"type":           "audit",
-							"entry_id":       m[entry1SpiffeID.Path],
-							"status":         "success",
-						},
-					},
+			expectAuditFields: func(m map[string]string) map[string]string {
+				return map[string]string{
+					"federates_with": "",
+					"entry_id":       m[entry1SpiffeID.Path],
 				}
 			},
 		},
@@ -1866,18 +1822,10 @@ func TestBatchUpdateEntry(t *testing.T) {
 					},
 				},
 			},
-			expectLogs: func(m map[string]string) []spiretest.LogEntry {
-				return []spiretest.LogEntry{
-					{
-						Level:   logrus.InfoLevel,
-						Message: "Audit log",
-						Data: logrus.Fields{
-							"admin":    "false",
-							"type":     "audit",
-							"entry_id": m[entry1SpiffeID.Path],
-							"status":   "success",
-						},
-					},
+			expectAuditFields: func(m map[string]string) map[string]string {
+				return map[string]string{
+					"admin":    "false",
+					"entry_id": m[entry1SpiffeID.Path],
 				}
 			},
 		},
@@ -1910,18 +1858,10 @@ func TestBatchUpdateEntry(t *testing.T) {
 					},
 				},
 			},
-			expectLogs: func(m map[string]string) []spiretest.LogEntry {
-				return []spiretest.LogEntry{
-					{
-						Level:   logrus.InfoLevel,
-						Message: "Audit log",
-						Data: logrus.Fields{
-							"downstream": "false",
-							"type":       "audit",
-							"entry_id":   m[entry1SpiffeID.Path],
-							"status":     "success",
-						},
-					},
+			expectAuditFields: func(m map[string]string) map[string]string {
+				return map[string]string{
+					"downstream": "false",
+					"entry_id":   m[entry1SpiffeID.Path],
 				}
 			},
 		},
@@ -1954,18 +1894,10 @@ func TestBatchUpdateEntry(t *testing.T) {
 					},
 				},
 			},
-			expectLogs: func(m map[string]string) []spiretest.LogEntry {
-				return []spiretest.LogEntry{
-					{
-						Level:   logrus.InfoLevel,
-						Message: "Audit log",
-						Data: logrus.Fields{
-							"expires_at": "999",
-							"type":       "audit",
-							"entry_id":   m[entry1SpiffeID.Path],
-							"status":     "success",
-						},
-					},
+			expectAuditFields: func(m map[string]string) map[string]string {
+				return map[string]string{
+					"expires_at": "999",
+					"entry_id":   m[entry1SpiffeID.Path],
 				}
 			},
 		},
@@ -1998,18 +1930,10 @@ func TestBatchUpdateEntry(t *testing.T) {
 					},
 				},
 			},
-			expectLogs: func(m map[string]string) []spiretest.LogEntry {
-				return []spiretest.LogEntry{
-					{
-						Level:   logrus.InfoLevel,
-						Message: "Audit log",
-						Data: logrus.Fields{
-							"dns_names": "dnsUpdated",
-							"type":      "audit",
-							"entry_id":  m[entry1SpiffeID.Path],
-							"status":    "success",
-						},
-					},
+			expectAuditFields: func(m map[string]string) map[string]string {
+				return map[string]string{
+					"dns_names": "dnsUpdated",
+					"entry_id":  m[entry1SpiffeID.Path],
 				}
 			},
 		},
@@ -2041,17 +1965,9 @@ func TestBatchUpdateEntry(t *testing.T) {
 					},
 				},
 			},
-			expectLogs: func(m map[string]string) []spiretest.LogEntry {
-				return []spiretest.LogEntry{
-					{
-						Level:   logrus.InfoLevel,
-						Message: "Audit log",
-						Data: logrus.Fields{
-							"type":     "audit",
-							"entry_id": m[entry1SpiffeID.Path],
-							"status":   "success",
-						},
-					},
+			expectAuditFields: func(m map[string]string) map[string]string {
+				return map[string]string{
+					"entry_id": m[entry1SpiffeID.Path],
 				}
 			},
 		},
@@ -2082,17 +1998,11 @@ func TestBatchUpdateEntry(t *testing.T) {
 							logrus.ErrorKey:          "invalid spiffe ID: trust domain is empty",
 						},
 					},
-					{
-						Level:   logrus.InfoLevel,
-						Message: "Audit log",
-						Data: logrus.Fields{
-							"type":           "audit",
-							"entry_id":       m[entry1SpiffeID.Path],
-							"status":         "error",
-							"status_code":    "InvalidArgument",
-							"status_message": "failed to convert entry: invalid spiffe ID: trust domain is empty",
-						},
-					},
+				}
+			},
+			expectAuditFields: func(m map[string]string) map[string]string {
+				return map[string]string{
+					"entry_id": m[entry1SpiffeID.Path],
 				}
 			},
 		},
@@ -2123,17 +2033,11 @@ func TestBatchUpdateEntry(t *testing.T) {
 							logrus.ErrorKey:          "invalid parent ID: trust domain is empty",
 						},
 					},
-					{
-						Level:   logrus.InfoLevel,
-						Message: "Audit log",
-						Data: logrus.Fields{
-							"type":           "audit",
-							"entry_id":       m[entry1SpiffeID.Path],
-							"status":         "error",
-							"status_code":    "InvalidArgument",
-							"status_message": "failed to convert entry: invalid parent ID: trust domain is empty",
-						},
-					},
+				}
+			},
+			expectAuditFields: func(m map[string]string) map[string]string {
+				return map[string]string{
+					"entry_id": m[entry1SpiffeID.Path],
 				}
 			},
 		},
@@ -2164,17 +2068,11 @@ func TestBatchUpdateEntry(t *testing.T) {
 							telemetry.RegistrationID: m[entry1SpiffeID.Path],
 						},
 					},
-					{
-						Level:   logrus.InfoLevel,
-						Message: "Audit log",
-						Data: logrus.Fields{
-							"type":           "audit",
-							"entry_id":       m[entry1SpiffeID.Path],
-							"status":         "error",
-							"status_code":    "InvalidArgument",
-							"status_message": "failed to convert entry: invalid parent ID: trust domain is empty",
-						},
-					},
+				}
+			},
+			expectAuditFields: func(m map[string]string) map[string]string {
+				return map[string]string{
+					"entry_id": m[entry1SpiffeID.Path],
 				}
 			},
 		},
@@ -2205,17 +2103,11 @@ func TestBatchUpdateEntry(t *testing.T) {
 							telemetry.RegistrationID: m[entry1SpiffeID.Path],
 						},
 					},
-					{
-						Level:   logrus.InfoLevel,
-						Message: "Audit log",
-						Data: logrus.Fields{
-							"type":           "audit",
-							"entry_id":       m[entry1SpiffeID.Path],
-							"status":         "error",
-							"status_code":    "InvalidArgument",
-							"status_message": "failed to convert entry: invalid spiffe ID: trust domain is empty",
-						},
-					},
+				}
+			},
+			expectAuditFields: func(m map[string]string) map[string]string {
+				return map[string]string{
+					"entry_id": m[entry1SpiffeID.Path],
 				}
 			},
 		},
@@ -2246,18 +2138,12 @@ func TestBatchUpdateEntry(t *testing.T) {
 							telemetry.RegistrationID: m[entry1SpiffeID.Path],
 						},
 					},
-					{
-						Level:   logrus.InfoLevel,
-						Message: "Audit log",
-						Data: logrus.Fields{
-							"type":           "audit",
-							"entry_id":       m[entry1SpiffeID.Path],
-							"selectors":      "",
-							"status":         "error",
-							"status_code":    "InvalidArgument",
-							"status_message": "failed to convert entry: selector list is empty",
-						},
-					},
+				}
+			},
+			expectAuditFields: func(m map[string]string) map[string]string {
+				return map[string]string{
+					"entry_id":  m[entry1SpiffeID.Path],
+					"selectors": "",
 				}
 			},
 		},
@@ -2288,18 +2174,12 @@ func TestBatchUpdateEntry(t *testing.T) {
 							logrus.ErrorKey:          "datastore error",
 						},
 					},
-					{
-						Level:   logrus.InfoLevel,
-						Message: "Audit log",
-						Data: logrus.Fields{
-							"type":           "audit",
-							"entry_id":       m[entry1SpiffeID.Path],
-							"parent_id":      "spiffe://example.org/workload",
-							"status":         "error",
-							"status_code":    "Internal",
-							"status_message": "failed to update entry: datastore error",
-						},
-					},
+				}
+			},
+			expectAuditFields: func(m map[string]string) map[string]string {
+				return map[string]string{
+					"entry_id":  m[entry1SpiffeID.Path],
+					"parent_id": "spiffe://example.org/workload",
 				}
 			},
 		},
@@ -2335,27 +2215,19 @@ func TestBatchUpdateEntry(t *testing.T) {
 					},
 				},
 			},
-			expectLogs: func(m map[string]string) []spiretest.LogEntry {
-				return []spiretest.LogEntry{
-					{
-						Level:   logrus.InfoLevel,
-						Message: "Audit log",
-						Data: logrus.Fields{
-							"type":            "audit",
-							"entry_id":        m[entry1SpiffeID.Path],
-							"admin":           "false",
-							"dns_names":       "dns3,dns4",
-							"downstream":      "false",
-							"expires_at":      "999999999",
-							"federates_with":  "",
-							"parent_id":       "spiffe://example.org/validUpdated",
-							"revision_number": "0",
-							"selectors":       "unix:uid:9999",
-							"spiffe_id":       "spiffe://example.org/validUpdated",
-							"status":          "success",
-							"ttl":             "500000",
-						},
-					},
+			expectAuditFields: func(m map[string]string) map[string]string {
+				return map[string]string{
+					"entry_id":        m[entry1SpiffeID.Path],
+					"admin":           "false",
+					"dns_names":       "dns3,dns4",
+					"downstream":      "false",
+					"expires_at":      "999999999",
+					"federates_with":  "",
+					"parent_id":       "spiffe://example.org/validUpdated",
+					"revision_number": "0",
+					"selectors":       "unix:uid:9999",
+					"spiffe_id":       "spiffe://example.org/validUpdated",
+					"ttl":             "500000",
 				}
 			},
 		},
@@ -2393,18 +2265,10 @@ func TestBatchUpdateEntry(t *testing.T) {
 					},
 				},
 			},
-			expectLogs: func(m map[string]string) []spiretest.LogEntry {
-				return []spiretest.LogEntry{
-					{
-						Level:   logrus.InfoLevel,
-						Message: "Audit log",
-						Data: logrus.Fields{
-							"type":     "audit",
-							"entry_id": m[entry1SpiffeID.Path],
-							"ttl":      "500000",
-							"status":   "success",
-						},
-					},
+			expectAuditFields: func(m map[string]string) map[string]string {
+				return map[string]string{
+					"entry_id": m[entry1SpiffeID.Path],
+					"ttl":      "500000",
 				}
 			},
 		},
@@ -2433,17 +2297,9 @@ func TestBatchUpdateEntry(t *testing.T) {
 					},
 				},
 			},
-			expectLogs: func(m map[string]string) []spiretest.LogEntry {
-				return []spiretest.LogEntry{
-					{
-						Level:   logrus.InfoLevel,
-						Message: "Audit log",
-						Data: logrus.Fields{
-							"type":     "audit",
-							"entry_id": m[entry1SpiffeID.Path],
-							"status":   "success",
-						},
-					},
+			expectAuditFields: func(m map[string]string) map[string]string {
+				return map[string]string{
+					"entry_id": m[entry1SpiffeID.Path],
 				}
 			},
 		},
@@ -2473,18 +2329,10 @@ func TestBatchUpdateEntry(t *testing.T) {
 					Entry:  &types.Entry{},
 				},
 			},
-			expectLogs: func(m map[string]string) []spiretest.LogEntry {
-				return []spiretest.LogEntry{
-					{
-						Level:   logrus.InfoLevel,
-						Message: "Audit log",
-						Data: logrus.Fields{
-							"type":     "audit",
-							"entry_id": m[entry1SpiffeID.Path],
-							"status":   "success",
-							"ttl":      "500000",
-						},
-					},
+			expectAuditFields: func(m map[string]string) map[string]string {
+				return map[string]string{
+					"entry_id": m[entry1SpiffeID.Path],
+					"ttl":      "500000",
 				}
 			},
 		},
@@ -2522,11 +2370,15 @@ func TestBatchUpdateEntry(t *testing.T) {
 			})
 			require.NoError(t, err)
 
-			expectedLogs := []spiretest.LogEntry{}
+			var expectedLogs []spiretest.LogEntry
 			if tt.expectLogs != nil {
 				expectedLogs = tt.expectLogs(spiffeToIDMap)
 			}
 			spiretest.AssertLogs(t, test.logHook.AllEntries(), expectedLogs)
+
+			expectedAuditFields := tt.expectAuditFields(spiffeToIDMap)
+			require.Equal(t, expectedAuditFields, test.auditLog.GetEmitedFields())
+
 			if tt.err != "" {
 				spiretest.RequireGRPCStatusContains(t, err, tt.code, tt.err)
 				require.Nil(t, resp)
