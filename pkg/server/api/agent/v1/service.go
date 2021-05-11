@@ -159,7 +159,9 @@ func requestFieldsFromListAgentsRequest(req *agentv1.ListAgentsRequest) logrus.F
 		}
 
 		if req.Filter.BySelectorMatch != nil {
-			fields["filter_by_selector_match"] = req.Filter.BySelectorMatch
+			fields["filter_by_selector_match"] = req.Filter.BySelectorMatch.Match
+
+			fields["filter_by_selector"] = api.SelectorFieldFromProto(req.Filter.BySelectorMatch.Selectors)
 		}
 	}
 

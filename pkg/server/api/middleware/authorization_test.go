@@ -71,6 +71,7 @@ func TestWithAuthorizationPreprocess(t *testing.T) {
 				{
 					Level:   logrus.InfoLevel,
 					Message: "Authorizer called",
+					Data:    logrus.Fields{},
 				},
 			},
 		},
@@ -122,6 +123,7 @@ func TestWithAuthorizationPreprocess(t *testing.T) {
 				{
 					Level:   logrus.ErrorLevel,
 					Message: "Authorization misconfigured (method not registered); this is a bug",
+					Data:    logrus.Fields{},
 				},
 			},
 		},
@@ -156,6 +158,20 @@ func TestWithAuthorizationPreprocess(t *testing.T) {
 
 			ctxOut, err := m.Preprocess(ctxIn, tt.fullMethod)
 			spiretest.RequireGRPCStatus(t, err, tt.expectCode, tt.expectMsg)
+
+			// No a good way to fake UUID generation, so I get it from fields, verify it is not emppy and set as expected
+			if hook.LastEntry() != nil {
+				requestID := hook.LastEntry().Data["request-id"]
+				assert.NotEmpty(t, requestID)
+
+				for _, e := range tt.expectLogs {
+					if e.Data == nil {
+						e.Data = logrus.Fields{}
+					}
+					e.Data["request-id"] = requestID
+				}
+			}
+
 			spiretest.AssertLogs(t, hook.AllEntries(), tt.expectLogs)
 
 			// Assert the properties of the context returned by Preprocess.

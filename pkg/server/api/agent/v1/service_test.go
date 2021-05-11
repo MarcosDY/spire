@@ -434,7 +434,8 @@ func TestListAgents(t *testing.T) {
 			expectAuditFields: map[string]string{
 				"page_size":                "0",
 				"page_token":               "",
-				"filter_by_selector_match": "selectors:{type:\"a\" value:\"1\"}  selectors:{type:\"b\"  value:\"2\"}",
+				"filter_by_selector":       "a:1,b:2",
+				"filter_by_selector_match": "MATCH_EXACT",
 			},
 		},
 		{
@@ -478,7 +479,8 @@ func TestListAgents(t *testing.T) {
 			expectAuditFields: map[string]string{
 				"page_size":                "0",
 				"page_token":               "",
-				"filter_by_selector_match": "selectors:{value:\"1\"}",
+				"filter_by_selector":       ":1",
+				"filter_by_selector_match": "MATCH_EXACT",
 			},
 		},
 		{
