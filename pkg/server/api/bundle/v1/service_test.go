@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strconv"
 	"testing"
 	"time"
 
@@ -23,6 +24,7 @@ import (
 	"github.com/spiffe/spire/pkg/server/api/rpccontext"
 	"github.com/spiffe/spire/pkg/server/plugin/datastore"
 	"github.com/spiffe/spire/proto/spire/common"
+	"github.com/spiffe/spire/test/fakes/fakeauditlog"
 	"github.com/spiffe/spire/test/fakes/fakedatastore"
 	"github.com/spiffe/spire/test/spiretest"
 	"github.com/spiffe/spire/test/testca"
@@ -65,20 +67,22 @@ func TestGetFederatedBundle(t *testing.T) {
 	defer test.Cleanup()
 
 	for _, tt := range []struct {
-		name        string
-		trustDomain string
-		err         string
-		expectLogs  []spiretest.LogEntry
-		outputMask  *types.BundleMask
-		isAdmin     bool
-		isAgent     bool
-		isLocal     bool
-		setBundle   bool
+		name              string
+		trustDomain       string
+		err               string
+		expectAuditFields map[string]string
+		expectLogs        []spiretest.LogEntry
+		outputMask        *types.BundleMask
+		isAdmin           bool
+		isAgent           bool
+		isLocal           bool
+		setBundle         bool
 	}{
 		{
-			name:    "Trust domain is empty",
-			isAdmin: true,
-			err:     "rpc error: code = InvalidArgument desc = trust domain argument is not valid: spiffeid: trust domain is empty",
+			name:              "Trust domain is empty",
+			isAdmin:           true,
+			err:               "rpc error: code = InvalidArgument desc = trust domain argument is not valid: spiffeid: trust domain is empty",
+			expectAuditFields: map[string]string{"trust_domain": ""},
 			expectLogs: []spiretest.LogEntry{
 				{
 					Level:   logrus.ErrorLevel,
@@ -91,10 +95,11 @@ func TestGetFederatedBundle(t *testing.T) {
 			},
 		},
 		{
-			name:        "Trust domain is not a valid trust domain",
-			isAdmin:     true,
-			trustDomain: "malformed id",
-			err:         `rpc error: code = InvalidArgument desc = trust domain argument is not valid: spiffeid: unable to parse: parse "spiffe://malformed id": invalid character " " in host name`,
+			name:              "Trust domain is not a valid trust domain",
+			isAdmin:           true,
+			trustDomain:       "malformed id",
+			err:               `rpc error: code = InvalidArgument desc = trust domain argument is not valid: spiffeid: unable to parse: parse "spiffe://malformed id": invalid character " " in host name`,
+			expectAuditFields: map[string]string{"trust_domain": "malformed id"},
 			expectLogs: []spiretest.LogEntry{
 				{
 					Level:   logrus.ErrorLevel,
@@ -107,10 +112,11 @@ func TestGetFederatedBundle(t *testing.T) {
 			},
 		},
 		{
-			name:        "The given trust domain is server's own trust domain",
-			isAdmin:     true,
-			trustDomain: "example.org",
-			err:         "rpc error: code = InvalidArgument desc = getting a federated bundle for the server's own trust domain is not allowed",
+			name:              "The given trust domain is server's own trust domain",
+			isAdmin:           true,
+			trustDomain:       "example.org",
+			err:               "rpc error: code = InvalidArgument desc = getting a federated bundle for the server's own trust domain is not allowed",
+			expectAuditFields: map[string]string{"trust_domain": "example.org"},
 			expectLogs: []spiretest.LogEntry{
 				{
 					Level:   logrus.ErrorLevel,
@@ -122,10 +128,11 @@ func TestGetFederatedBundle(t *testing.T) {
 			},
 		},
 		{
-			name:        "Trust domain not found",
-			isAdmin:     true,
-			trustDomain: "another-example.org",
-			err:         `rpc error: code = NotFound desc = bundle not found`,
+			name:              "Trust domain not found",
+			isAdmin:           true,
+			trustDomain:       "another-example.org",
+			err:               `rpc error: code = NotFound desc = bundle not found`,
+			expectAuditFields: map[string]string{"trust_domain": "another-example.org"},
 			expectLogs: []spiretest.LogEntry{
 				{
 					Level:   logrus.ErrorLevel,
@@ -137,10 +144,11 @@ func TestGetFederatedBundle(t *testing.T) {
 			},
 		},
 		{
-			name:        "Get federated bundle do not returns fields filtered by mask",
-			isAdmin:     true,
-			trustDomain: "another-example.org",
-			setBundle:   true,
+			name:              "Get federated bundle do not returns fields filtered by mask",
+			isAdmin:           true,
+			trustDomain:       "another-example.org",
+			setBundle:         true,
+			expectAuditFields: map[string]string{"trust_domain": "another-example.org"},
 			outputMask: &types.BundleMask{
 				RefreshHint:     false,
 				SequenceNumber:  false,
@@ -149,27 +157,31 @@ func TestGetFederatedBundle(t *testing.T) {
 			},
 		},
 		{
-			name:        "Get federated bundle succeeds for admin workloads",
-			isAdmin:     true,
-			trustDomain: "another-example.org",
-			setBundle:   true,
+			name:              "Get federated bundle succeeds for admin workloads",
+			isAdmin:           true,
+			trustDomain:       "another-example.org",
+			expectAuditFields: map[string]string{"trust_domain": "another-example.org"},
+			setBundle:         true,
 		},
 		{
-			name:        "Get federated bundle succeeds for local workloads",
-			isLocal:     true,
-			trustDomain: "another-example.org",
-			setBundle:   true,
+			name:              "Get federated bundle succeeds for local workloads",
+			isLocal:           true,
+			trustDomain:       "another-example.org",
+			expectAuditFields: map[string]string{"trust_domain": "another-example.org"},
+			setBundle:         true,
 		},
 		{
-			name:        "Get federated bundle succeeds for agent workload",
-			isAgent:     true,
-			trustDomain: "another-example.org",
-			setBundle:   true,
+			name:              "Get federated bundle succeeds for agent workload",
+			isAgent:           true,
+			trustDomain:       "another-example.org",
+			expectAuditFields: map[string]string{"trust_domain": "another-example.org"},
+			setBundle:         true,
 		},
 	} {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			test.logHook.Reset()
+			test.auditLog.Reset()
 			test.isAdmin = tt.isAdmin
 			test.isAgent = tt.isAgent
 			test.isLocal = tt.isLocal
@@ -184,6 +196,7 @@ func TestGetFederatedBundle(t *testing.T) {
 				OutputMask:  tt.outputMask,
 			})
 
+			require.Equal(t, tt.expectAuditFields, test.auditLog.GetEmitedFields())
 			spiretest.AssertLogs(t, test.logHook.AllEntries(), tt.expectLogs)
 
 			if tt.err != "" {
@@ -203,24 +216,34 @@ func TestGetFederatedBundle(t *testing.T) {
 
 func TestGetBundle(t *testing.T) {
 	for _, tt := range []struct {
-		name       string
-		err        string
-		logMsg     string
-		outputMask *types.BundleMask
-		setBundle  bool
+		name              string
+		err               string
+		logMsg            string
+		outputMask        *types.BundleMask
+		expectAuditFields map[string]string
+		setBundle         bool
 	}{
 		{
-			name:      "Get bundle returns bundle",
+			name: "Get bundle returns bundle",
+			expectAuditFields: map[string]string{
+				"trust_domain": "example.org",
+			},
 			setBundle: true,
 		},
 		{
-			name:   "Bundle not found",
-			err:    `bundle not found`,
+			name: "Bundle not found",
+			err:  `bundle not found`,
+			expectAuditFields: map[string]string{
+				"trust_domain": "example.org",
+			},
 			logMsg: `Bundle not found`,
 		},
 		{
 			name:      "Get bundle does not return fields filtered by mask",
 			setBundle: true,
+			expectAuditFields: map[string]string{
+				"trust_domain": "example.org",
+			},
 			outputMask: &types.BundleMask{
 				RefreshHint:     false,
 				SequenceNumber:  false,
@@ -243,6 +266,8 @@ func TestGetBundle(t *testing.T) {
 				OutputMask: tt.outputMask,
 			})
 
+			require.Equal(t, tt.expectAuditFields, test.auditLog.GetEmitedFields())
+
 			if tt.err != "" {
 				require.Nil(t, b)
 				require.Error(t, err)
@@ -264,6 +289,7 @@ func TestAppendBundle(t *testing.T) {
 
 	pkixBytes, err := base64.StdEncoding.DecodeString("MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEYSlUVLqTD8DEnA4F1EWMTf5RXc5lnCxw+5WKJwngEL3rPc9i4Tgzz9riR3I/NiSlkgRO1WsxBusqpC284j9dXA==")
 	require.NoError(t, err)
+	pkixBytesHashed := api.HashByte(pkixBytes)
 
 	sb := &common.Bundle{
 		TrustDomainId: serverTrustDomain.IDString(),
@@ -286,11 +312,13 @@ func TestAppendBundle(t *testing.T) {
 		KeyId:     "key-id-2",
 		ExpiresAt: expiresAt,
 	}
+	expiresAtStr := strconv.FormatInt(expiresAt, 10)
 	x509Cert := &types.X509Certificate{
 		Asn1: rootCA.Raw,
 	}
 	_, expectedX509Err := x509.ParseCertificates([]byte("malformed"))
 	require.Error(t, expectedX509Err)
+	x509CertHashed := api.HashByte(rootCA.Raw)
 
 	_, expectedJWTErr := x509.ParsePKIXPublicKey([]byte("malformed"))
 	require.Error(t, expectedJWTErr)
@@ -298,17 +326,18 @@ func TestAppendBundle(t *testing.T) {
 	for _, tt := range []struct {
 		name string
 
-		trustDomain     string
-		x509Authorities []*types.X509Certificate
-		jwtAuthorities  []*types.JWTKey
-		code            codes.Code
-		dsError         error
-		err             string
-		expectBundle    *types.Bundle
-		expectLogs      []spiretest.LogEntry
-		invalidEntry    bool
-		noBundle        bool
-		outputMask      *types.BundleMask
+		trustDomain       string
+		x509Authorities   []*types.X509Certificate
+		jwtAuthorities    []*types.JWTKey
+		code              codes.Code
+		dsError           error
+		err               string
+		expectBundle      *types.Bundle
+		expectAuditFields map[string]string
+		expectLogs        []spiretest.LogEntry
+		invalidEntry      bool
+		noBundle          bool
+		outputMask        *types.BundleMask
 	}{
 		{
 			name:            "no output mask defined",
@@ -321,6 +350,12 @@ func TestAppendBundle(t *testing.T) {
 				X509Authorities: append(defaultBundle.X509Authorities, x509Cert),
 				JwtAuthorities:  append(defaultBundle.JwtAuthorities, jwtKey2),
 			},
+			expectAuditFields: map[string]string{
+				"jwt_authority_expires_at_0": expiresAtStr,
+				"jwt_authority_key_id_0":     "key-id-2",
+				"jwt_authority_public_key_0": pkixBytesHashed,
+				"x509_authorities_asn1_0":    x509CertHashed,
+			},
 		},
 		{
 			name:            "output mask defined",
@@ -330,6 +365,12 @@ func TestAppendBundle(t *testing.T) {
 				TrustDomain:     defaultBundle.TrustDomain,
 				X509Authorities: append(defaultBundle.X509Authorities, x509Cert),
 			},
+			expectAuditFields: map[string]string{
+				"jwt_authority_expires_at_0": expiresAtStr,
+				"jwt_authority_key_id_0":     "key-id-2",
+				"jwt_authority_public_key_0": pkixBytesHashed,
+				"x509_authorities_asn1_0":    x509CertHashed,
+			},
 			outputMask: &types.BundleMask{
 				X509Authorities: true,
 			},
@@ -337,6 +378,9 @@ func TestAppendBundle(t *testing.T) {
 		{
 			name:            "update only X.509 authorities",
 			x509Authorities: []*types.X509Certificate{x509Cert},
+			expectAuditFields: map[string]string{
+				"x509_authorities_asn1_0": x509CertHashed,
+			},
 			expectBundle: &types.Bundle{
 				TrustDomain:     defaultBundle.TrustDomain,
 				RefreshHint:     defaultBundle.RefreshHint,
@@ -355,12 +399,23 @@ func TestAppendBundle(t *testing.T) {
 				JwtAuthorities:  append(defaultBundle.JwtAuthorities, jwtKey2),
 				X509Authorities: defaultBundle.X509Authorities,
 			},
+			expectAuditFields: map[string]string{
+				"jwt_authority_expires_at_0": expiresAtStr,
+				"jwt_authority_key_id_0":     "key-id-2",
+				"jwt_authority_public_key_0": pkixBytesHashed,
+			},
 		},
 		{
 			name:            "output mask all false",
 			x509Authorities: []*types.X509Certificate{x509Cert},
 			jwtAuthorities:  []*types.JWTKey{jwtKey2},
 			expectBundle:    &types.Bundle{TrustDomain: serverTrustDomain.String()},
+			expectAuditFields: map[string]string{
+				"jwt_authority_expires_at_0": expiresAtStr,
+				"jwt_authority_key_id_0":     "key-id-2",
+				"jwt_authority_public_key_0": pkixBytesHashed,
+				"x509_authorities_asn1_0":    x509CertHashed,
+			},
 			outputMask: &types.BundleMask{
 				X509Authorities: false,
 				JwtAuthorities:  false,
@@ -369,9 +424,10 @@ func TestAppendBundle(t *testing.T) {
 			},
 		},
 		{
-			name: "no authorities",
-			code: codes.InvalidArgument,
-			err:  "no authorities to append",
+			name:              "no authorities",
+			code:              codes.InvalidArgument,
+			err:               "no authorities to append",
+			expectAuditFields: map[string]string{},
 			expectLogs: []spiretest.LogEntry{
 				{
 					Level:   logrus.ErrorLevel,
@@ -388,6 +444,9 @@ func TestAppendBundle(t *testing.T) {
 			},
 			code: codes.InvalidArgument,
 			err:  `failed to convert X.509 authority:`,
+			expectAuditFields: map[string]string{
+				"x509_authorities_asn1_0": api.HashByte([]byte("malformed")),
+			},
 			expectLogs: []spiretest.LogEntry{
 				{
 					Level:   logrus.ErrorLevel,
@@ -410,6 +469,11 @@ func TestAppendBundle(t *testing.T) {
 			},
 			code: codes.InvalidArgument,
 			err:  "failed to convert JWT authority",
+			expectAuditFields: map[string]string{
+				"jwt_authority_expires_at_0": expiresAtStr,
+				"jwt_authority_key_id_0":     "kid2",
+				"jwt_authority_public_key_0": api.HashByte([]byte("malformed")),
+			},
 			expectLogs: []spiretest.LogEntry{
 				{
 					Level:   logrus.ErrorLevel,
@@ -431,6 +495,11 @@ func TestAppendBundle(t *testing.T) {
 			},
 			code: codes.InvalidArgument,
 			err:  "failed to convert JWT authority",
+			expectAuditFields: map[string]string{
+				"jwt_authority_expires_at_0": "0",
+				"jwt_authority_key_id_0":     "",
+				"jwt_authority_public_key_0": pkixBytesHashed,
+			},
 			expectLogs: []spiretest.LogEntry{
 				{
 					Level:   logrus.ErrorLevel,
@@ -448,6 +517,9 @@ func TestAppendBundle(t *testing.T) {
 			code:            codes.Internal,
 			dsError:         errors.New("some error"),
 			err:             "failed to append bundle: some error",
+			expectAuditFields: map[string]string{
+				"x509_authorities_asn1_0": x509CertHashed,
+			},
 			expectLogs: []spiretest.LogEntry{
 				{
 					Level:   logrus.ErrorLevel,
@@ -463,6 +535,12 @@ func TestAppendBundle(t *testing.T) {
 			name:            "if bundle not found, a new bundle is created",
 			x509Authorities: []*types.X509Certificate{x509Cert},
 			jwtAuthorities:  []*types.JWTKey{jwtKey2},
+			expectAuditFields: map[string]string{
+				"jwt_authority_expires_at_0": expiresAtStr,
+				"jwt_authority_key_id_0":     "key-id-2",
+				"jwt_authority_public_key_0": pkixBytesHashed,
+				"x509_authorities_asn1_0":    x509CertHashed,
+			},
 			expectBundle: &types.Bundle{
 				TrustDomain:     serverTrustDomain.String(),
 				X509Authorities: []*types.X509Certificate{x509Cert},
@@ -496,6 +574,7 @@ func TestAppendBundle(t *testing.T) {
 				OutputMask:      tt.outputMask,
 			})
 
+			require.Equal(t, tt.expectAuditFields, test.auditLog.GetEmitedFields())
 			spiretest.AssertLogs(t, test.logHook.AllEntries(), tt.expectLogs)
 			if tt.err != "" {
 				spiretest.RequireGRPCStatusContains(t, err, tt.code, tt.err)
@@ -539,21 +618,36 @@ func TestBatchDeleteFederatedBundle(t *testing.T) {
 	for _, tt := range []struct {
 		name string
 
-		entry           *common.RegistrationEntry
-		code            codes.Code
-		dsError         error
-		err             string
-		expectLogs      []spiretest.LogEntry
-		expectResults   []*bundlev1.BatchDeleteFederatedBundleResponse_Result
-		expectDSBundles []string
-		mode            bundlev1.BatchDeleteFederatedBundleRequest_Mode
-		trustDomains    []string
+		entry              *common.RegistrationEntry
+		code               codes.Code
+		dsError            error
+		err                string
+		expectAuditEntries []map[string]string
+		expectLogs         []spiretest.LogEntry
+		expectResults      []*bundlev1.BatchDeleteFederatedBundleResponse_Result
+		expectDSBundles    []string
+		mode               bundlev1.BatchDeleteFederatedBundleRequest_Mode
+		trustDomains       []string
 	}{
 		{
 			name: "remove multiple bundles",
 			expectResults: []*bundlev1.BatchDeleteFederatedBundleResponse_Result{
 				{Status: &types.Status{Code: int32(codes.OK), Message: "OK"}, TrustDomain: td1.String()},
 				{Status: &types.Status{Code: int32(codes.OK), Message: "OK"}, TrustDomain: td2.String()},
+			},
+			expectAuditEntries: []map[string]string{
+				{
+					"status_code":    "OK",
+					"status_message": "OK",
+					"mode":           "RESTRICT",
+					"trust_domain":   "td1.org",
+				},
+				{
+					"status_code":    "Ok",
+					"status_message": "Ok",
+					"mode":           "RESTRICT",
+					"trust_domain":   "td2.org",
+				},
 			},
 			expectDSBundles: []string{serverTrustDomain.IDString(), td3.IDString()},
 			trustDomains:    []string{td1.String(), td2.String()},
@@ -575,6 +669,14 @@ func TestBatchDeleteFederatedBundle(t *testing.T) {
 						telemetry.TrustDomainID:             "td1.org",
 						telemetry.DeleteFederatedBundleMode: "RESTRICT",
 					},
+				},
+			},
+			expectAuditEntries: []map[string]string{
+				{
+					"status_code":    "FailedPrecondition",
+					"status_message": "Ok",
+					"mode":           "RESTRICT",
+					"trust_domain":   "td1.org",
 				},
 			},
 			expectResults: []*bundlev1.BatchDeleteFederatedBundleResponse_Result{
@@ -733,6 +835,7 @@ func TestBatchDeleteFederatedBundle(t *testing.T) {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			test.logHook.Reset()
+			test.auditLog.Reset()
 
 			// Create all test bundles
 			for _, td := range dsBundles {
@@ -753,6 +856,7 @@ func TestBatchDeleteFederatedBundle(t *testing.T) {
 				Mode:         tt.mode,
 			})
 
+			require.Equal(t, tt.expectAuditEntries, test.auditLog.GetBatchEntries())
 			spiretest.AssertLogs(t, test.logHook.AllEntries(), tt.expectLogs)
 			if tt.err != "" {
 				spiretest.RequireGRPCStatusContains(t, err, tt.code, tt.err)
@@ -816,14 +920,15 @@ func TestPublishJWTAuthority(t *testing.T) {
 	for _, tt := range []struct {
 		name string
 
-		code           codes.Code
-		err            string
-		expectLogs     []spiretest.LogEntry
-		resultKeys     []*types.JWTKey
-		fakeErr        error
-		fakeExpectKey  *common.PublicKey
-		jwtKey         *types.JWTKey
-		rateLimiterErr error
+		code              codes.Code
+		err               string
+		expectAuditFields map[string]string
+		expectLogs        []spiretest.LogEntry
+		resultKeys        []*types.JWTKey
+		fakeErr           error
+		fakeExpectKey     *common.PublicKey
+		jwtKey            *types.JWTKey
+		rateLimiterErr    error
 	}{
 		{
 			name:   "success",
@@ -939,6 +1044,7 @@ func TestPublishJWTAuthority(t *testing.T) {
 				JwtAuthority: tt.jwtKey,
 			})
 
+			require.Equal(t, tt.expectAuditFields, test.auditLog.GetEmitedFields())
 			spiretest.AssertLogs(t, test.logHook.AllEntries(), tt.expectLogs)
 			if err != nil {
 				spiretest.RequireGRPCStatusContains(t, err, tt.code, tt.err)
@@ -976,6 +1082,7 @@ func TestListFederatedBundles(t *testing.T) {
 		name              string
 		code              codes.Code
 		err               string
+		expectAuditFields map[string]string
 		expectBundlePages [][]*common.Bundle
 		expectLogs        []spiretest.LogEntry
 		outputMask        *types.BundleMask
@@ -1034,6 +1141,7 @@ func TestListFederatedBundles(t *testing.T) {
 					PageSize:   tt.pageSize,
 					PageToken:  pageToken,
 				})
+				require.Equal(t, tt.expectAuditFields, test.auditLog.GetEmitedFields())
 				if tt.err != "" {
 					spiretest.RequireGRPCStatusContains(t, err, tt.code, tt.err)
 					require.Nil(t, resp)
@@ -1076,13 +1184,14 @@ func TestCountBundles(t *testing.T) {
 	}
 
 	for _, tt := range []struct {
-		name       string
-		count      int32
-		resp       *bundlev1.CountBundlesResponse
-		code       codes.Code
-		dsError    error
-		err        string
-		expectLogs []spiretest.LogEntry
+		name              string
+		count             int32
+		resp              *bundlev1.CountBundlesResponse
+		code              codes.Code
+		dsError           error
+		err               string
+		expectAuditFields map[string]string
+		expectLogs        []spiretest.LogEntry
 	}{
 		{
 			name:  "0 bundles",
@@ -1132,6 +1241,7 @@ func TestCountBundles(t *testing.T) {
 			test.ds.SetNextError(tt.dsError)
 			resp, err := test.client.CountBundles(context.Background(), &bundlev1.CountBundlesRequest{})
 
+			require.Equal(t, tt.expectAuditFields, test.auditLog.GetEmitedFields())
 			spiretest.AssertLogs(t, test.logHook.AllEntries(), tt.expectLogs)
 			if tt.err != "" {
 				spiretest.RequireGRPCStatusContains(t, err, tt.code, tt.err)
@@ -1173,12 +1283,13 @@ func TestBatchCreateFederatedBundle(t *testing.T) {
 	require.Error(t, expectedX509Err)
 
 	for _, tt := range []struct {
-		name            string
-		bundlesToCreate []*types.Bundle
-		outputMask      *types.BundleMask
-		expectedResults []*bundlev1.BatchCreateFederatedBundleResponse_Result
-		expectedLogMsgs []spiretest.LogEntry
-		dsError         error
+		name              string
+		bundlesToCreate   []*types.Bundle
+		outputMask        *types.BundleMask
+		expectAuditFields map[string]string
+		expectedResults   []*bundlev1.BatchCreateFederatedBundleResponse_Result
+		expectedLogMsgs   []spiretest.LogEntry
+		dsError           error
 	}{
 		{
 			name:            "Create succeeds",
@@ -1377,6 +1488,7 @@ func TestBatchCreateFederatedBundle(t *testing.T) {
 				Bundle:     tt.bundlesToCreate,
 				OutputMask: tt.outputMask,
 			})
+			require.Equal(t, tt.expectAuditFields, test.auditLog.GetEmitedFields())
 			require.NoError(t, err)
 			require.NotNil(t, resp)
 			spiretest.AssertLogs(t, test.logHook.AllEntries(), tt.expectedLogMsgs)
@@ -1400,6 +1512,7 @@ func TestBatchUpdateFederatedBundle(t *testing.T) {
 		preExistentBundle *common.Bundle
 		inputMask         *types.BundleMask
 		outputMask        *types.BundleMask
+		expectAuditFields map[string]string
 		expectedResults   []*bundlev1.BatchCreateFederatedBundleResponse_Result
 		expectedLogMsgs   []spiretest.LogEntry
 		dsError           error
@@ -1636,6 +1749,7 @@ func TestBatchUpdateFederatedBundle(t *testing.T) {
 				OutputMask: tt.outputMask,
 			})
 
+			require.Equal(t, tt.expectAuditFields, test.auditLog.GetEmitedFields())
 			require.NoError(t, err)
 			require.NotNil(t, resp)
 			spiretest.AssertLogs(t, test.logHook.AllEntries(), tt.expectedLogMsgs)
@@ -1670,12 +1784,13 @@ func TestBatchSetFederatedBundle(t *testing.T) {
 	updatedBundle.RefreshHint = 120
 
 	for _, tt := range []struct {
-		name            string
-		bundlesToSet    []*types.Bundle
-		outputMask      *types.BundleMask
-		expectedResults []*bundlev1.BatchSetFederatedBundleResponse_Result
-		expectedLogMsgs []spiretest.LogEntry
-		dsError         error
+		name              string
+		bundlesToSet      []*types.Bundle
+		outputMask        *types.BundleMask
+		expectedResults   []*bundlev1.BatchSetFederatedBundleResponse_Result
+		expectedLogMsgs   []spiretest.LogEntry
+		expectAuditFields map[string]string
+		dsError           error
 	}{
 		{
 			name:         "Succeeds",
@@ -1877,6 +1992,7 @@ func TestBatchSetFederatedBundle(t *testing.T) {
 				Bundle:     tt.bundlesToSet,
 				OutputMask: tt.outputMask,
 			})
+			require.Equal(t, tt.expectAuditFields, test.auditLog.GetEmitedFields())
 			require.NoError(t, err)
 			require.NotNil(t, resp)
 			spiretest.AssertLogs(t, test.logHook.AllEntries(), tt.expectedLogMsgs)
@@ -1938,6 +2054,7 @@ type serviceTest struct {
 	logHook     *test.Hook
 	up          *fakeUpstreamPublisher
 	rateLimiter *fakeRateLimiter
+	auditLog    *fakeauditlog.AuditLog
 	done        func()
 	isAdmin     bool
 	isAgent     bool
@@ -1963,12 +2080,14 @@ func setupServiceTest(t *testing.T) *serviceTest {
 	registerFn := func(s *grpc.Server) {
 		bundle.RegisterService(s, service)
 	}
+	auditLog := fakeauditlog.New()
 
 	test := &serviceTest{
 		ds:          ds,
 		logHook:     logHook,
 		up:          up,
 		rateLimiter: rateLimiter,
+		auditLog:    auditLog,
 	}
 
 	contextFn := func(ctx context.Context) context.Context {
@@ -1987,6 +2106,7 @@ func setupServiceTest(t *testing.T) *serviceTest {
 		}
 
 		ctx = rpccontext.WithRateLimiter(ctx, rateLimiter)
+		ctx = rpccontext.WithAuditLog(ctx, auditLog)
 		return ctx
 	}
 

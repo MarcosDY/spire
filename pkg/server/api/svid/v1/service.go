@@ -2,7 +2,10 @@ package svid
 
 import (
 	"context"
+	"crypto/sha256"
 	"crypto/x509"
+	"encoding/hex"
+	"strings"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -56,6 +59,11 @@ type Service struct {
 }
 
 func (s *Service) MintX509SVID(ctx context.Context, req *svidv1.MintX509SVIDRequest) (*svidv1.MintX509SVIDResponse, error) {
+	// TODO: may we add Csr as a hashed string?
+	rpccontext.AddRPCAuditFields(ctx, logrus.Fields{
+		"ttl": req.Ttl,
+		"csr": hashByte(req.Csr),
+	})
 	log := rpccontext.Logger(ctx)
 
 	if len(req.Csr) == 0 {
@@ -108,6 +116,7 @@ func (s *Service) MintX509SVID(ctx context.Context, req *svidv1.MintX509SVIDRequ
 	if err != nil {
 		return nil, api.MakeErr(log, codes.Internal, "failed to sign X509-SVID", err)
 	}
+	rpccontext.EmitRPCAudit(ctx, logrus.Fields{})
 
 	return &svidv1.MintX509SVIDResponse{
 		Svid: &types.X509SVID{
@@ -119,11 +128,17 @@ func (s *Service) MintX509SVID(ctx context.Context, req *svidv1.MintX509SVIDRequ
 }
 
 func (s *Service) MintJWTSVID(ctx context.Context, req *svidv1.MintJWTSVIDRequest) (*svidv1.MintJWTSVIDResponse, error) {
+	rpccontext.AddRPCAuditFields(ctx, logrus.Fields{
+		"audience":  strings.Join(req.Audience, ","),
+		"spiffe_id": api.FieldFromIDProto(req.Id),
+		"ttl":       req.Ttl,
+	})
 	jwtsvid, err := s.mintJWTSVID(ctx, req.Id, req.Audience, req.Ttl)
 	if err != nil {
 		return nil, err
 	}
 
+	rpccontext.EmitRPCAudit(ctx, logrus.Fields{})
 	return &svidv1.MintJWTSVIDResponse{
 		Svid: jwtsvid,
 	}, nil
@@ -149,7 +164,13 @@ func (s *Service) BatchNewX509SVID(ctx context.Context, req *svidv1.BatchNewX509
 	var results []*svidv1.BatchNewX509SVIDResponse_Result
 	for _, svidParam := range req.Params {
 		//  Create new SVID
-		results = append(results, s.newX509SVID(ctx, svidParam, entriesMap))
+		r := s.newX509SVID(ctx, svidParam, entriesMap)
+		results = append(results, r)
+
+		rpccontext.EmitBatchRPCAudit(ctx, r.Status, logrus.Fields{
+			"entry_id": svidParam.EntryId,
+			"csr":      hashByte(svidParam.Csr),
+		})
 	}
 
 	return &svidv1.BatchNewX509SVIDResponse{Results: results}, nil
@@ -284,6 +305,11 @@ func (s *Service) mintJWTSVID(ctx context.Context, protoID *types.SPIFFEID, audi
 }
 
 func (s *Service) NewJWTSVID(ctx context.Context, req *svidv1.NewJWTSVIDRequest) (resp *svidv1.NewJWTSVIDResponse, err error) {
+	rpccontext.AddRPCAuditFields(ctx, logrus.Fields{
+		"audience": strings.Join(req.Audience, ","),
+		"entry_id": req.EntryId,
+	})
+
 	log := rpccontext.Logger(ctx)
 
 	if err := rpccontext.RateLimit(ctx, 1); err != nil {
@@ -305,6 +331,7 @@ func (s *Service) NewJWTSVID(ctx context.Context, req *svidv1.NewJWTSVIDRequest)
 	if err != nil {
 		return nil, err
 	}
+	rpccontext.EmitRPCAudit(ctx, logrus.Fields{})
 
 	return &svidv1.NewJWTSVIDResponse{
 		Svid: jwtsvid,
@@ -312,6 +339,7 @@ func (s *Service) NewJWTSVID(ctx context.Context, req *svidv1.NewJWTSVIDRequest)
 }
 
 func (s *Service) NewDownstreamX509CA(ctx context.Context, req *svidv1.NewDownstreamX509CARequest) (*svidv1.NewDownstreamX509CAResponse, error) {
+	rpccontext.AddRPCAuditFields(ctx, logrus.Fields{"csr": hashByte(req.Csr)})
 	log := rpccontext.Logger(ctx)
 
 	if err := rpccontext.RateLimit(ctx, 1); err != nil {
@@ -352,6 +380,7 @@ func (s *Service) NewDownstreamX509CA(ctx context.Context, req *svidv1.NewDownst
 	for _, cert := range bundle.RootCas {
 		rawRootCerts = append(rawRootCerts, cert.DerBytes)
 	}
+	rpccontext.EmitRPCAudit(ctx, logrus.Fields{})
 
 	return &svidv1.NewDownstreamX509CAResponse{
 		CaCertChain:     x509util.RawCertsFromCertificates(x509CASvid),
@@ -372,4 +401,13 @@ func parseAndCheckCSR(ctx context.Context, csrBytes []byte) (*x509.CertificateRe
 	}
 
 	return csr, nil
+}
+
+func hashByte(b []byte) string {
+	if len(b) == 0 {
+		return ""
+	}
+
+	s := sha256.Sum256(b)
+	return hex.EncodeToString(s[:])
 }

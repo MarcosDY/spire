@@ -75,6 +75,7 @@ func (s *Service) CountAgents(ctx context.Context, req *agentv1.CountAgentsReque
 		log := rpccontext.Logger(ctx)
 		return nil, api.MakeErr(log, codes.Internal, "failed to count agents", err)
 	}
+	rpccontext.EmitRPCAudit(ctx, logrus.Fields{})
 
 	return &agentv1.CountAgentsResponse{Count: count}, nil
 }
@@ -138,38 +139,14 @@ func (s *Service) ListAgents(ctx context.Context, req *agentv1.ListAgentsRequest
 		applyMask(a, req.OutputMask)
 		resp.Agents = append(resp.Agents, a)
 	}
-
 	rpccontext.EmitRPCAudit(ctx, logrus.Fields{})
+
 	return resp, nil
-}
-
-func requestFieldsFromListAgentsRequest(req *agentv1.ListAgentsRequest) logrus.Fields {
-	fields := logrus.Fields{
-		"page_token": req.PageToken,
-		"page_size":  req.PageSize,
-	}
-
-	if req.Filter != nil {
-		if req.Filter.ByAttestationType != "" {
-			fields["filter_by_attestation_type"] = req.Filter.ByAttestationType
-		}
-
-		if req.Filter.ByBanned != nil {
-			fields["filter_by_banned"] = req.Filter.ByBanned.Value
-		}
-
-		if req.Filter.BySelectorMatch != nil {
-			fields["filter_by_selector_match"] = req.Filter.BySelectorMatch.Match
-
-			fields["filter_by_selector"] = api.SelectorFieldFromProto(req.Filter.BySelectorMatch.Selectors)
-		}
-	}
-
-	return fields
 }
 
 // GetAgent returns the agent associated with the given SpiffeID.
 func (s *Service) GetAgent(ctx context.Context, req *agentv1.GetAgentRequest) (*types.Agent, error) {
+	rpccontext.AddRPCAuditFields(ctx, logrus.Fields{"agent_id": api.FieldFromIDProto(req.Id)})
 	log := rpccontext.Logger(ctx)
 
 	agentID, err := api.TrustDomainAgentIDFromProto(s.td, req.Id)
@@ -198,11 +175,13 @@ func (s *Service) GetAgent(ctx context.Context, req *agentv1.GetAgentRequest) (*
 	}
 
 	applyMask(agent, req.OutputMask)
+	rpccontext.EmitRPCAudit(ctx, logrus.Fields{})
 	return agent, nil
 }
 
 // DeleteAgent removes the agent with the given SpiffeID.
 func (s *Service) DeleteAgent(ctx context.Context, req *agentv1.DeleteAgentRequest) (*emptypb.Empty, error) {
+	rpccontext.AddRPCAuditFields(ctx, logrus.Fields{"agent_id": api.FieldFromIDProto(req.Id)})
 	log := rpccontext.Logger(ctx)
 
 	id, err := api.TrustDomainAgentIDFromProto(s.td, req.Id)
@@ -215,6 +194,7 @@ func (s *Service) DeleteAgent(ctx context.Context, req *agentv1.DeleteAgentReque
 	_, err = s.ds.DeleteAttestedNode(ctx, id.String())
 	switch status.Code(err) {
 	case codes.OK:
+		rpccontext.EmitRPCAudit(ctx, logrus.Fields{})
 		log.Info("Agent deleted")
 		return &emptypb.Empty{}, nil
 	case codes.NotFound:
@@ -226,6 +206,7 @@ func (s *Service) DeleteAgent(ctx context.Context, req *agentv1.DeleteAgentReque
 
 // BanAgent sets the agent with the given SpiffeID to the banned state.
 func (s *Service) BanAgent(ctx context.Context, req *agentv1.BanAgentRequest) (*emptypb.Empty, error) {
+	rpccontext.AddRPCAuditFields(ctx, logrus.Fields{"agent_id": api.FieldFromIDProto(req.Id)})
 	log := rpccontext.Logger(ctx)
 
 	id, err := api.TrustDomainAgentIDFromProto(s.td, req.Id)
@@ -247,6 +228,7 @@ func (s *Service) BanAgent(ctx context.Context, req *agentv1.BanAgentRequest) (*
 
 	switch status.Code(err) {
 	case codes.OK:
+		rpccontext.EmitRPCAudit(ctx, logrus.Fields{})
 		log.Info("Agent banned")
 		return &emptypb.Empty{}, nil
 	case codes.NotFound:
@@ -270,8 +252,26 @@ func (s *Service) AttestAgent(stream agentv1.Agent_AttestAgentServer) error {
 		return api.MakeErr(log, codes.InvalidArgument, "failed to receive request from stream", err)
 	}
 
-	// validate
 	params := req.GetParams()
+
+	parseRequest := func() logrus.Fields {
+		fields := logrus.Fields{}
+		if params == nil {
+			return fields
+		}
+		if params.Data != nil {
+			// TODO: may we add a hash for payload?
+			fields["type"] = params.Data.Type
+		}
+		if params.Params != nil {
+			fields["csr"] = api.HashByte(params.Params.Csr)
+		}
+
+		return fields
+	}
+	rpccontext.AddRPCAuditFields(ctx, parseRequest())
+
+	// validate
 	if err := validateAttestAgentParams(params); err != nil {
 		return api.MakeErr(log, codes.InvalidArgument, "malformed param", err)
 	}
@@ -294,6 +294,7 @@ func (s *Service) AttestAgent(stream agentv1.Agent_AttestAgentServer) error {
 
 	agentID := attestResult.AgentID
 	log = log.WithField(telemetry.AgentID, agentID)
+	rpccontext.AddRPCAuditFields(ctx, logrus.Fields{telemetry.AgentID: agentID})
 
 	if err := idutil.CheckAgentIDStringNormalization(agentID); err != nil {
 		return api.MakeErr(log, codes.Internal, "agent ID is malformed", err)
@@ -369,6 +370,7 @@ func (s *Service) AttestAgent(stream agentv1.Agent_AttestAgentServer) error {
 	if err := stream.Send(response); err != nil {
 		return api.MakeErr(log, codes.Internal, "failed to send response over stream", err)
 	}
+	rpccontext.EmitRPCAudit(ctx, logrus.Fields{})
 
 	return nil
 }
@@ -376,6 +378,9 @@ func (s *Service) AttestAgent(stream agentv1.Agent_AttestAgentServer) error {
 // RenewAgent renews the SVID of the agent with the given SpiffeID.
 func (s *Service) RenewAgent(ctx context.Context, req *agentv1.RenewAgentRequest) (*agentv1.RenewAgentResponse, error) {
 	log := rpccontext.Logger(ctx)
+	if req.Params != nil {
+		rpccontext.AddRPCAuditFields(ctx, logrus.Fields{"csr": api.HashByte(req.Params.Csr)})
+	}
 
 	if err := rpccontext.RateLimit(ctx, 1); err != nil {
 		return nil, api.MakeErr(log, status.Code(err), "rejecting request due to renew agent rate limiting", err)
@@ -411,6 +416,7 @@ func (s *Service) RenewAgent(ctx context.Context, req *agentv1.RenewAgentRequest
 	}, log); err != nil {
 		return nil, err
 	}
+	rpccontext.EmitRPCAudit(ctx, logrus.Fields{})
 
 	// Send response with new X509 SVID
 	return &agentv1.RenewAgentResponse{
@@ -424,6 +430,20 @@ func (s *Service) RenewAgent(ctx context.Context, req *agentv1.RenewAgentRequest
 
 // CreateJoinToken returns a new JoinToken for an agent.
 func (s *Service) CreateJoinToken(ctx context.Context, req *agentv1.CreateJoinTokenRequest) (_ *types.JoinToken, err error) {
+	parseRequest := func() logrus.Fields {
+		fields := logrus.Fields{
+			"agent_id": api.FieldFromIDProto(req.AgentId),
+			"ttl":      req.Ttl,
+		}
+
+		// What must we do with tokens? I was thinking in not adding a field for it.
+		if req.Token != "" {
+			fields["token"] = "token provided"
+		}
+
+		return fields
+	}
+	rpccontext.AddRPCAuditFields(ctx, parseRequest())
 	log := rpccontext.Logger(ctx)
 
 	if req.Ttl < 1 {
@@ -468,6 +488,7 @@ func (s *Service) CreateJoinToken(ctx context.Context, req *agentv1.CreateJoinTo
 			return nil, api.MakeErr(log, codes.Internal, "failed to create join token registration entry", err)
 		}
 	}
+	rpccontext.EmitRPCAudit(ctx, logrus.Fields{})
 
 	return &types.JoinToken{Value: req.Token, ExpiresAt: expiry.Unix()}, nil
 }
@@ -652,4 +673,27 @@ func getAttestAgentResponse(spiffeID spiffeid.ID, certificates []*x509.Certifica
 			},
 		},
 	}
+}
+
+func requestFieldsFromListAgentsRequest(req *agentv1.ListAgentsRequest) logrus.Fields {
+	fields := logrus.Fields{
+		"page_token": req.PageToken,
+		"page_size":  req.PageSize,
+	}
+
+	if req.Filter != nil {
+		if req.Filter.ByAttestationType != "" {
+			fields["filter_by_attestation_type"] = req.Filter.ByAttestationType
+		}
+
+		if req.Filter.ByBanned != nil {
+			fields["filter_by_banned"] = req.Filter.ByBanned.Value
+		}
+
+		if req.Filter.BySelectorMatch != nil {
+			fields["filter_by_selector"] = fmt.Sprintf("%s: %s", req.Filter.BySelectorMatch.Match, api.SelectorFieldFromProto(req.Filter.BySelectorMatch.Selectors))
+		}
+	}
+
+	return fields
 }

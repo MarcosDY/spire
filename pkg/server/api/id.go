@@ -3,6 +3,7 @@ package api
 import (
 	"errors"
 	"fmt"
+	"net/url"
 
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/spiffe/spire-api-sdk/proto/spire/api/types"
@@ -76,6 +77,20 @@ func VerifyTrustDomainWorkloadID(td spiffeid.TrustDomain, id spiffeid.ID) error 
 		return fmt.Errorf("%q is not a workload in trust domain %q; path is in the reserved namespace", id, td)
 	}
 	return nil
+}
+
+// FieldFromIDProto parse proto into a string, not using spiffeid package to avoy errors, and diplay what api receive no matter if it is not a valid SPIFFE ID
+func FieldFromIDProto(protoID *types.SPIFFEID) string {
+	if protoID == nil {
+		return ""
+	}
+
+	idUrl := url.URL{
+		Scheme: "spiffe",
+		Host:   protoID.TrustDomain,
+		Path:   protoID.Path,
+	}
+	return idUrl.String()
 }
 
 // ProtoFromID converts a SPIFFE ID from the given spiffeid.ID to

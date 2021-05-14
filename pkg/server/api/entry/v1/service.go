@@ -59,11 +59,37 @@ func (s *Service) CountEntries(ctx context.Context, req *entryv1.CountEntriesReq
 		return nil, api.MakeErr(log, codes.Internal, "failed to count entries", err)
 	}
 
+	rpccontext.EmitRPCAudit(ctx, logrus.Fields{})
 	return &entryv1.CountEntriesResponse{Count: count}, nil
 }
 
 // ListEntries returns the optionally filtered and/or paginated list of entries.
 func (s *Service) ListEntries(ctx context.Context, req *entryv1.ListEntriesRequest) (*entryv1.ListEntriesResponse, error) {
+	parseRequest := func() logrus.Fields {
+		fields := logrus.Fields{
+			"page_size":  req.PageSize,
+			"page_token": req.PageToken,
+		}
+		if req.Filter != nil {
+			if req.Filter.BySpiffeId != nil {
+				fields["by_spiffe_id"] = api.FieldFromIDProto(req.Filter.BySpiffeId)
+			}
+
+			if req.Filter.ByParentId != nil {
+				fields["by_parent_id"] = api.FieldFromIDProto(req.Filter.ByParentId)
+			}
+
+			if req.Filter.BySelectors != nil {
+				fields["by_selectors"] = fmt.Sprintf("%s: %s", req.Filter.BySelectors.Match, api.SelectorFieldFromProto(req.Filter.BySelectors.Selectors))
+			}
+
+			if req.Filter.ByFederatesWith != nil {
+				fields["by_federates_with"] = fmt.Sprintf("%s: %s", req.Filter.ByFederatesWith.Match, strings.Join(req.Filter.ByFederatesWith.TrustDomains, ","))
+			}
+		}
+		return fields
+	}
+	rpccontext.AddRPCAuditFields(ctx, parseRequest())
 	log := rpccontext.Logger(ctx)
 
 	listReq := &datastore.ListRegistrationEntriesRequest{}
@@ -149,11 +175,13 @@ func (s *Service) ListEntries(ctx context.Context, req *entryv1.ListEntriesReque
 		resp.Entries = append(resp.Entries, entry)
 	}
 
+	rpccontext.EmitRPCAudit(ctx, logrus.Fields{})
 	return resp, nil
 }
 
 // GetEntry returns the registration entry associated with the given SpiffeID
 func (s *Service) GetEntry(ctx context.Context, req *entryv1.GetEntryRequest) (*types.Entry, error) {
+	rpccontext.AddRPCAuditFields(ctx, logrus.Fields{"entry_id": req.Id})
 	log := rpccontext.Logger(ctx)
 
 	if req.Id == "" {
@@ -175,6 +203,7 @@ func (s *Service) GetEntry(ctx context.Context, req *entryv1.GetEntryRequest) (*
 	}
 	applyMask(entry, req.OutputMask)
 
+	rpccontext.EmitRPCAudit(ctx, logrus.Fields{})
 	return entry, nil
 }
 
@@ -182,7 +211,11 @@ func (s *Service) GetEntry(ctx context.Context, req *entryv1.GetEntryRequest) (*
 func (s *Service) BatchCreateEntry(ctx context.Context, req *entryv1.BatchCreateEntryRequest) (*entryv1.BatchCreateEntryResponse, error) {
 	var results []*entryv1.BatchCreateEntryResponse_Result
 	for _, eachEntry := range req.Entries {
-		results = append(results, s.createEntry(ctx, eachEntry, req.OutputMask))
+		r := s.createEntry(ctx, eachEntry, req.OutputMask)
+		results = append(results, r)
+
+		// Add audit log
+		rpccontext.EmitBatchRPCAudit(ctx, r.Status, fieldsFromEntry(s.td, eachEntry, nil))
 	}
 
 	return &entryv1.BatchCreateEntryResponse{
@@ -260,7 +293,11 @@ func (s *Service) BatchUpdateEntry(ctx context.Context, req *entryv1.BatchUpdate
 func (s *Service) BatchDeleteEntry(ctx context.Context, req *entryv1.BatchDeleteEntryRequest) (*entryv1.BatchDeleteEntryResponse, error) {
 	var results []*entryv1.BatchDeleteEntryResponse_Result
 	for _, id := range req.Ids {
-		results = append(results, s.deleteEntry(ctx, id))
+		r := s.deleteEntry(ctx, id)
+		results = append(results, r)
+
+		// Add audit log
+		rpccontext.EmitBatchRPCAudit(ctx, r.Status, logrus.Fields{"entry_id": id})
 	}
 
 	return &entryv1.BatchDeleteEntryResponse{
@@ -317,6 +354,7 @@ func (s *Service) GetAuthorizedEntries(ctx context.Context, req *entryv1.GetAuth
 		Entries: entries,
 	}
 
+	rpccontext.EmitRPCAudit(ctx, logrus.Fields{})
 	return resp, nil
 }
 
@@ -455,8 +493,11 @@ func (s *Service) updateEntry(ctx context.Context, e *types.Entry, inputMask *ty
 }
 
 func fieldsFromEntry(td spiffeid.TrustDomain, entry *types.Entry, inputMask *types.EntryMask) logrus.Fields {
-	fields := logrus.Fields{
-		"entry_id": entry.Id,
+	fields := logrus.Fields{}
+
+	// Entry is empty when creating
+	if entry.Id != "" {
+		fields["entry_id"] = entry.Id
 	}
 
 	if inputMask == nil || inputMask.Admin {
