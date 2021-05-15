@@ -5,16 +5,30 @@ import (
 	"net"
 	"testing"
 
+	"github.com/spiffe/spire/pkg/common/api/middleware"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 )
+
+func NewAPIServerWithMiddleware(t *testing.T, registerFn func(s *grpc.Server), mid middleware.Middleware) (*grpc.ClientConn, func()) {
+	unaryInterceptor, streamInterceptor := middleware.Interceptors(mid)
+	server := grpc.NewServer(
+		grpc.UnaryInterceptor(unaryInterceptor),
+		grpc.StreamInterceptor(streamInterceptor),
+	)
+	return newApiServer(t, registerFn, server)
+}
 
 func NewAPIServer(t *testing.T, registerFn func(s *grpc.Server), contextFn func(ctx context.Context) context.Context) (*grpc.ClientConn, func()) {
 	server := grpc.NewServer(
 		grpc.UnaryInterceptor(unaryInterceptor(contextFn)),
 		grpc.StreamInterceptor(streamInterceptor(contextFn)),
 	)
+	return newApiServer(t, registerFn, server)
+}
+
+func newApiServer(t *testing.T, registerFn func(s *grpc.Server), server *grpc.Server) (*grpc.ClientConn, func()) {
 	registerFn(server)
 
 	listener, err := net.Listen("tcp", "localhost:0")

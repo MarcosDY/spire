@@ -157,10 +157,11 @@ func (s *Service) AppendBundle(ctx context.Context, req *bundlev1.AppendBundleRe
 func (s *Service) PublishJWTAuthority(ctx context.Context, req *bundlev1.PublishJWTAuthorityRequest) (*bundlev1.PublishJWTAuthorityResponse, error) {
 	parseRequest := func() logrus.Fields {
 		fields := logrus.Fields{}
-		fields["jwt_authority_expires_at"] = req.JwtAuthority.ExpiresAt
-		fields["jwt_authority_key_id"] = req.JwtAuthority.KeyId
-		fields["jwt_authority_public_key"] = api.HashByte(req.JwtAuthority.PublicKey)
-
+		if req.JwtAuthority != nil {
+			fields["jwt_authority_expires_at"] = req.JwtAuthority.ExpiresAt
+			fields["jwt_authority_key_id"] = req.JwtAuthority.KeyId
+			fields["jwt_authority_public_key"] = api.HashByte(req.JwtAuthority.PublicKey)
+		}
 		return fields
 	}
 	rpccontext.AddRPCAuditFields(ctx, parseRequest())
@@ -183,6 +184,8 @@ func (s *Service) PublishJWTAuthority(ctx context.Context, req *bundlev1.Publish
 	if err != nil {
 		return nil, api.MakeErr(log, codes.Internal, "failed to publish JWT key", err)
 	}
+
+	rpccontext.EmitRPCAudit(ctx, logrus.Fields{})
 
 	return &bundlev1.PublishJWTAuthorityResponse{
 		JwtAuthorities: api.PublicKeysToProto(resp),
@@ -467,7 +470,7 @@ func (s *Service) BatchSetFederatedBundle(ctx context.Context, req *bundlev1.Bat
 		r := s.setFederatedBundle(ctx, b, req.OutputMask)
 		results = append(results, r)
 
-		rpccontext.AddRPCAuditFields(ctx, fieldsFromBundleProto(b, nil))
+		rpccontext.EmitBatchRPCAudit(ctx, r.Status, fieldsFromBundleProto(b, nil))
 	}
 
 	return &bundlev1.BatchSetFederatedBundleResponse{

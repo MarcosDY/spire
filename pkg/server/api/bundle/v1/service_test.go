@@ -21,10 +21,10 @@ import (
 	"github.com/spiffe/spire/pkg/common/telemetry"
 	"github.com/spiffe/spire/pkg/server/api"
 	"github.com/spiffe/spire/pkg/server/api/bundle/v1"
+	"github.com/spiffe/spire/pkg/server/api/middleware"
 	"github.com/spiffe/spire/pkg/server/api/rpccontext"
 	"github.com/spiffe/spire/pkg/server/plugin/datastore"
 	"github.com/spiffe/spire/proto/spire/common"
-	"github.com/spiffe/spire/test/fakes/fakeauditlog"
 	"github.com/spiffe/spire/test/fakes/fakedatastore"
 	"github.com/spiffe/spire/test/spiretest"
 	"github.com/spiffe/spire/test/testca"
@@ -67,22 +67,22 @@ func TestGetFederatedBundle(t *testing.T) {
 	defer test.Cleanup()
 
 	for _, tt := range []struct {
-		name              string
-		trustDomain       string
-		err               string
-		expectAuditFields map[string]string
-		expectLogs        []spiretest.LogEntry
-		outputMask        *types.BundleMask
-		isAdmin           bool
-		isAgent           bool
-		isLocal           bool
-		setBundle         bool
+		name            string
+		trustDomain     string
+		err             string
+		expectAuditLogs []spiretest.LogEntry
+		expectLogs      []spiretest.LogEntry
+		outputMask      *types.BundleMask
+		isAdmin         bool
+		isAgent         bool
+		isLocal         bool
+		setBundle       bool
 	}{
 		{
-			name:              "Trust domain is empty",
-			isAdmin:           true,
-			err:               "rpc error: code = InvalidArgument desc = trust domain argument is not valid: spiffeid: trust domain is empty",
-			expectAuditFields: map[string]string{"trust_domain": ""},
+			name:            "Trust domain is empty",
+			isAdmin:         true,
+			err:             "rpc error: code = InvalidArgument desc = trust domain argument is not valid: spiffeid: trust domain is empty",
+			expectAuditLogs: []spiretest.LogEntry{},
 			expectLogs: []spiretest.LogEntry{
 				{
 					Level:   logrus.ErrorLevel,
@@ -92,14 +92,24 @@ func TestGetFederatedBundle(t *testing.T) {
 						logrus.ErrorKey:         "spiffeid: trust domain is empty",
 					},
 				},
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"status":         "error",
+						"status_code":    "InvalidArgument",
+						"status_message": "trust domain argument is not valid: spiffeid: trust domain is empty",
+						"trust_domain":   "",
+						"type":           "audit",
+					},
+				},
 			},
 		},
 		{
-			name:              "Trust domain is not a valid trust domain",
-			isAdmin:           true,
-			trustDomain:       "malformed id",
-			err:               `rpc error: code = InvalidArgument desc = trust domain argument is not valid: spiffeid: unable to parse: parse "spiffe://malformed id": invalid character " " in host name`,
-			expectAuditFields: map[string]string{"trust_domain": "malformed id"},
+			name:        "Trust domain is not a valid trust domain",
+			isAdmin:     true,
+			trustDomain: "malformed id",
+			err:         `rpc error: code = InvalidArgument desc = trust domain argument is not valid: spiffeid: unable to parse: parse "spiffe://malformed id": invalid character " " in host name`,
 			expectLogs: []spiretest.LogEntry{
 				{
 					Level:   logrus.ErrorLevel,
@@ -109,14 +119,24 @@ func TestGetFederatedBundle(t *testing.T) {
 						logrus.ErrorKey:         `spiffeid: unable to parse: parse "spiffe://malformed id": invalid character " " in host name`,
 					},
 				},
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"status":         "error",
+						"status_code":    "InvalidArgument",
+						"status_message": `trust domain argument is not valid: spiffeid: unable to parse: parse "spiffe://malformed id": invalid character " " in host name`,
+						"trust_domain":   "malformed id",
+						"type":           "audit",
+					},
+				},
 			},
 		},
 		{
-			name:              "The given trust domain is server's own trust domain",
-			isAdmin:           true,
-			trustDomain:       "example.org",
-			err:               "rpc error: code = InvalidArgument desc = getting a federated bundle for the server's own trust domain is not allowed",
-			expectAuditFields: map[string]string{"trust_domain": "example.org"},
+			name:        "The given trust domain is server's own trust domain",
+			isAdmin:     true,
+			trustDomain: "example.org",
+			err:         "rpc error: code = InvalidArgument desc = getting a federated bundle for the server's own trust domain is not allowed",
 			expectLogs: []spiretest.LogEntry{
 				{
 					Level:   logrus.ErrorLevel,
@@ -125,14 +145,24 @@ func TestGetFederatedBundle(t *testing.T) {
 						telemetry.TrustDomainID: serverTrustDomain.String(),
 					},
 				},
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"status":         "error",
+						"status_code":    "InvalidArgument",
+						"status_message": "getting a federated bundle for the server's own trust domain is not allowed",
+						"trust_domain":   "example.org",
+						"type":           "audit",
+					},
+				},
 			},
 		},
 		{
-			name:              "Trust domain not found",
-			isAdmin:           true,
-			trustDomain:       "another-example.org",
-			err:               `rpc error: code = NotFound desc = bundle not found`,
-			expectAuditFields: map[string]string{"trust_domain": "another-example.org"},
+			name:        "Trust domain not found",
+			isAdmin:     true,
+			trustDomain: "another-example.org",
+			err:         `rpc error: code = NotFound desc = bundle not found`,
 			expectLogs: []spiretest.LogEntry{
 				{
 					Level:   logrus.ErrorLevel,
@@ -141,47 +171,97 @@ func TestGetFederatedBundle(t *testing.T) {
 						telemetry.TrustDomainID: federatedTrustDomain.String(),
 					},
 				},
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"status":         "error",
+						"status_code":    "NotFound",
+						"status_message": "bundle not found",
+						"trust_domain":   "another-example.org",
+						"type":           "audit",
+					},
+				},
 			},
 		},
 		{
-			name:              "Get federated bundle do not returns fields filtered by mask",
-			isAdmin:           true,
-			trustDomain:       "another-example.org",
-			setBundle:         true,
-			expectAuditFields: map[string]string{"trust_domain": "another-example.org"},
+			name:        "Get federated bundle do not returns fields filtered by mask",
+			isAdmin:     true,
+			trustDomain: "another-example.org",
+			setBundle:   true,
 			outputMask: &types.BundleMask{
 				RefreshHint:     false,
 				SequenceNumber:  false,
 				X509Authorities: false,
 				JwtAuthorities:  false,
 			},
+			expectLogs: []spiretest.LogEntry{
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"status":       "success",
+						"trust_domain": "another-example.org",
+						"type":         "audit",
+					},
+				},
+			},
 		},
 		{
-			name:              "Get federated bundle succeeds for admin workloads",
-			isAdmin:           true,
-			trustDomain:       "another-example.org",
-			expectAuditFields: map[string]string{"trust_domain": "another-example.org"},
-			setBundle:         true,
+			name:        "Get federated bundle succeeds for admin workloads",
+			isAdmin:     true,
+			trustDomain: "another-example.org",
+			setBundle:   true,
+			expectLogs: []spiretest.LogEntry{
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"status":       "success",
+						"trust_domain": "another-example.org",
+						"type":         "audit",
+					},
+				},
+			},
 		},
 		{
-			name:              "Get federated bundle succeeds for local workloads",
-			isLocal:           true,
-			trustDomain:       "another-example.org",
-			expectAuditFields: map[string]string{"trust_domain": "another-example.org"},
-			setBundle:         true,
+			name:        "Get federated bundle succeeds for local workloads",
+			isLocal:     true,
+			trustDomain: "another-example.org",
+			setBundle:   true,
+			expectLogs: []spiretest.LogEntry{
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"status":       "success",
+						"trust_domain": "another-example.org",
+						"type":         "audit",
+					},
+				},
+			},
 		},
 		{
-			name:              "Get federated bundle succeeds for agent workload",
-			isAgent:           true,
-			trustDomain:       "another-example.org",
-			expectAuditFields: map[string]string{"trust_domain": "another-example.org"},
-			setBundle:         true,
+			name:        "Get federated bundle succeeds for agent workload",
+			isAgent:     true,
+			trustDomain: "another-example.org",
+			setBundle:   true,
+			expectLogs: []spiretest.LogEntry{
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"status":       "success",
+						"trust_domain": "another-example.org",
+						"type":         "audit",
+					},
+				},
+			},
 		},
 	} {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			test.logHook.Reset()
-			test.auditLog.Reset()
 			test.isAdmin = tt.isAdmin
 			test.isAgent = tt.isAgent
 			test.isLocal = tt.isLocal
@@ -196,7 +276,6 @@ func TestGetFederatedBundle(t *testing.T) {
 				OutputMask:  tt.outputMask,
 			})
 
-			require.Equal(t, tt.expectAuditFields, test.auditLog.GetEmitedFields())
 			spiretest.AssertLogs(t, test.logHook.AllEntries(), tt.expectLogs)
 
 			if tt.err != "" {
@@ -216,39 +295,69 @@ func TestGetFederatedBundle(t *testing.T) {
 
 func TestGetBundle(t *testing.T) {
 	for _, tt := range []struct {
-		name              string
-		err               string
-		logMsg            string
-		outputMask        *types.BundleMask
-		expectAuditFields map[string]string
-		setBundle         bool
+		name       string
+		err        string
+		logMsg     string
+		expectLogs []spiretest.LogEntry
+		outputMask *types.BundleMask
+		setBundle  bool
 	}{
 		{
-			name: "Get bundle returns bundle",
-			expectAuditFields: map[string]string{
-				"trust_domain": "example.org",
-			},
+			name:      "Get bundle returns bundle",
 			setBundle: true,
+			expectLogs: []spiretest.LogEntry{
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"status":       "success",
+						"trust_domain": "example.org",
+						"type":         "audit",
+					},
+				},
+			},
 		},
 		{
 			name: "Bundle not found",
 			err:  `bundle not found`,
-			expectAuditFields: map[string]string{
-				"trust_domain": "example.org",
+			expectLogs: []spiretest.LogEntry{
+				{
+					Level:   logrus.ErrorLevel,
+					Message: "Bundle not found",
+				},
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"status":         "error",
+						"status_code":    "NotFound",
+						"status_message": "bundle not found",
+						"trust_domain":   "example.org",
+						"type":           "audit",
+					},
+				},
 			},
 			logMsg: `Bundle not found`,
 		},
 		{
 			name:      "Get bundle does not return fields filtered by mask",
 			setBundle: true,
-			expectAuditFields: map[string]string{
-				"trust_domain": "example.org",
-			},
 			outputMask: &types.BundleMask{
 				RefreshHint:     false,
 				SequenceNumber:  false,
 				X509Authorities: false,
 				JwtAuthorities:  false,
+			},
+			expectLogs: []spiretest.LogEntry{
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"status":       "success",
+						"trust_domain": "example.org",
+						"type":         "audit",
+					},
+				},
 			},
 		},
 	} {
@@ -266,13 +375,12 @@ func TestGetBundle(t *testing.T) {
 				OutputMask: tt.outputMask,
 			})
 
-			require.Equal(t, tt.expectAuditFields, test.auditLog.GetEmitedFields())
+			spiretest.AssertLogs(t, test.logHook.AllEntries(), tt.expectLogs)
 
 			if tt.err != "" {
 				require.Nil(t, b)
 				require.Error(t, err)
 				require.Contains(t, err.Error(), tt.err)
-				require.Contains(t, test.logHook.LastEntry().Message, tt.logMsg)
 				return
 			}
 
@@ -326,18 +434,17 @@ func TestAppendBundle(t *testing.T) {
 	for _, tt := range []struct {
 		name string
 
-		trustDomain       string
-		x509Authorities   []*types.X509Certificate
-		jwtAuthorities    []*types.JWTKey
-		code              codes.Code
-		dsError           error
-		err               string
-		expectBundle      *types.Bundle
-		expectAuditFields map[string]string
-		expectLogs        []spiretest.LogEntry
-		invalidEntry      bool
-		noBundle          bool
-		outputMask        *types.BundleMask
+		trustDomain     string
+		x509Authorities []*types.X509Certificate
+		jwtAuthorities  []*types.JWTKey
+		code            codes.Code
+		dsError         error
+		err             string
+		expectBundle    *types.Bundle
+		expectLogs      []spiretest.LogEntry
+		invalidEntry    bool
+		noBundle        bool
+		outputMask      *types.BundleMask
 	}{
 		{
 			name:            "no output mask defined",
@@ -350,11 +457,19 @@ func TestAppendBundle(t *testing.T) {
 				X509Authorities: append(defaultBundle.X509Authorities, x509Cert),
 				JwtAuthorities:  append(defaultBundle.JwtAuthorities, jwtKey2),
 			},
-			expectAuditFields: map[string]string{
-				"jwt_authority_expires_at_0": expiresAtStr,
-				"jwt_authority_key_id_0":     "key-id-2",
-				"jwt_authority_public_key_0": pkixBytesHashed,
-				"x509_authorities_asn1_0":    x509CertHashed,
+			expectLogs: []spiretest.LogEntry{
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"status":                     "success",
+						"type":                       "audit",
+						"jwt_authority_expires_at_0": expiresAtStr,
+						"jwt_authority_key_id_0":     "key-id-2",
+						"jwt_authority_public_key_0": pkixBytesHashed,
+						"x509_authorities_asn1_0":    x509CertHashed,
+					},
+				},
 			},
 		},
 		{
@@ -365,11 +480,19 @@ func TestAppendBundle(t *testing.T) {
 				TrustDomain:     defaultBundle.TrustDomain,
 				X509Authorities: append(defaultBundle.X509Authorities, x509Cert),
 			},
-			expectAuditFields: map[string]string{
-				"jwt_authority_expires_at_0": expiresAtStr,
-				"jwt_authority_key_id_0":     "key-id-2",
-				"jwt_authority_public_key_0": pkixBytesHashed,
-				"x509_authorities_asn1_0":    x509CertHashed,
+			expectLogs: []spiretest.LogEntry{
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"status":                     "success",
+						"type":                       "audit",
+						"jwt_authority_expires_at_0": expiresAtStr,
+						"jwt_authority_key_id_0":     "key-id-2",
+						"jwt_authority_public_key_0": pkixBytesHashed,
+						"x509_authorities_asn1_0":    x509CertHashed,
+					},
+				},
 			},
 			outputMask: &types.BundleMask{
 				X509Authorities: true,
@@ -378,8 +501,16 @@ func TestAppendBundle(t *testing.T) {
 		{
 			name:            "update only X.509 authorities",
 			x509Authorities: []*types.X509Certificate{x509Cert},
-			expectAuditFields: map[string]string{
-				"x509_authorities_asn1_0": x509CertHashed,
+			expectLogs: []spiretest.LogEntry{
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"status":                  "success",
+						"type":                    "audit",
+						"x509_authorities_asn1_0": x509CertHashed,
+					},
+				},
 			},
 			expectBundle: &types.Bundle{
 				TrustDomain:     defaultBundle.TrustDomain,
@@ -399,10 +530,18 @@ func TestAppendBundle(t *testing.T) {
 				JwtAuthorities:  append(defaultBundle.JwtAuthorities, jwtKey2),
 				X509Authorities: defaultBundle.X509Authorities,
 			},
-			expectAuditFields: map[string]string{
-				"jwt_authority_expires_at_0": expiresAtStr,
-				"jwt_authority_key_id_0":     "key-id-2",
-				"jwt_authority_public_key_0": pkixBytesHashed,
+			expectLogs: []spiretest.LogEntry{
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"status":                     "success",
+						"type":                       "audit",
+						"jwt_authority_expires_at_0": expiresAtStr,
+						"jwt_authority_key_id_0":     "key-id-2",
+						"jwt_authority_public_key_0": pkixBytesHashed,
+					},
+				},
 			},
 		},
 		{
@@ -410,11 +549,19 @@ func TestAppendBundle(t *testing.T) {
 			x509Authorities: []*types.X509Certificate{x509Cert},
 			jwtAuthorities:  []*types.JWTKey{jwtKey2},
 			expectBundle:    &types.Bundle{TrustDomain: serverTrustDomain.String()},
-			expectAuditFields: map[string]string{
-				"jwt_authority_expires_at_0": expiresAtStr,
-				"jwt_authority_key_id_0":     "key-id-2",
-				"jwt_authority_public_key_0": pkixBytesHashed,
-				"x509_authorities_asn1_0":    x509CertHashed,
+			expectLogs: []spiretest.LogEntry{
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"status":                     "success",
+						"type":                       "audit",
+						"jwt_authority_expires_at_0": expiresAtStr,
+						"jwt_authority_key_id_0":     "key-id-2",
+						"jwt_authority_public_key_0": pkixBytesHashed,
+						"x509_authorities_asn1_0":    x509CertHashed,
+					},
+				},
 			},
 			outputMask: &types.BundleMask{
 				X509Authorities: false,
@@ -424,14 +571,23 @@ func TestAppendBundle(t *testing.T) {
 			},
 		},
 		{
-			name:              "no authorities",
-			code:              codes.InvalidArgument,
-			err:               "no authorities to append",
-			expectAuditFields: map[string]string{},
+			name: "no authorities",
+			code: codes.InvalidArgument,
+			err:  "no authorities to append",
 			expectLogs: []spiretest.LogEntry{
 				{
 					Level:   logrus.ErrorLevel,
 					Message: "Invalid argument: no authorities to append",
+				},
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"status":         "error",
+						"type":           "audit",
+						"status_code":    "InvalidArgument",
+						"status_message": "no authorities to append",
+					},
 				},
 			},
 		},
@@ -444,9 +600,6 @@ func TestAppendBundle(t *testing.T) {
 			},
 			code: codes.InvalidArgument,
 			err:  `failed to convert X.509 authority:`,
-			expectAuditFields: map[string]string{
-				"x509_authorities_asn1_0": api.HashByte([]byte("malformed")),
-			},
 			expectLogs: []spiretest.LogEntry{
 				{
 					Level:   logrus.ErrorLevel,
@@ -454,6 +607,17 @@ func TestAppendBundle(t *testing.T) {
 					Data: logrus.Fields{
 						telemetry.TrustDomainID: serverTrustDomain.String(),
 						logrus.ErrorKey:         expectedX509Err.Error(),
+					},
+				},
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"status":                  "error",
+						"type":                    "audit",
+						"status_code":             "InvalidArgument",
+						"status_message":          fmt.Sprintf("failed to convert X.509 authority: %v", expectedX509Err.Error()),
+						"x509_authorities_asn1_0": api.HashByte([]byte("malformed")),
 					},
 				},
 			},
@@ -469,11 +633,6 @@ func TestAppendBundle(t *testing.T) {
 			},
 			code: codes.InvalidArgument,
 			err:  "failed to convert JWT authority",
-			expectAuditFields: map[string]string{
-				"jwt_authority_expires_at_0": expiresAtStr,
-				"jwt_authority_key_id_0":     "kid2",
-				"jwt_authority_public_key_0": api.HashByte([]byte("malformed")),
-			},
 			expectLogs: []spiretest.LogEntry{
 				{
 					Level:   logrus.ErrorLevel,
@@ -481,6 +640,19 @@ func TestAppendBundle(t *testing.T) {
 					Data: logrus.Fields{
 						telemetry.TrustDomainID: serverTrustDomain.String(),
 						logrus.ErrorKey:         expectedJWTErr.Error(),
+					},
+				},
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"status":                     "error",
+						"type":                       "audit",
+						"status_code":                "InvalidArgument",
+						"status_message":             fmt.Sprintf("failed to convert JWT authority: %s", expectedJWTErr.Error()),
+						"jwt_authority_expires_at_0": expiresAtStr,
+						"jwt_authority_key_id_0":     "kid2",
+						"jwt_authority_public_key_0": api.HashByte([]byte("malformed")),
 					},
 				},
 			},
@@ -495,11 +667,6 @@ func TestAppendBundle(t *testing.T) {
 			},
 			code: codes.InvalidArgument,
 			err:  "failed to convert JWT authority",
-			expectAuditFields: map[string]string{
-				"jwt_authority_expires_at_0": "0",
-				"jwt_authority_key_id_0":     "",
-				"jwt_authority_public_key_0": pkixBytesHashed,
-			},
 			expectLogs: []spiretest.LogEntry{
 				{
 					Level:   logrus.ErrorLevel,
@@ -507,6 +674,19 @@ func TestAppendBundle(t *testing.T) {
 					Data: logrus.Fields{
 						telemetry.TrustDomainID: serverTrustDomain.String(),
 						logrus.ErrorKey:         "missing key ID",
+					},
+				},
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"status":                     "error",
+						"type":                       "audit",
+						"status_code":                "InvalidArgument",
+						"status_message":             "failed to convert JWT authority: missing key ID",
+						"jwt_authority_expires_at_0": "0",
+						"jwt_authority_key_id_0":     "",
+						"jwt_authority_public_key_0": pkixBytesHashed,
 					},
 				},
 			},
@@ -517,9 +697,6 @@ func TestAppendBundle(t *testing.T) {
 			code:            codes.Internal,
 			dsError:         errors.New("some error"),
 			err:             "failed to append bundle: some error",
-			expectAuditFields: map[string]string{
-				"x509_authorities_asn1_0": x509CertHashed,
-			},
 			expectLogs: []spiretest.LogEntry{
 				{
 					Level:   logrus.ErrorLevel,
@@ -529,17 +706,36 @@ func TestAppendBundle(t *testing.T) {
 						logrus.ErrorKey:         "some error",
 					},
 				},
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"status":                  "error",
+						"type":                    "audit",
+						"status_code":             "Internal",
+						"status_message":          "failed to append bundle: some error",
+						"x509_authorities_asn1_0": x509CertHashed,
+					},
+				},
 			},
 		},
 		{
 			name:            "if bundle not found, a new bundle is created",
 			x509Authorities: []*types.X509Certificate{x509Cert},
 			jwtAuthorities:  []*types.JWTKey{jwtKey2},
-			expectAuditFields: map[string]string{
-				"jwt_authority_expires_at_0": expiresAtStr,
-				"jwt_authority_key_id_0":     "key-id-2",
-				"jwt_authority_public_key_0": pkixBytesHashed,
-				"x509_authorities_asn1_0":    x509CertHashed,
+			expectLogs: []spiretest.LogEntry{
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"status":                     "success",
+						"type":                       "audit",
+						"jwt_authority_expires_at_0": expiresAtStr,
+						"jwt_authority_key_id_0":     "key-id-2",
+						"jwt_authority_public_key_0": pkixBytesHashed,
+						"x509_authorities_asn1_0":    x509CertHashed,
+					},
+				},
 			},
 			expectBundle: &types.Bundle{
 				TrustDomain:     serverTrustDomain.String(),
@@ -574,7 +770,6 @@ func TestAppendBundle(t *testing.T) {
 				OutputMask:      tt.outputMask,
 			})
 
-			require.Equal(t, tt.expectAuditFields, test.auditLog.GetEmitedFields())
 			spiretest.AssertLogs(t, test.logHook.AllEntries(), tt.expectLogs)
 			if tt.err != "" {
 				spiretest.RequireGRPCStatusContains(t, err, tt.code, tt.err)
@@ -618,16 +813,15 @@ func TestBatchDeleteFederatedBundle(t *testing.T) {
 	for _, tt := range []struct {
 		name string
 
-		entry              *common.RegistrationEntry
-		code               codes.Code
-		dsError            error
-		err                string
-		expectAuditEntries []map[string]string
-		expectLogs         []spiretest.LogEntry
-		expectResults      []*bundlev1.BatchDeleteFederatedBundleResponse_Result
-		expectDSBundles    []string
-		mode               bundlev1.BatchDeleteFederatedBundleRequest_Mode
-		trustDomains       []string
+		entry           *common.RegistrationEntry
+		code            codes.Code
+		dsError         error
+		err             string
+		expectLogs      []spiretest.LogEntry
+		expectResults   []*bundlev1.BatchDeleteFederatedBundleResponse_Result
+		expectDSBundles []string
+		mode            bundlev1.BatchDeleteFederatedBundleRequest_Mode
+		trustDomains    []string
 	}{
 		{
 			name: "remove multiple bundles",
@@ -635,22 +829,30 @@ func TestBatchDeleteFederatedBundle(t *testing.T) {
 				{Status: &types.Status{Code: int32(codes.OK), Message: "OK"}, TrustDomain: td1.String()},
 				{Status: &types.Status{Code: int32(codes.OK), Message: "OK"}, TrustDomain: td2.String()},
 			},
-			expectAuditEntries: []map[string]string{
-				{
-					"status_code":    "OK",
-					"status_message": "OK",
-					"mode":           "RESTRICT",
-					"trust_domain":   "td1.org",
-				},
-				{
-					"status_code":    "Ok",
-					"status_message": "Ok",
-					"mode":           "RESTRICT",
-					"trust_domain":   "td2.org",
-				},
-			},
 			expectDSBundles: []string{serverTrustDomain.IDString(), td3.IDString()},
 			trustDomains:    []string{td1.String(), td2.String()},
+			expectLogs: []spiretest.LogEntry{
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"status":       "success",
+						"type":         "audit",
+						"mode":         "RESTRICT",
+						"trust_domain": "td1.org",
+					},
+				},
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"status":       "success",
+						"type":         "audit",
+						"mode":         "RESTRICT",
+						"trust_domain": "td2.org",
+					},
+				},
+			},
 		},
 		{
 			name:            "empty trust domains",
@@ -670,13 +872,17 @@ func TestBatchDeleteFederatedBundle(t *testing.T) {
 						telemetry.DeleteFederatedBundleMode: "RESTRICT",
 					},
 				},
-			},
-			expectAuditEntries: []map[string]string{
 				{
-					"status_code":    "FailedPrecondition",
-					"status_message": "Ok",
-					"mode":           "RESTRICT",
-					"trust_domain":   "td1.org",
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"status":         "error",
+						"type":           "audit",
+						"status_code":    "FailedPrecondition",
+						"status_message": "failed to delete federated bundle: datastore-sql: cannot delete bundle; federated with 1 registration entries",
+						"mode":           "RESTRICT",
+						"trust_domain":   "td1.org",
+					},
 				},
 			},
 			expectResults: []*bundlev1.BatchDeleteFederatedBundleResponse_Result{
@@ -711,6 +917,18 @@ func TestBatchDeleteFederatedBundle(t *testing.T) {
 				td2.IDString(),
 				td3.IDString(),
 			},
+			expectLogs: []spiretest.LogEntry{
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"status":       "success",
+						"type":         "audit",
+						"mode":         "DISSOCIATE",
+						"trust_domain": "td1.org",
+					},
+				},
+			},
 		},
 		{
 			name:  "delete with DELETE mode",
@@ -731,6 +949,18 @@ func TestBatchDeleteFederatedBundle(t *testing.T) {
 				td2.IDString(),
 				td3.IDString(),
 			},
+			expectLogs: []spiretest.LogEntry{
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"status":       "success",
+						"type":         "audit",
+						"mode":         "DELETE",
+						"trust_domain": "td1.org",
+					},
+				},
+			},
 		},
 		{
 			name: "malformed trust domain",
@@ -742,6 +972,18 @@ func TestBatchDeleteFederatedBundle(t *testing.T) {
 						logrus.ErrorKey:                     `spiffeid: unable to parse: parse "spiffe://malformed TD": invalid character " " in host name`,
 						telemetry.TrustDomainID:             "malformed TD",
 						telemetry.DeleteFederatedBundleMode: "RESTRICT",
+					},
+				},
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"status":         "error",
+						"status_code":    "InvalidArgument",
+						"status_message": `trust domain argument is not valid: spiffeid: unable to parse: parse "spiffe://malformed TD": invalid character " " in host name`,
+						"type":           "audit",
+						"mode":           "RESTRICT",
+						"trust_domain":   "malformed TD",
 					},
 				},
 			},
@@ -766,6 +1008,18 @@ func TestBatchDeleteFederatedBundle(t *testing.T) {
 					Data: logrus.Fields{
 						telemetry.TrustDomainID:             serverTrustDomain.String(),
 						telemetry.DeleteFederatedBundleMode: "RESTRICT",
+					},
+				},
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"status":         "error",
+						"status_code":    "InvalidArgument",
+						"status_message": "removing the bundle for the server trust domain is not allowed",
+						"type":           "audit",
+						"mode":           "RESTRICT",
+						"trust_domain":   "example.org",
 					},
 				},
 			},
@@ -801,6 +1055,18 @@ func TestBatchDeleteFederatedBundle(t *testing.T) {
 						telemetry.TrustDomainID:             "notfound.org",
 					},
 				},
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"status":         "error",
+						"status_code":    "NotFound",
+						"status_message": "bundle not found",
+						"type":           "audit",
+						"mode":           "RESTRICT",
+						"trust_domain":   "notfound.org",
+					},
+				},
 			},
 			expectDSBundles: dsBundles,
 			trustDomains:    []string{"notfound.org"},
@@ -815,6 +1081,18 @@ func TestBatchDeleteFederatedBundle(t *testing.T) {
 						logrus.ErrorKey:                     "rpc error: code = Internal desc = datasource fails",
 						telemetry.DeleteFederatedBundleMode: "RESTRICT",
 						telemetry.TrustDomainID:             td1.String(),
+					},
+				},
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"status":         "error",
+						"status_code":    "Internal",
+						"status_message": "failed to delete federated bundle: datasource fails",
+						"type":           "audit",
+						"mode":           "RESTRICT",
+						"trust_domain":   "td1.org",
 					},
 				},
 			},
@@ -835,7 +1113,7 @@ func TestBatchDeleteFederatedBundle(t *testing.T) {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			test.logHook.Reset()
-			test.auditLog.Reset()
+			// test.auditLog.Reset()
 
 			// Create all test bundles
 			for _, td := range dsBundles {
@@ -856,7 +1134,6 @@ func TestBatchDeleteFederatedBundle(t *testing.T) {
 				Mode:         tt.mode,
 			})
 
-			require.Equal(t, tt.expectAuditEntries, test.auditLog.GetBatchEntries())
 			spiretest.AssertLogs(t, test.logHook.AllEntries(), tt.expectLogs)
 			if tt.err != "" {
 				spiretest.RequireGRPCStatusContains(t, err, tt.code, tt.err)
@@ -906,8 +1183,10 @@ func TestPublishJWTAuthority(t *testing.T) {
 	defer test.Cleanup()
 
 	pkixBytes, err := base64.StdEncoding.DecodeString("MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEYSlUVLqTD8DEnA4F1EWMTf5RXc5lnCxw+5WKJwngEL3rPc9i4Tgzz9riR3I/NiSlkgRO1WsxBusqpC284j9dXA==")
+	pkixHashed := api.HashByte(pkixBytes)
 	require.NoError(t, err)
 	expiresAt := time.Now().Unix()
+	expiresAtStr := strconv.FormatInt(expiresAt, 10)
 	jwtKey1 := &types.JWTKey{
 		ExpiresAt: expiresAt,
 		KeyId:     "key1",
@@ -920,15 +1199,14 @@ func TestPublishJWTAuthority(t *testing.T) {
 	for _, tt := range []struct {
 		name string
 
-		code              codes.Code
-		err               string
-		expectAuditFields map[string]string
-		expectLogs        []spiretest.LogEntry
-		resultKeys        []*types.JWTKey
-		fakeErr           error
-		fakeExpectKey     *common.PublicKey
-		jwtKey            *types.JWTKey
-		rateLimiterErr    error
+		code           codes.Code
+		err            string
+		expectLogs     []spiretest.LogEntry
+		resultKeys     []*types.JWTKey
+		fakeErr        error
+		fakeExpectKey  *common.PublicKey
+		jwtKey         *types.JWTKey
+		rateLimiterErr error
 	}{
 		{
 			name:   "success",
@@ -943,6 +1221,19 @@ func TestPublishJWTAuthority(t *testing.T) {
 					ExpiresAt: expiresAt,
 					KeyId:     "key1",
 					PublicKey: pkixBytes,
+				},
+			},
+			expectLogs: []spiretest.LogEntry{
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"status":                   "success",
+						"type":                     "audit",
+						"jwt_authority_key_id":     "key1",
+						"jwt_authority_public_key": pkixHashed,
+						"jwt_authority_expires_at": expiresAtStr,
+					},
 				},
 			},
 		},
@@ -960,6 +1251,19 @@ func TestPublishJWTAuthority(t *testing.T) {
 						logrus.ErrorKey: "rpc error: code = Internal desc = limit error",
 					},
 				},
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"status":                   "error",
+						"status_code":              "Internal",
+						"status_message":           "rejecting request due to key publishing rate limiting: limit error",
+						"type":                     "audit",
+						"jwt_authority_key_id":     "key1",
+						"jwt_authority_public_key": pkixHashed,
+						"jwt_authority_expires_at": expiresAtStr,
+					},
+				},
 			},
 		},
 		{
@@ -970,6 +1274,16 @@ func TestPublishJWTAuthority(t *testing.T) {
 				{
 					Level:   logrus.ErrorLevel,
 					Message: "Invalid argument: missing JWT authority",
+				},
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"status":         "error",
+						"status_code":    "InvalidArgument",
+						"status_message": "missing JWT authority",
+						"type":           "audit",
+					},
 				},
 			},
 		},
@@ -990,6 +1304,19 @@ func TestPublishJWTAuthority(t *testing.T) {
 						logrus.ErrorKey: expectedJWTErr.Error(),
 					},
 				},
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"status":                   "error",
+						"status_code":              "InvalidArgument",
+						"status_message":           fmt.Sprintf("invalid JWT authority: %v", expectedJWTErr),
+						"type":                     "audit",
+						"jwt_authority_key_id":     "key1",
+						"jwt_authority_public_key": api.HashByte([]byte("malformed key")),
+						"jwt_authority_expires_at": expiresAtStr,
+					},
+				},
 			},
 		},
 		{
@@ -1008,6 +1335,19 @@ func TestPublishJWTAuthority(t *testing.T) {
 						logrus.ErrorKey: "missing key ID",
 					},
 				},
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"status":                   "error",
+						"status_code":              "InvalidArgument",
+						"status_message":           "invalid JWT authority: missing key ID",
+						"type":                     "audit",
+						"jwt_authority_key_id":     "",
+						"jwt_authority_public_key": pkixHashed,
+						"jwt_authority_expires_at": expiresAtStr,
+					},
+				},
 			},
 		},
 		{
@@ -1022,6 +1362,19 @@ func TestPublishJWTAuthority(t *testing.T) {
 					Message: "Failed to publish JWT key",
 					Data: logrus.Fields{
 						logrus.ErrorKey: "publish error",
+					},
+				},
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"status":                   "error",
+						"status_code":              "Internal",
+						"status_message":           "failed to publish JWT key: publish error",
+						"type":                     "audit",
+						"jwt_authority_key_id":     "key1",
+						"jwt_authority_public_key": pkixHashed,
+						"jwt_authority_expires_at": expiresAtStr,
 					},
 				},
 			},
@@ -1044,7 +1397,6 @@ func TestPublishJWTAuthority(t *testing.T) {
 				JwtAuthority: tt.jwtKey,
 			})
 
-			require.Equal(t, tt.expectAuditFields, test.auditLog.GetEmitedFields())
 			spiretest.AssertLogs(t, test.logHook.AllEntries(), tt.expectLogs)
 			if err != nil {
 				spiretest.RequireGRPCStatusContains(t, err, tt.code, tt.err)
@@ -1082,15 +1434,28 @@ func TestListFederatedBundles(t *testing.T) {
 		name              string
 		code              codes.Code
 		err               string
-		expectAuditFields map[string]string
 		expectBundlePages [][]*common.Bundle
-		expectLogs        []spiretest.LogEntry
+		expectLogs        [][]spiretest.LogEntry
 		outputMask        *types.BundleMask
 		pageSize          int32
 	}{
 		{
 			name:              "all bundles at once with no mask",
 			expectBundlePages: [][]*common.Bundle{{b1, b2, b3}},
+			expectLogs: [][]spiretest.LogEntry{
+				{
+					{
+						Level:   logrus.InfoLevel,
+						Message: "Audit log",
+						Data: logrus.Fields{
+							"status":     "success",
+							"type":       "audit",
+							"page_size":  "0",
+							"page_token": "",
+						},
+					},
+				},
+			},
 		},
 		{
 			name:              "all bundles at once with most permissive mask",
@@ -1101,6 +1466,20 @@ func TestListFederatedBundles(t *testing.T) {
 				X509Authorities: true,
 				JwtAuthorities:  true,
 			},
+			expectLogs: [][]spiretest.LogEntry{
+				{
+					{
+						Level:   logrus.InfoLevel,
+						Message: "Audit log",
+						Data: logrus.Fields{
+							"status":     "success",
+							"type":       "audit",
+							"page_size":  "0",
+							"page_token": "",
+						},
+					},
+				},
+			},
 		},
 		{
 			name:              "all bundles at once filtered by mask",
@@ -1110,6 +1489,20 @@ func TestListFederatedBundles(t *testing.T) {
 				SequenceNumber:  false,
 				X509Authorities: false,
 				JwtAuthorities:  false,
+			},
+			expectLogs: [][]spiretest.LogEntry{
+				{
+					{
+						Level:   logrus.InfoLevel,
+						Message: "Audit log",
+						Data: logrus.Fields{
+							"status":     "success",
+							"type":       "audit",
+							"page_size":  "0",
+							"page_token": "",
+						},
+					},
+				},
 			},
 		},
 		{
@@ -1122,6 +1515,44 @@ func TestListFederatedBundles(t *testing.T) {
 				{},
 			},
 			pageSize: 2,
+			expectLogs: [][]spiretest.LogEntry{
+				{
+					{
+						Level:   logrus.InfoLevel,
+						Message: "Audit log",
+						Data: logrus.Fields{
+							"status":     "success",
+							"type":       "audit",
+							"page_size":  "2",
+							"page_token": "",
+						},
+					},
+				},
+				{
+					{
+						Level:   logrus.InfoLevel,
+						Message: "Audit log",
+						Data: logrus.Fields{
+							"status":     "success",
+							"type":       "audit",
+							"page_size":  "2",
+							"page_token": "2",
+						},
+					},
+				},
+				{
+					{
+						Level:   logrus.InfoLevel,
+						Message: "Audit log",
+						Data: logrus.Fields{
+							"status":     "success",
+							"type":       "audit",
+							"page_size":  "2",
+							"page_token": "4",
+						},
+					},
+				},
+			},
 		},
 	} {
 		tt := tt
@@ -1133,6 +1564,7 @@ func TestListFederatedBundles(t *testing.T) {
 			// that paging is likely broken.
 			const pagesLimit = 10
 
+			page := 0
 			var pageToken string
 			var actualBundlePages [][]*types.Bundle
 			for {
@@ -1141,11 +1573,11 @@ func TestListFederatedBundles(t *testing.T) {
 					PageSize:   tt.pageSize,
 					PageToken:  pageToken,
 				})
-				require.Equal(t, tt.expectAuditFields, test.auditLog.GetEmitedFields())
+				spiretest.AssertLastLogs(t, test.logHook.AllEntries(), tt.expectLogs[page])
+				page++
 				if tt.err != "" {
 					spiretest.RequireGRPCStatusContains(t, err, tt.code, tt.err)
 					require.Nil(t, resp)
-					spiretest.AssertLogs(t, test.logHook.AllEntries(), tt.expectLogs)
 
 					return
 				}
@@ -1184,34 +1616,73 @@ func TestCountBundles(t *testing.T) {
 	}
 
 	for _, tt := range []struct {
-		name              string
-		count             int32
-		resp              *bundlev1.CountBundlesResponse
-		code              codes.Code
-		dsError           error
-		err               string
-		expectAuditFields map[string]string
-		expectLogs        []spiretest.LogEntry
+		name       string
+		count      int32
+		resp       *bundlev1.CountBundlesResponse
+		code       codes.Code
+		dsError    error
+		err        string
+		expectLogs []spiretest.LogEntry
 	}{
 		{
 			name:  "0 bundles",
 			count: 0,
 			resp:  &bundlev1.CountBundlesResponse{Count: 0},
+			expectLogs: []spiretest.LogEntry{
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"status": "success",
+						"type":   "audit",
+					},
+				},
+			},
 		},
 		{
 			name:  "1 bundle",
 			count: 1,
 			resp:  &bundlev1.CountBundlesResponse{Count: 1},
+			expectLogs: []spiretest.LogEntry{
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"status": "success",
+						"type":   "audit",
+					},
+				},
+			},
 		},
 		{
 			name:  "2 bundles",
 			count: 2,
 			resp:  &bundlev1.CountBundlesResponse{Count: 2},
+			expectLogs: []spiretest.LogEntry{
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"status": "success",
+						"type":   "audit",
+					},
+				},
+			},
 		},
 		{
 			name:  "3 bundles",
 			count: 3,
 			resp:  &bundlev1.CountBundlesResponse{Count: 3},
+			expectLogs: []spiretest.LogEntry{
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"status": "success",
+						"type":   "audit",
+					},
+				},
+			},
 		},
 		{
 			name:    "ds error",
@@ -1224,6 +1695,16 @@ func TestCountBundles(t *testing.T) {
 					Message: "Failed to count bundles",
 					Data: logrus.Fields{
 						logrus.ErrorKey: "rpc error: code = Internal desc = ds error",
+					},
+				},
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"status":         "error",
+						"type":           "audit",
+						"status_code":    "Internal",
+						"status_message": "failed to count bundles: ds error",
 					},
 				},
 			},
@@ -1241,7 +1722,6 @@ func TestCountBundles(t *testing.T) {
 			test.ds.SetNextError(tt.dsError)
 			resp, err := test.client.CountBundles(context.Background(), &bundlev1.CountBundlesRequest{})
 
-			require.Equal(t, tt.expectAuditFields, test.auditLog.GetEmitedFields())
 			spiretest.AssertLogs(t, test.logHook.AllEntries(), tt.expectLogs)
 			if tt.err != "" {
 				spiretest.RequireGRPCStatusContains(t, err, tt.code, tt.err)
@@ -1257,39 +1737,23 @@ func TestCountBundles(t *testing.T) {
 	}
 }
 
-func createBundle(t *testing.T, test *serviceTest, td string) *common.Bundle {
-	b := &common.Bundle{
-		TrustDomainId: td,
-		RefreshHint:   60,
-		RootCas:       []*common.Certificate{{DerBytes: []byte(fmt.Sprintf("cert-bytes-%s", td))}},
-		JwtSigningKeys: []*common.PublicKey{
-			{
-				Kid:       fmt.Sprintf("key-id-%s", td),
-				NotAfter:  time.Now().Add(time.Minute).Unix(),
-				PkixBytes: []byte(fmt.Sprintf("key-bytes-%s", td)),
-			},
-		},
-	}
-	test.setBundle(t, b)
-
-	return b
-}
-
 func TestBatchCreateFederatedBundle(t *testing.T) {
 	test := setupServiceTest(t)
 	defer test.Cleanup()
+
+	bundle := makeValidBundle(t, federatedTrustDomain)
+	x509BundleHash := api.HashByte(bundle.X509Authorities[0].Asn1)
 
 	_, expectedX509Err := x509.ParseCertificates([]byte("malformed"))
 	require.Error(t, expectedX509Err)
 
 	for _, tt := range []struct {
-		name              string
-		bundlesToCreate   []*types.Bundle
-		outputMask        *types.BundleMask
-		expectAuditFields map[string]string
-		expectedResults   []*bundlev1.BatchCreateFederatedBundleResponse_Result
-		expectedLogMsgs   []spiretest.LogEntry
-		dsError           error
+		name            string
+		bundlesToCreate []*types.Bundle
+		outputMask      *types.BundleMask
+		expectedResults []*bundlev1.BatchCreateFederatedBundleResponse_Result
+		expectedLogMsgs []spiretest.LogEntry
+		dsError         error
 	}{
 		{
 			name:            "Create succeeds",
@@ -1314,6 +1778,18 @@ func TestBatchCreateFederatedBundle(t *testing.T) {
 						telemetry.TrustDomainID: "another-example.org",
 					},
 				},
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"status":                  "success",
+						"type":                    "audit",
+						"refresh_hint":            "60",
+						"sequence_number":         "0",
+						"trust_domain":            "another-example.org",
+						"x509_authorities_asn1_0": x509BundleHash,
+					},
+				},
 			},
 		},
 		{
@@ -1334,6 +1810,18 @@ func TestBatchCreateFederatedBundle(t *testing.T) {
 						telemetry.TrustDomainID: "another-example.org",
 					},
 				},
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"status":                  "success",
+						"type":                    "audit",
+						"refresh_hint":            "60",
+						"sequence_number":         "0",
+						"trust_domain":            "another-example.org",
+						"x509_authorities_asn1_0": x509BundleHash,
+					},
+				},
 			},
 		},
 		{
@@ -1351,6 +1839,18 @@ func TestBatchCreateFederatedBundle(t *testing.T) {
 					Message: "Federated bundle created",
 					Data: logrus.Fields{
 						telemetry.TrustDomainID: "another-example.org",
+					},
+				},
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"status":                  "success",
+						"type":                    "audit",
+						"refresh_hint":            "60",
+						"sequence_number":         "0",
+						"trust_domain":            "another-example.org",
+						"x509_authorities_asn1_0": x509BundleHash,
 					},
 				},
 			},
@@ -1380,6 +1880,20 @@ func TestBatchCreateFederatedBundle(t *testing.T) {
 						logrus.ErrorKey:         `spiffeid: unable to parse: parse "spiffe://malformed id": invalid character " " in host name`,
 					},
 				},
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"status":                  "error",
+						"status_code":             "InvalidArgument",
+						"status_message":          `trust domain argument is not valid: spiffeid: unable to parse: parse "spiffe://malformed id": invalid character " " in host name`,
+						"type":                    "audit",
+						"refresh_hint":            "60",
+						"sequence_number":         "0",
+						"trust_domain":            "malformed id",
+						"x509_authorities_asn1_0": x509BundleHash,
+					},
+				},
 			},
 		},
 		{
@@ -1400,6 +1914,20 @@ func TestBatchCreateFederatedBundle(t *testing.T) {
 					Message: `Invalid argument: creating a federated bundle for the server's own trust domain is not allowed`,
 					Data: logrus.Fields{
 						telemetry.TrustDomainID: "example.org",
+					},
+				},
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"status":                  "error",
+						"status_code":             "InvalidArgument",
+						"status_message":          "creating a federated bundle for the server's own trust domain is not allowed",
+						"type":                    "audit",
+						"refresh_hint":            "60",
+						"sequence_number":         "0",
+						"trust_domain":            "example.org",
+						"x509_authorities_asn1_0": x509BundleHash,
 					},
 				},
 			},
@@ -1425,10 +1953,36 @@ func TestBatchCreateFederatedBundle(t *testing.T) {
 					},
 				},
 				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"status":                  "success",
+						"type":                    "audit",
+						"refresh_hint":            "60",
+						"sequence_number":         "0",
+						"trust_domain":            "another-example.org",
+						"x509_authorities_asn1_0": x509BundleHash,
+					},
+				},
+				{
 					Level:   logrus.ErrorLevel,
 					Message: "Bundle already exists",
 					Data: logrus.Fields{
 						telemetry.TrustDomainID: "another-example.org",
+					},
+				},
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"status":                  "error",
+						"status_code":             "AlreadyExists",
+						"status_message":          "bundle already exists",
+						"type":                    "audit",
+						"refresh_hint":            "60",
+						"sequence_number":         "0",
+						"trust_domain":            "another-example.org",
+						"x509_authorities_asn1_0": x509BundleHash,
 					},
 				},
 			},
@@ -1447,6 +2001,20 @@ func TestBatchCreateFederatedBundle(t *testing.T) {
 					Data: logrus.Fields{
 						telemetry.TrustDomainID: "another-example.org",
 						logrus.ErrorKey:         "datastore error",
+					},
+				},
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"status":                  "error",
+						"status_code":             "Internal",
+						"status_message":          "unable to create bundle: datastore error",
+						"type":                    "audit",
+						"refresh_hint":            "60",
+						"sequence_number":         "0",
+						"trust_domain":            "another-example.org",
+						"x509_authorities_asn1_0": x509BundleHash,
 					},
 				},
 			},
@@ -1475,6 +2043,20 @@ func TestBatchCreateFederatedBundle(t *testing.T) {
 						logrus.ErrorKey:         fmt.Sprintf("unable to parse X.509 authority: %v", expectedX509Err),
 					},
 				},
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"status":                  "error",
+						"status_code":             "InvalidArgument",
+						"status_message":          fmt.Sprintf("failed to convert bundle: unable to parse X.509 authority: %v", expectedX509Err),
+						"type":                    "audit",
+						"refresh_hint":            "0",
+						"sequence_number":         "0",
+						"trust_domain":            "another-example.org",
+						"x509_authorities_asn1_0": api.HashByte([]byte("malformed")),
+					},
+				},
 			},
 		},
 	} {
@@ -1488,7 +2070,6 @@ func TestBatchCreateFederatedBundle(t *testing.T) {
 				Bundle:     tt.bundlesToCreate,
 				OutputMask: tt.outputMask,
 			})
-			require.Equal(t, tt.expectAuditFields, test.auditLog.GetEmitedFields())
 			require.NoError(t, err)
 			require.NotNil(t, resp)
 			spiretest.AssertLogs(t, test.logHook.AllEntries(), tt.expectedLogMsgs)
@@ -1505,6 +2086,8 @@ func TestBatchCreateFederatedBundle(t *testing.T) {
 func TestBatchUpdateFederatedBundle(t *testing.T) {
 	_, expectedX509Err := x509.ParseCertificates([]byte("malformed"))
 	require.Error(t, expectedX509Err)
+	validBundle := makeValidBundle(t, federatedTrustDomain)
+	x509BundleHash := api.HashByte(validBundle.X509Authorities[0].Asn1)
 
 	for _, tt := range []struct {
 		name              string
@@ -1512,7 +2095,6 @@ func TestBatchUpdateFederatedBundle(t *testing.T) {
 		preExistentBundle *common.Bundle
 		inputMask         *types.BundleMask
 		outputMask        *types.BundleMask
-		expectAuditFields map[string]string
 		expectedResults   []*bundlev1.BatchCreateFederatedBundleResponse_Result
 		expectedLogMsgs   []spiretest.LogEntry
 		dsError           error
@@ -1535,6 +2117,18 @@ func TestBatchUpdateFederatedBundle(t *testing.T) {
 					Message: "Federated bundle updated",
 					Data: logrus.Fields{
 						telemetry.TrustDomainID: "another-example.org",
+					},
+				},
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"status":                  "success",
+						"type":                    "audit",
+						"refresh_hint":            "60",
+						"sequence_number":         "0",
+						"trust_domain":            "another-example.org",
+						"x509_authorities_asn1_0": x509BundleHash,
 					},
 				},
 			},
@@ -1562,6 +2156,17 @@ func TestBatchUpdateFederatedBundle(t *testing.T) {
 						telemetry.TrustDomainID: "another-example.org",
 					},
 				},
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"status":                  "success",
+						"type":                    "audit",
+						"refresh_hint":            "60",
+						"trust_domain":            "another-example.org",
+						"x509_authorities_asn1_0": x509BundleHash,
+					},
+				},
 			},
 		},
 		{
@@ -1586,6 +2191,18 @@ func TestBatchUpdateFederatedBundle(t *testing.T) {
 					Message: "Federated bundle updated",
 					Data: logrus.Fields{
 						telemetry.TrustDomainID: "another-example.org",
+					},
+				},
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"status":                  "success",
+						"type":                    "audit",
+						"refresh_hint":            "60",
+						"sequence_number":         "0",
+						"trust_domain":            "another-example.org",
+						"x509_authorities_asn1_0": x509BundleHash,
 					},
 				},
 			},
@@ -1615,6 +2232,20 @@ func TestBatchUpdateFederatedBundle(t *testing.T) {
 						logrus.ErrorKey:         `spiffeid: unable to parse: parse "spiffe://malformed id": invalid character " " in host name`,
 					},
 				},
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"status":                  "error",
+						"type":                    "audit",
+						"refresh_hint":            "60",
+						"sequence_number":         "0",
+						"trust_domain":            "malformed id",
+						"x509_authorities_asn1_0": x509BundleHash,
+						"status_code":             "InvalidArgument",
+						"status_message":          `trust domain argument is not valid: spiffeid: unable to parse: parse "spiffe://malformed id": invalid character " " in host name`,
+					},
+				},
 			},
 		},
 		{
@@ -1637,6 +2268,20 @@ func TestBatchUpdateFederatedBundle(t *testing.T) {
 						telemetry.TrustDomainID: "example.org",
 					},
 				},
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"status":                  "error",
+						"type":                    "audit",
+						"refresh_hint":            "60",
+						"sequence_number":         "0",
+						"trust_domain":            "example.org",
+						"x509_authorities_asn1_0": x509BundleHash,
+						"status_code":             "InvalidArgument",
+						"status_message":          "updating a federated bundle for the server's own trust domain is not allowed",
+					},
+				},
 			},
 		},
 		{
@@ -1655,6 +2300,20 @@ func TestBatchUpdateFederatedBundle(t *testing.T) {
 						telemetry.TrustDomainID: "another-example.org",
 					},
 				},
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"status":                  "error",
+						"type":                    "audit",
+						"refresh_hint":            "60",
+						"sequence_number":         "0",
+						"trust_domain":            "another-example.org",
+						"x509_authorities_asn1_0": x509BundleHash,
+						"status_code":             "NotFound",
+						"status_message":          "bundle not found",
+					},
+				},
 			},
 		},
 		{
@@ -1671,6 +2330,20 @@ func TestBatchUpdateFederatedBundle(t *testing.T) {
 					Data: logrus.Fields{
 						telemetry.TrustDomainID: "another-example.org",
 						logrus.ErrorKey:         "datastore error",
+					},
+				},
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"status":                  "error",
+						"type":                    "audit",
+						"refresh_hint":            "60",
+						"sequence_number":         "0",
+						"trust_domain":            "another-example.org",
+						"x509_authorities_asn1_0": x509BundleHash,
+						"status_code":             "Internal",
+						"status_message":          "failed to update bundle: datastore error",
 					},
 				},
 			},
@@ -1699,6 +2372,20 @@ func TestBatchUpdateFederatedBundle(t *testing.T) {
 						logrus.ErrorKey:         fmt.Sprintf("unable to parse X.509 authority: %v", expectedX509Err),
 					},
 				},
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"status":                  "error",
+						"type":                    "audit",
+						"refresh_hint":            "0",
+						"sequence_number":         "0",
+						"trust_domain":            "another-example.org",
+						"x509_authorities_asn1_0": api.HashByte([]byte("malformed")),
+						"status_code":             "InvalidArgument",
+						"status_message":          fmt.Sprintf("failed to convert bundle: unable to parse X.509 authority: %v", expectedX509Err),
+					},
+				},
 			},
 		},
 		{
@@ -1723,10 +2410,36 @@ func TestBatchUpdateFederatedBundle(t *testing.T) {
 					},
 				},
 				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"status":                  "error",
+						"type":                    "audit",
+						"refresh_hint":            "60",
+						"sequence_number":         "0",
+						"trust_domain":            "non-existent-td",
+						"x509_authorities_asn1_0": x509BundleHash,
+						"status_code":             "NotFound",
+						"status_message":          "bundle not found",
+					},
+				},
+				{
 					Level:   logrus.DebugLevel,
 					Message: "Federated bundle updated",
 					Data: logrus.Fields{
 						telemetry.TrustDomainID: "another-example.org",
+					},
+				},
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"status":                  "success",
+						"type":                    "audit",
+						"refresh_hint":            "60",
+						"sequence_number":         "0",
+						"trust_domain":            "another-example.org",
+						"x509_authorities_asn1_0": x509BundleHash,
 					},
 				},
 			},
@@ -1749,7 +2462,6 @@ func TestBatchUpdateFederatedBundle(t *testing.T) {
 				OutputMask: tt.outputMask,
 			})
 
-			require.Equal(t, tt.expectAuditFields, test.auditLog.GetEmitedFields())
 			require.NoError(t, err)
 			require.NotNil(t, resp)
 			spiretest.AssertLogs(t, test.logHook.AllEntries(), tt.expectedLogMsgs)
@@ -1782,15 +2494,15 @@ func TestBatchSetFederatedBundle(t *testing.T) {
 	updatedBundle := makeValidBundle(t, federatedTrustDomain)
 	// Change the refresh hint
 	updatedBundle.RefreshHint = 120
+	x509BundleHash := api.HashByte(updatedBundle.X509Authorities[0].Asn1)
 
 	for _, tt := range []struct {
-		name              string
-		bundlesToSet      []*types.Bundle
-		outputMask        *types.BundleMask
-		expectedResults   []*bundlev1.BatchSetFederatedBundleResponse_Result
-		expectedLogMsgs   []spiretest.LogEntry
-		expectAuditFields map[string]string
-		dsError           error
+		name            string
+		bundlesToSet    []*types.Bundle
+		outputMask      *types.BundleMask
+		expectedResults []*bundlev1.BatchSetFederatedBundleResponse_Result
+		expectedLogMsgs []spiretest.LogEntry
+		dsError         error
 	}{
 		{
 			name:         "Succeeds",
@@ -1815,6 +2527,18 @@ func TestBatchSetFederatedBundle(t *testing.T) {
 						telemetry.TrustDomainID: "another-example.org",
 					},
 				},
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"refresh_hint":            "60",
+						"sequence_number":         "0",
+						"status":                  "success",
+						"trust_domain":            "another-example.org",
+						"type":                    "audit",
+						"x509_authorities_asn1_0": x509BundleHash,
+					},
+				},
 			},
 		},
 		{
@@ -1835,6 +2559,18 @@ func TestBatchSetFederatedBundle(t *testing.T) {
 						telemetry.TrustDomainID: "another-example.org",
 					},
 				},
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"refresh_hint":            "60",
+						"sequence_number":         "0",
+						"status":                  "success",
+						"trust_domain":            "another-example.org",
+						"type":                    "audit",
+						"x509_authorities_asn1_0": x509BundleHash,
+					},
+				},
 			},
 		},
 		{
@@ -1852,6 +2588,18 @@ func TestBatchSetFederatedBundle(t *testing.T) {
 					Message: `Bundle set successfully`,
 					Data: logrus.Fields{
 						telemetry.TrustDomainID: "another-example.org",
+					},
+				},
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"refresh_hint":            "60",
+						"sequence_number":         "0",
+						"status":                  "success",
+						"trust_domain":            "another-example.org",
+						"type":                    "audit",
+						"x509_authorities_asn1_0": x509BundleHash,
 					},
 				},
 			},
@@ -1883,9 +2631,33 @@ func TestBatchSetFederatedBundle(t *testing.T) {
 				},
 				{
 					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"refresh_hint":            "60",
+						"sequence_number":         "0",
+						"status":                  "success",
+						"trust_domain":            "another-example.org",
+						"type":                    "audit",
+						"x509_authorities_asn1_0": x509BundleHash,
+					},
+				},
+				{
+					Level:   logrus.InfoLevel,
 					Message: "Bundle set successfully",
 					Data: logrus.Fields{
 						telemetry.TrustDomainID: "another-example.org",
+					},
+				},
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"refresh_hint":            "120",
+						"sequence_number":         "0",
+						"status":                  "success",
+						"trust_domain":            "another-example.org",
+						"type":                    "audit",
+						"x509_authorities_asn1_0": x509BundleHash,
 					},
 				},
 			},
@@ -1911,6 +2683,20 @@ func TestBatchSetFederatedBundle(t *testing.T) {
 						logrus.ErrorKey:         "spiffeid: trust domain is empty",
 					},
 				},
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"refresh_hint":            "60",
+						"sequence_number":         "0",
+						"status":                  "error",
+						"status_code":             "InvalidArgument",
+						"status_message":          "trust domain argument is not valid: spiffeid: trust domain is empty",
+						"trust_domain":            "//notvalid",
+						"type":                    "audit",
+						"x509_authorities_asn1_0": x509BundleHash,
+					},
+				},
 			},
 		},
 		{
@@ -1933,6 +2719,20 @@ func TestBatchSetFederatedBundle(t *testing.T) {
 						telemetry.TrustDomainID: "example.org",
 					},
 				},
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"refresh_hint":            "60",
+						"sequence_number":         "0",
+						"status":                  "error",
+						"status_code":             "InvalidArgument",
+						"status_message":          "setting a federated bundle for the server's own trust domain is not allowed",
+						"trust_domain":            "example.org",
+						"type":                    "audit",
+						"x509_authorities_asn1_0": x509BundleHash,
+					},
+				},
 			},
 		},
 		{
@@ -1949,6 +2749,20 @@ func TestBatchSetFederatedBundle(t *testing.T) {
 					Data: logrus.Fields{
 						telemetry.TrustDomainID: "another-example.org",
 						logrus.ErrorKey:         "datastore error",
+					},
+				},
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"refresh_hint":            "60",
+						"sequence_number":         "0",
+						"status":                  "error",
+						"status_code":             "Internal",
+						"status_message":          "failed to set bundle: datastore error",
+						"trust_domain":            "another-example.org",
+						"type":                    "audit",
+						"x509_authorities_asn1_0": x509BundleHash,
 					},
 				},
 			},
@@ -1977,6 +2791,20 @@ func TestBatchSetFederatedBundle(t *testing.T) {
 						logrus.ErrorKey:         fmt.Sprintf("unable to parse X.509 authority: %v", expectedX509Err),
 					},
 				},
+				{
+					Level:   logrus.InfoLevel,
+					Message: "Audit log",
+					Data: logrus.Fields{
+						"refresh_hint":            "0",
+						"sequence_number":         "0",
+						"status":                  "error",
+						"status_code":             "InvalidArgument",
+						"status_message":          fmt.Sprintf("failed to convert bundle: unable to parse X.509 authority: %v", expectedX509Err),
+						"trust_domain":            "another-example.org",
+						"type":                    "audit",
+						"x509_authorities_asn1_0": api.HashByte([]byte("malformed")),
+					},
+				},
 			},
 		},
 	} {
@@ -1992,7 +2820,6 @@ func TestBatchSetFederatedBundle(t *testing.T) {
 				Bundle:     tt.bundlesToSet,
 				OutputMask: tt.outputMask,
 			})
-			require.Equal(t, tt.expectAuditFields, test.auditLog.GetEmitedFields())
 			require.NoError(t, err)
 			require.NotNil(t, resp)
 			spiretest.AssertLogs(t, test.logHook.AllEntries(), tt.expectedLogMsgs)
@@ -2054,7 +2881,7 @@ type serviceTest struct {
 	logHook     *test.Hook
 	up          *fakeUpstreamPublisher
 	rateLimiter *fakeRateLimiter
-	auditLog    *fakeauditlog.AuditLog
+	auditHook   *test.Hook
 	done        func()
 	isAdmin     bool
 	isAgent     bool
@@ -2080,17 +2907,15 @@ func setupServiceTest(t *testing.T) *serviceTest {
 	registerFn := func(s *grpc.Server) {
 		bundle.RegisterService(s, service)
 	}
-	auditLog := fakeauditlog.New()
 
 	test := &serviceTest{
 		ds:          ds,
 		logHook:     logHook,
 		up:          up,
 		rateLimiter: rateLimiter,
-		auditLog:    auditLog,
 	}
 
-	contextFn := func(ctx context.Context) context.Context {
+	ppMiddleware := middleware.Preprocess(func(ctx context.Context, fullMethod string) (context.Context, error) {
 		ctx = rpccontext.WithLogger(ctx, log)
 		if test.isAdmin {
 			ctx = rpccontext.WithCallerAdminEntries(ctx, []*types.Entry{{Admin: true}})
@@ -2106,11 +2931,13 @@ func setupServiceTest(t *testing.T) *serviceTest {
 		}
 
 		ctx = rpccontext.WithRateLimiter(ctx, rateLimiter)
-		ctx = rpccontext.WithAuditLog(ctx, auditLog)
-		return ctx
-	}
+		return ctx, nil
+	})
 
-	conn, done := spiretest.NewAPIServer(t, registerFn, contextFn)
+	conn, done := spiretest.NewAPIServerWithMiddleware(t, registerFn, middleware.Chain(
+		ppMiddleware,
+		middleware.WithAuditLog(),
+	))
 	test.done = done
 	test.client = bundlev1.NewBundleClient(conn)
 
@@ -2192,4 +3019,22 @@ func (f *fakeRateLimiter) RateLimit(ctx context.Context, count int) error {
 	}
 
 	return f.err
+}
+
+func createBundle(t *testing.T, test *serviceTest, td string) *common.Bundle {
+	b := &common.Bundle{
+		TrustDomainId: td,
+		RefreshHint:   60,
+		RootCas:       []*common.Certificate{{DerBytes: []byte(fmt.Sprintf("cert-bytes-%s", td))}},
+		JwtSigningKeys: []*common.PublicKey{
+			{
+				Kid:       fmt.Sprintf("key-id-%s", td),
+				NotAfter:  time.Now().Add(time.Minute).Unix(),
+				PkixBytes: []byte(fmt.Sprintf("key-bytes-%s", td)),
+			},
+		},
+	}
+	test.setBundle(t, b)
+
+	return b
 }
