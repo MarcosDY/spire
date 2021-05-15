@@ -194,8 +194,8 @@ func (c *checker) checkStates(states map[string]health.State) (bool, bool, inter
 	liveDetails := make(map[string]interface{})
 	readyDetails := make(map[string]interface{})
 	for subsystemName, subsystemState := range states {
-		state, ok := subsystemState.Details.(State)
-		if !ok || !state.Live {
+		state, _ := subsystemState.Details.(State)
+		if !state.Live {
 			isLive = false
 		}
 

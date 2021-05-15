@@ -322,10 +322,7 @@ func (r *PodReconciler) forEachPodEndpointAddress(endpoints *corev1.Endpoints, t
 func (r *PodReconciler) SetupWithManager(mgr ctrl.Manager, builder *ctrlBuilder.Builder) error {
 	if r.AddPodDNSNames {
 		builder.Watches(&source.Kind{Type: &corev1.Endpoints{}}, &handler.EnqueueRequestsFromMapFunc{ToRequests: handler.ToRequestsFunc(func(a handler.MapObject) []reconcile.Request {
-			endpoints, ok := a.Object.(*corev1.Endpoints)
-			if !ok {
-				return nil
-			}
+			endpoints, _ := a.Object.(*corev1.Endpoints)
 
 			var requests []reconcile.Request
 			r.forEachPodEndpointAddress(endpoints, func(address corev1.EndpointAddress) {
@@ -341,10 +338,7 @@ func (r *PodReconciler) SetupWithManager(mgr ctrl.Manager, builder *ctrlBuilder.
 		})})
 
 		return mgr.GetFieldIndexer().IndexField(context.Background(), &corev1.Endpoints{}, endpointSubsetAddressReferenceField, func(rawObj runtime.Object) []string {
-			endpoints, ok := rawObj.(*corev1.Endpoints)
-			if !ok {
-				return []string{}
-			}
+			endpoints, _ := rawObj.(*corev1.Endpoints)
 
 			var podNames []string
 
