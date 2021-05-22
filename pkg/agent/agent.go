@@ -9,6 +9,7 @@ import (
 	"os"
 	"path"
 	"runtime"
+
 	"sync"
 
 	api_workload "github.com/spiffe/spire/api/workload"
@@ -18,6 +19,8 @@ import (
 	"github.com/spiffe/spire/pkg/agent/catalog"
 	"github.com/spiffe/spire/pkg/agent/endpoints"
 	"github.com/spiffe/spire/pkg/agent/manager"
+	"github.com/spiffe/spire/pkg/agent/manager/pipe"
+	"github.com/spiffe/spire/pkg/agent/svid/store"
 	"github.com/spiffe/spire/pkg/common/health"
 	"github.com/spiffe/spire/pkg/common/profiling"
 	"github.com/spiffe/spire/pkg/common/telemetry"
@@ -79,7 +82,17 @@ func (a *Agent) Run(ctx context.Context) error {
 		return err
 	}
 
-	manager, err := a.newManager(ctx, cat, metrics, as)
+	// If there is an SVID Store plugin, create a buffered pipe
+	var pipeIn pipe.In
+	var pipeOut pipe.Out
+
+	hasStores := len(cat.GetSVIDStores()) > 0
+	if hasStores {
+		pipeIn, pipeOut = pipe.BufferedPipe(1000)
+		defer pipeIn.Close()
+	}
+
+	manager, err := a.newManager(ctx, cat, metrics, as, pipeIn)
 	if err != nil {
 		return err
 	}
@@ -100,6 +113,12 @@ func (a *Agent) Run(ctx context.Context) error {
 	if a.c.AdminBindAddress != nil {
 		adminEndpoints := a.newAdminEndpoints(manager)
 		tasks = append(tasks, adminEndpoints.ListenAndServe)
+	}
+
+	// If an SVID store is configured, create store and add it to tasks
+	if hasStores {
+		store := a.newStore(cat, pipeOut)
+		tasks = append(tasks, store.Run)
 	}
 
 	err = util.RunTasks(ctx, tasks...)
@@ -181,7 +200,7 @@ func (a *Agent) attest(ctx context.Context, cat catalog.Catalog, metrics telemet
 	return node_attestor.New(&config).Attest(ctx)
 }
 
-func (a *Agent) newManager(ctx context.Context, cat catalog.Catalog, metrics telemetry.Metrics, as *node_attestor.AttestationResult) (manager.Manager, error) {
+func (a *Agent) newManager(ctx context.Context, cat catalog.Catalog, metrics telemetry.Metrics, as *node_attestor.AttestationResult, pipeIn pipe.In) (manager.Manager, error) {
 	config := &manager.Config{
 		SVID:            as.SVID,
 		SVIDKey:         as.Key,
@@ -194,6 +213,7 @@ func (a *Agent) newManager(ctx context.Context, cat catalog.Catalog, metrics tel
 		BundleCachePath: a.bundleCachePath(),
 		SVIDCachePath:   a.agentSVIDPath(),
 		SyncInterval:    a.c.SyncInterval,
+		PipeIn:          pipeIn,
 	}
 
 	mgr := manager.New(config)
@@ -202,6 +222,16 @@ func (a *Agent) newManager(ctx context.Context, cat catalog.Catalog, metrics tel
 	}
 
 	return mgr, nil
+}
+
+func (a *Agent) newStore(c catalog.Catalog, pipeOut pipe.Out) store.Service {
+	config := store.Config{
+		Catalog: c,
+		Log:     a.c.Log.WithField(telemetry.SubsystemName, "svidstore"),
+		PipeOut: pipeOut,
+	}
+
+	return store.New(config)
 }
 
 func (a *Agent) newEndpoints(cat catalog.Catalog, metrics telemetry.Metrics, mgr manager.Manager) endpoints.Server {

@@ -382,7 +382,7 @@ func TestSubcriberNotificationsOnSelectorChanges(t *testing.T) {
 
 func newTestCache() *Cache {
 	log, _ := test.NewNullLogger()
-	return New(log, spiffeid.RequireTrustDomainFromString("domain.test"), bundleV1, telemetry.Blackhole{})
+	return New(log, spiffeid.RequireTrustDomainFromString("domain.test"), bundleV1, telemetry.Blackhole{}, nil)
 }
 
 func TestSubcriberNotifiedWhenEntryDropped(t *testing.T) {
