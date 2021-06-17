@@ -43,6 +43,7 @@ func TestParseConfigGood(t *testing.T) {
 	assert.True(t, c.Server.Federation.FederatesWith["domain1.test"].BundleEndpoint.UseWebPKI)
 	assert.Equal(t, c.Server.Federation.FederatesWith["domain2.test"].BundleEndpoint.Address, "5.6.7.8")
 	assert.Equal(t, c.Server.Federation.FederatesWith["domain2.test"].BundleEndpoint.SpiffeID, "spiffe://domain2.test/bundle-provider")
+	assert.True(t, c.Server.AuditLogEnabled)
 
 	// Check for plugins configurations
 	pluginConfigs := *c.Plugins
@@ -495,6 +496,16 @@ func TestMergeInput(t *testing.T) {
 			},
 			test: func(t *testing.T, c *Config) {
 				require.Equal(t, "bar", c.Server.TrustDomain)
+			},
+		},
+		{
+			msg: "auditlog_enabled should be configurable by file",
+			fileInput: func(c *Config) {
+				c.Server.AuditLogEnabled = true
+			},
+			cliInput: func(c *serverConfig) {},
+			test: func(t *testing.T, c *Config) {
+				require.True(t, c.Server.AuditLogEnabled)
 			},
 		},
 	}
@@ -1030,6 +1041,24 @@ func TestNewServerConfig(t *testing.T) {
 			},
 			test: func(t *testing.T, c *server.Config) {
 				require.Nil(t, c)
+			},
+		},
+		{
+			msg: "auditlog_enabled is enabled",
+			input: func(c *Config) {
+				c.Server.AuditLogEnabled = true
+			},
+			test: func(t *testing.T, c *server.Config) {
+				require.True(t, c.AuditLogEnabled)
+			},
+		},
+		{
+			msg: "auditlog_enabled is disabled",
+			input: func(c *Config) {
+				c.Server.AuditLogEnabled = false
+			},
+			test: func(t *testing.T, c *server.Config) {
+				require.False(t, c.AuditLogEnabled)
 			},
 		},
 	}
