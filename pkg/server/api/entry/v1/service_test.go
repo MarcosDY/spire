@@ -305,6 +305,35 @@ func TestListEntries(t *testing.T) {
 			},
 		},
 		{
+			name:            "filter by selectors match any",
+			expectedEntries: []*types.Entry{expectedChild},
+			request: &entryv1.ListEntriesRequest{
+				Filter: &entryv1.ListEntriesRequest_Filter{
+					BySelectors: &types.SelectorMatch{
+						Selectors: []*types.Selector{
+							{Type: "unix", Value: "gid:1000"},
+						},
+						Match: types.SelectorMatch_MATCH_ANY,
+					},
+				},
+			},
+		},
+		{
+			name:            "filter by selectors superset",
+			expectedEntries: []*types.Entry{expectedChild},
+			request: &entryv1.ListEntriesRequest{
+				Filter: &entryv1.ListEntriesRequest_Filter{
+					BySelectors: &types.SelectorMatch{
+						Selectors: []*types.Selector{
+							{Type: "unix", Value: "gid:1000"},
+							{Type: "unix", Value: "uid:1000"},
+						},
+						Match: types.SelectorMatch_MATCH_SUPERSET,
+					},
+				},
+			},
+		},
+		{
 			name:            "filter by federates with exact match (no subset)",
 			expectedEntries: []*types.Entry{expectedSecondChild},
 			request: &entryv1.ListEntriesRequest{
@@ -423,6 +452,129 @@ func TestListEntries(t *testing.T) {
 							notFederatedTd.String(),
 						},
 						Match: types.FederatesWithMatch_MATCH_SUBSET,
+					},
+				},
+			},
+		},
+		{
+			name:            "filter by federates with match any (no subset)",
+			expectedEntries: []*types.Entry{expectedChild, expectedSecondChild},
+			request: &entryv1.ListEntriesRequest{
+				Filter: &entryv1.ListEntriesRequest_Filter{
+					ByFederatesWith: &types.FederatesWithMatch{
+						TrustDomains: []string{
+							// Both formats should work
+							federatedTd.IDString(),
+							secondFederatedTd.String(),
+						},
+						Match: types.FederatesWithMatch_MATCH_ANY,
+					},
+				},
+			},
+		},
+		{
+			name:            "filter by federates with match any (no superset)",
+			expectedEntries: []*types.Entry{expectedSecondChild},
+			request: &entryv1.ListEntriesRequest{
+				Filter: &entryv1.ListEntriesRequest_Filter{
+					ByFederatesWith: &types.FederatesWithMatch{
+						TrustDomains: []string{
+							secondFederatedTd.IDString(),
+						},
+						Match: types.FederatesWithMatch_MATCH_ANY,
+					},
+				},
+			},
+		},
+		{
+			name:            "filter by federates with match any (with repeated tds)",
+			expectedEntries: []*types.Entry{expectedChild, expectedSecondChild},
+			request: &entryv1.ListEntriesRequest{
+				Filter: &entryv1.ListEntriesRequest_Filter{
+					ByFederatesWith: &types.FederatesWithMatch{
+						TrustDomains: []string{
+							// Both formats should work
+							federatedTd.IDString(),
+							secondFederatedTd.IDString(),
+							secondFederatedTd.String(), // repeated td
+						},
+						Match: types.FederatesWithMatch_MATCH_ANY,
+					},
+				},
+			},
+		},
+		{
+			name:            "filter by federates with match any (not federated)",
+			expectedEntries: []*types.Entry{},
+			request: &entryv1.ListEntriesRequest{
+				Filter: &entryv1.ListEntriesRequest_Filter{
+					ByFederatesWith: &types.FederatesWithMatch{
+						TrustDomains: []string{
+							notFederatedTd.String(),
+						},
+						Match: types.FederatesWithMatch_MATCH_ANY,
+					},
+				},
+			},
+		},
+		{
+			name:            "filter by federates with superset match",
+			expectedEntries: []*types.Entry{expectedSecondChild},
+			request: &entryv1.ListEntriesRequest{
+				Filter: &entryv1.ListEntriesRequest_Filter{
+					ByFederatesWith: &types.FederatesWithMatch{
+						TrustDomains: []string{
+							// Both formats should work
+							federatedTd.IDString(),
+							secondFederatedTd.String(),
+						},
+						Match: types.FederatesWithMatch_MATCH_SUPERSET,
+					},
+				},
+			},
+		},
+		{
+			name:            "filter by federates with subset match (superset)",
+			expectedEntries: []*types.Entry{expectedChild, expectedSecondChild},
+			request: &entryv1.ListEntriesRequest{
+				Filter: &entryv1.ListEntriesRequest_Filter{
+					ByFederatesWith: &types.FederatesWithMatch{
+						TrustDomains: []string{
+							federatedTd.IDString(),
+						},
+						Match: types.FederatesWithMatch_MATCH_SUPERSET,
+					},
+				},
+			},
+		},
+		{
+			name:            "filter by federates with subset match (with repeated tds)",
+			expectedEntries: []*types.Entry{expectedSecondChild},
+			request: &entryv1.ListEntriesRequest{
+				Filter: &entryv1.ListEntriesRequest_Filter{
+					ByFederatesWith: &types.FederatesWithMatch{
+						TrustDomains: []string{
+							// Both formats should work
+							federatedTd.IDString(),
+							secondFederatedTd.IDString(),
+							secondFederatedTd.String(), // repeated td
+						},
+						Match: types.FederatesWithMatch_MATCH_SUPERSET,
+					},
+				},
+			},
+		},
+		{
+			name:            "filter by federates with subset match (no matchs)",
+			expectedEntries: []*types.Entry{},
+			request: &entryv1.ListEntriesRequest{
+				Filter: &entryv1.ListEntriesRequest_Filter{
+					ByFederatesWith: &types.FederatesWithMatch{
+						TrustDomains: []string{
+							// Both formats should work
+							notFederatedTd.IDString(),
+						},
+						Match: types.FederatesWithMatch_MATCH_SUPERSET,
 					},
 				},
 			},

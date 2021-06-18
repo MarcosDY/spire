@@ -2,6 +2,8 @@ module github.com/spiffe/spire
 
 go 1.16
 
+replace github.com/spiffe/spire-api-sdk => ../spire-api-sdk/
+
 require (
 	cloud.google.com/go v0.80.0
 	cloud.google.com/go/storage v1.10.0

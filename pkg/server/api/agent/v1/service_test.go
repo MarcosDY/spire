@@ -390,6 +390,158 @@ func TestListAgents(t *testing.T) {
 			},
 		},
 		{
+			name: "by selectors - match any",
+			req: &agentv1.ListAgentsRequest{
+				OutputMask: &types.AgentMask{},
+				Filter: &agentv1.ListAgentsRequest_Filter{
+					BySelectorMatch: &types.SelectorMatch{
+						Match: types.SelectorMatch_MATCH_ANY,
+						Selectors: []*types.Selector{
+							{Type: "a", Value: "1"},
+							{Type: "b", Value: "2"},
+						},
+					},
+				},
+			},
+			expectResp: &agentv1.ListAgentsResponse{
+				Agents: []*types.Agent{
+					{Id: api.ProtoFromID(node1ID)},
+					{Id: api.ProtoFromID(node2ID)},
+				},
+			},
+		},
+		{
+			name: "by selectors - match any (no results)",
+			req: &agentv1.ListAgentsRequest{
+				OutputMask: &types.AgentMask{},
+				Filter: &agentv1.ListAgentsRequest_Filter{
+					BySelectorMatch: &types.SelectorMatch{
+						Match: types.SelectorMatch_MATCH_ANY,
+						Selectors: []*types.Selector{
+							{Type: "d", Value: "2"},
+						},
+					},
+				},
+			},
+			expectResp: &agentv1.ListAgentsResponse{
+				Agents: []*types.Agent{},
+			},
+		},
+		{
+			name: "by selectors - match exact",
+			req: &agentv1.ListAgentsRequest{
+				OutputMask: &types.AgentMask{},
+				Filter: &agentv1.ListAgentsRequest_Filter{
+					BySelectorMatch: &types.SelectorMatch{
+						Match: types.SelectorMatch_MATCH_EXACT,
+						Selectors: []*types.Selector{
+							{Type: "a", Value: "1"},
+							{Type: "b", Value: "2"},
+						},
+					},
+				},
+			},
+			expectResp: &agentv1.ListAgentsResponse{
+				Agents: []*types.Agent{
+					{Id: api.ProtoFromID(node1ID)},
+				},
+			},
+		},
+		{
+			name: "by selectors - match exact (no results)",
+			req: &agentv1.ListAgentsRequest{
+				OutputMask: &types.AgentMask{},
+				Filter: &agentv1.ListAgentsRequest_Filter{
+					BySelectorMatch: &types.SelectorMatch{
+						Match: types.SelectorMatch_MATCH_EXACT,
+						Selectors: []*types.Selector{
+							{Type: "b", Value: "2"},
+							{Type: "c", Value: "3"},
+						},
+					},
+				},
+			},
+			expectResp: &agentv1.ListAgentsResponse{
+				Agents: []*types.Agent{},
+			},
+		},
+		{
+			name: "by selectors - match subset",
+			req: &agentv1.ListAgentsRequest{
+				OutputMask: &types.AgentMask{},
+				Filter: &agentv1.ListAgentsRequest_Filter{
+					BySelectorMatch: &types.SelectorMatch{
+						Match: types.SelectorMatch_MATCH_SUBSET,
+						Selectors: []*types.Selector{
+							{Type: "a", Value: "1"},
+							{Type: "c", Value: "3"},
+						},
+					},
+				},
+			},
+			expectResp: &agentv1.ListAgentsResponse{
+				Agents: []*types.Agent{
+					{Id: api.ProtoFromID(node2ID)},
+				},
+			},
+		},
+		{
+			name: "by selectors - match subset (no results)",
+			req: &agentv1.ListAgentsRequest{
+				OutputMask: &types.AgentMask{},
+				Filter: &agentv1.ListAgentsRequest_Filter{
+					BySelectorMatch: &types.SelectorMatch{
+						Match: types.SelectorMatch_MATCH_SUBSET,
+						Selectors: []*types.Selector{
+							{Type: "b", Value: "2"},
+							{Type: "c", Value: "3"},
+						},
+					},
+				},
+			},
+			expectResp: &agentv1.ListAgentsResponse{
+				Agents: []*types.Agent{},
+			},
+		},
+		{
+			name: "by selectors - match superset",
+			req: &agentv1.ListAgentsRequest{
+				OutputMask: &types.AgentMask{},
+				Filter: &agentv1.ListAgentsRequest_Filter{
+					BySelectorMatch: &types.SelectorMatch{
+						Match: types.SelectorMatch_MATCH_SUPERSET,
+						Selectors: []*types.Selector{
+							{Type: "a", Value: "1"},
+						},
+					},
+				},
+			},
+			expectResp: &agentv1.ListAgentsResponse{
+				Agents: []*types.Agent{
+					{Id: api.ProtoFromID(node1ID)},
+					{Id: api.ProtoFromID(node2ID)},
+				},
+			},
+		},
+		{
+			name: "by selectors - match superset (no results)",
+			req: &agentv1.ListAgentsRequest{
+				OutputMask: &types.AgentMask{},
+				Filter: &agentv1.ListAgentsRequest_Filter{
+					BySelectorMatch: &types.SelectorMatch{
+						Match: types.SelectorMatch_MATCH_SUPERSET,
+						Selectors: []*types.Selector{
+							{Type: "b", Value: "2"},
+							{Type: "c", Value: "3"},
+						},
+					},
+				},
+			},
+			expectResp: &agentv1.ListAgentsResponse{
+				Agents: []*types.Agent{},
+			},
+		},
+		{
 			name: "with pagination",
 			req: &agentv1.ListAgentsRequest{
 				OutputMask: &types.AgentMask{},

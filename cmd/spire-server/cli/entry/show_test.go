@@ -23,6 +23,8 @@ func TestShowHelp(t *testing.T) {
     	The Entry ID of the records to show
   -federatesWith value
     	SPIFFE ID of a trust domain an entry is federate with. Can be used more than once
+  -matchOn string
+    	The match mode used when filtering by selector and federates with. Options: exact, any, superset and subset (default "superset")
   -parentID string
     	The Parent ID of the records to show
   -registrationUDSPath string
@@ -53,6 +55,10 @@ func TestShow(t *testing.T) {
 	}
 	fakeRespFatherDaughter := &entryv1.ListEntriesResponse{
 		Entries: getEntries(2)[1:],
+	}
+
+	fakeRespMotherDaughter := &entryv1.ListEntriesResponse{
+		Entries: getEntries(3)[2:],
 	}
 
 	for _, tt := range []struct {
@@ -140,8 +146,27 @@ func TestShow(t *testing.T) {
 			expErr: "Error: error parsing SPIFFE ID \"invalid-id\": spiffeid: invalid scheme\n",
 		},
 		{
-			name: "List by selectors",
+			name: "List by selectors: default matcher",
 			args: []string{"-selector", "foo:bar", "-selector", "bar:baz"},
+			expListReq: &entryv1.ListEntriesRequest{
+				Filter: &entryv1.ListEntriesRequest_Filter{
+					BySelectors: &types.SelectorMatch{
+						Selectors: []*types.Selector{
+							{Type: "foo", Value: "bar"},
+							{Type: "bar", Value: "baz"},
+						},
+						Match: types.SelectorMatch_MATCH_SUPERSET,
+					},
+				},
+			},
+			fakeListResp: fakeRespFatherDaughter,
+			expOut: fmt.Sprintf("Found 1 entry\n%s",
+				getPrintedEntry(1),
+			),
+		},
+		{
+			name: "List by selectors: exact matcher",
+			args: []string{"-selector", "foo:bar", "-selector", "bar:baz", "-matchOn", "exact"},
 			expListReq: &entryv1.ListEntriesRequest{
 				Filter: &entryv1.ListEntriesRequest_Filter{
 					BySelectors: &types.SelectorMatch{
@@ -157,6 +182,68 @@ func TestShow(t *testing.T) {
 			expOut: fmt.Sprintf("Found 1 entry\n%s",
 				getPrintedEntry(1),
 			),
+		},
+		{
+			name: "List by selectors: superset matcher",
+			args: []string{"-selector", "foo:bar", "-selector", "bar:baz", "-matchOn", "superset"},
+			expListReq: &entryv1.ListEntriesRequest{
+				Filter: &entryv1.ListEntriesRequest_Filter{
+					BySelectors: &types.SelectorMatch{
+						Selectors: []*types.Selector{
+							{Type: "foo", Value: "bar"},
+							{Type: "bar", Value: "baz"},
+						},
+						Match: types.SelectorMatch_MATCH_SUPERSET,
+					},
+				},
+			},
+			fakeListResp: fakeRespFatherDaughter,
+			expOut: fmt.Sprintf("Found 1 entry\n%s",
+				getPrintedEntry(1),
+			),
+		},
+		{
+			name: "List by selectors: subset matcher",
+			args: []string{"-selector", "foo:bar", "-selector", "bar:baz", "-matchOn", "subset"},
+			expListReq: &entryv1.ListEntriesRequest{
+				Filter: &entryv1.ListEntriesRequest_Filter{
+					BySelectors: &types.SelectorMatch{
+						Selectors: []*types.Selector{
+							{Type: "foo", Value: "bar"},
+							{Type: "bar", Value: "baz"},
+						},
+						Match: types.SelectorMatch_MATCH_SUBSET,
+					},
+				},
+			},
+			fakeListResp: fakeRespFatherDaughter,
+			expOut: fmt.Sprintf("Found 1 entry\n%s",
+				getPrintedEntry(1),
+			),
+		},
+		{
+			name: "List by selectors: Any matcher",
+			args: []string{"-selector", "foo:bar", "-selector", "bar:baz", "-matchOn", "any"},
+			expListReq: &entryv1.ListEntriesRequest{
+				Filter: &entryv1.ListEntriesRequest_Filter{
+					BySelectors: &types.SelectorMatch{
+						Selectors: []*types.Selector{
+							{Type: "foo", Value: "bar"},
+							{Type: "bar", Value: "baz"},
+						},
+						Match: types.SelectorMatch_MATCH_ANY,
+					},
+				},
+			},
+			fakeListResp: fakeRespFatherDaughter,
+			expOut: fmt.Sprintf("Found 1 entry\n%s",
+				getPrintedEntry(1),
+			),
+		},
+		{
+			name:   "List by selectors: Invalid matcher",
+			args:   []string{"-selector", "foo:bar", "-selector", "bar:baz", "-matchOn", "NO-MATCHER"},
+			expErr: "Error: unsupported match behavior\n",
 		},
 		{
 			name:   "List by selector using invalid selector",
@@ -175,16 +262,89 @@ func TestShow(t *testing.T) {
 			expErr:    "Error: error fetching entries: rpc error: code = Internal desc = internal server error\n",
 		},
 		{
-			name: "List by Federates With",
+			name: "List by Federates With: default matcher",
 			args: []string{"-federatesWith", "spiffe://domain.test"},
 			expListReq: &entryv1.ListEntriesRequest{
-				// Filter is empty because federatesWith filtering is done on the client side
-				Filter: &entryv1.ListEntriesRequest_Filter{},
+				Filter: &entryv1.ListEntriesRequest_Filter{
+					ByFederatesWith: &types.FederatesWithMatch{
+						TrustDomains: []string{"spiffe://domain.test"},
+						Match:        types.FederatesWithMatch_MATCH_SUPERSET,
+					},
+				},
 			},
-			fakeListResp: fakeRespAll,
+			fakeListResp: fakeRespMotherDaughter,
 			expOut: fmt.Sprintf("Found 1 entry\n%s",
 				getPrintedEntry(2),
 			),
+		},
+		{
+			name: "List by Federates With: exact matcher",
+			args: []string{"-federatesWith", "spiffe://domain.test", "-matchOn", "exact"},
+			expListReq: &entryv1.ListEntriesRequest{
+				Filter: &entryv1.ListEntriesRequest_Filter{
+					ByFederatesWith: &types.FederatesWithMatch{
+						TrustDomains: []string{"spiffe://domain.test"},
+						Match:        types.FederatesWithMatch_MATCH_EXACT,
+					},
+				},
+			},
+			fakeListResp: fakeRespMotherDaughter,
+			expOut: fmt.Sprintf("Found 1 entry\n%s",
+				getPrintedEntry(2),
+			),
+		},
+		{
+			name: "List by Federates With: Any matcher",
+			args: []string{"-federatesWith", "spiffe://domain.test", "-matchOn", "any"},
+			expListReq: &entryv1.ListEntriesRequest{
+				Filter: &entryv1.ListEntriesRequest_Filter{
+					ByFederatesWith: &types.FederatesWithMatch{
+						TrustDomains: []string{"spiffe://domain.test"},
+						Match:        types.FederatesWithMatch_MATCH_ANY,
+					},
+				},
+			},
+			fakeListResp: fakeRespMotherDaughter,
+			expOut: fmt.Sprintf("Found 1 entry\n%s",
+				getPrintedEntry(2),
+			),
+		},
+		{
+			name: "List by Federates With: superset matcher",
+			args: []string{"-federatesWith", "spiffe://domain.test", "-matchOn", "superset"},
+			expListReq: &entryv1.ListEntriesRequest{
+				Filter: &entryv1.ListEntriesRequest_Filter{
+					ByFederatesWith: &types.FederatesWithMatch{
+						TrustDomains: []string{"spiffe://domain.test"},
+						Match:        types.FederatesWithMatch_MATCH_SUPERSET,
+					},
+				},
+			},
+			fakeListResp: fakeRespMotherDaughter,
+			expOut: fmt.Sprintf("Found 1 entry\n%s",
+				getPrintedEntry(2),
+			),
+		},
+		{
+			name: "List by Federates With: subset matcher",
+			args: []string{"-federatesWith", "spiffe://domain.test", "-matchOn", "subset"},
+			expListReq: &entryv1.ListEntriesRequest{
+				Filter: &entryv1.ListEntriesRequest_Filter{
+					ByFederatesWith: &types.FederatesWithMatch{
+						TrustDomains: []string{"spiffe://domain.test"},
+						Match:        types.FederatesWithMatch_MATCH_SUBSET,
+					},
+				},
+			},
+			fakeListResp: fakeRespMotherDaughter,
+			expOut: fmt.Sprintf("Found 1 entry\n%s",
+				getPrintedEntry(2),
+			),
+		},
+		{
+			name:   "List by Federates With: Invalid matcher",
+			args:   []string{"-federatesWith", "spiffe://domain.test", "-matchOn", "NO-MATCHER"},
+			expErr: "Error: unsupported match behavior\n",
 		},
 	} {
 		tt := tt
