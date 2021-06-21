@@ -23,7 +23,8 @@ var (
 	testAgents              = []*types.Agent{{Id: &types.SPIFFEID{TrustDomain: "example.org", Path: "/spire/agent/agent1"}}}
 	testAgentsWithSelectors = []*types.Agent{
 		{
-			Id: &types.SPIFFEID{TrustDomain: "example.org", Path: "/spire/agent/agent2"},
+			Id:              &types.SPIFFEID{TrustDomain: "example.org", Path: "/spire/agent/agent2"},
+			AttestationType: "someType",
 			Selectors: []*types.Selector{
 				{Type: "k8s_psat", Value: "agent_ns:spire"},
 				{Type: "k8s_psat", Value: "agent_sa:spire-agent"},
@@ -177,8 +178,14 @@ func TestListHelp(t *testing.T) {
 
 	test.client.Help()
 	require.Equal(t, `Usage of agent list:
+  -byAttestationType string
+    	The Attestation type of the Agents to be listed
+  -matchSelectorsOn string
+    	The match mode used when filtering by selectors. Options: exact, any, superset and subset (default "superset")
   -registrationUDSPath string
     	Path to the SPIRE Server API socket (deprecated; use -socketPath)
+  -selector value
+    	A colon-delimited type:value selector. Can be used more than once
   -socketPath string
     	Path to the SPIRE Server API socket (default "/tmp/spire-server/private/api.sock")
 `, test.stderr.String())
@@ -191,6 +198,7 @@ func TestList(t *testing.T) {
 		expectedReturnCode int
 		expectedStdout     string
 		expectedStderr     string
+		expectReq          *agentv1.ListAgentsRequest
 		existentAgents     []*types.Agent
 		serverErr          error
 	}{
@@ -199,16 +207,134 @@ func TestList(t *testing.T) {
 			expectedReturnCode: 0,
 			existentAgents:     testAgents,
 			expectedStdout:     "Found 1 attested agent:\n\nSPIFFE ID         : spiffe://example.org/spire/agent/agent1",
+			expectReq: &agentv1.ListAgentsRequest{
+				Filter: &agentv1.ListAgentsRequest_Filter{},
+			},
 		},
 		{
 			name:               "no agents",
 			expectedReturnCode: 0,
+			expectReq: &agentv1.ListAgentsRequest{
+				Filter: &agentv1.ListAgentsRequest_Filter{},
+			},
 		},
 		{
 			name:               "server error",
 			expectedReturnCode: 1,
 			serverErr:          status.Error(codes.Internal, "internal server error"),
 			expectedStderr:     "Error: rpc error: code = Internal desc = internal server error\n",
+			expectReq: &agentv1.ListAgentsRequest{
+				Filter: &agentv1.ListAgentsRequest_Filter{},
+			},
+		},
+		{
+			name: "by attestation type",
+			args: []string{"-byAttestationType", "someType"},
+			expectReq: &agentv1.ListAgentsRequest{
+				Filter: &agentv1.ListAgentsRequest_Filter{
+					ByAttestationType: "someType",
+				},
+			},
+			existentAgents: testAgents,
+			expectedStdout: "Found 1 attested agent:\n\nSPIFFE ID         : spiffe://example.org/spire/agent/agent1",
+		},
+
+		{
+			name: "by selector: default matcher",
+			args: []string{"-selector", "foo:bar", "-selector", "bar:baz"},
+			expectReq: &agentv1.ListAgentsRequest{
+				Filter: &agentv1.ListAgentsRequest_Filter{
+					BySelectorMatch: &types.SelectorMatch{
+						Selectors: []*types.Selector{
+							{Type: "foo", Value: "bar"},
+							{Type: "bar", Value: "baz"},
+						},
+						Match: types.SelectorMatch_MATCH_SUPERSET,
+					},
+				},
+			},
+			existentAgents: testAgents,
+			expectedStdout: "Found 1 attested agent:\n\nSPIFFE ID         : spiffe://example.org/spire/agent/agent1",
+		},
+		{
+			name: "by selector: any matcher",
+			args: []string{"-selector", "foo:bar", "-selector", "bar:baz", "-matchSelectorsOn", "any"},
+			expectReq: &agentv1.ListAgentsRequest{
+				Filter: &agentv1.ListAgentsRequest_Filter{
+					BySelectorMatch: &types.SelectorMatch{
+						Selectors: []*types.Selector{
+							{Type: "foo", Value: "bar"},
+							{Type: "bar", Value: "baz"},
+						},
+						Match: types.SelectorMatch_MATCH_ANY,
+					},
+				},
+			},
+			existentAgents: testAgents,
+			expectedStdout: "Found 1 attested agent:\n\nSPIFFE ID         : spiffe://example.org/spire/agent/agent1",
+		},
+		{
+			name: "by selector: exact matcher",
+			args: []string{"-selector", "foo:bar", "-selector", "bar:baz", "-matchSelectorsOn", "exact"},
+			expectReq: &agentv1.ListAgentsRequest{
+				Filter: &agentv1.ListAgentsRequest_Filter{
+					BySelectorMatch: &types.SelectorMatch{
+						Selectors: []*types.Selector{
+							{Type: "foo", Value: "bar"},
+							{Type: "bar", Value: "baz"},
+						},
+						Match: types.SelectorMatch_MATCH_EXACT,
+					},
+				},
+			},
+			existentAgents: testAgents,
+			expectedStdout: "Found 1 attested agent:\n\nSPIFFE ID         : spiffe://example.org/spire/agent/agent1",
+		},
+		{
+			name: "by selector: superset matcher",
+			args: []string{"-selector", "foo:bar", "-selector", "bar:baz", "-matchSelectorsOn", "superset"},
+			expectReq: &agentv1.ListAgentsRequest{
+				Filter: &agentv1.ListAgentsRequest_Filter{
+					BySelectorMatch: &types.SelectorMatch{
+						Selectors: []*types.Selector{
+							{Type: "foo", Value: "bar"},
+							{Type: "bar", Value: "baz"},
+						},
+						Match: types.SelectorMatch_MATCH_SUPERSET,
+					},
+				},
+			},
+			existentAgents: testAgents,
+			expectedStdout: "Found 1 attested agent:\n\nSPIFFE ID         : spiffe://example.org/spire/agent/agent1",
+		},
+		{
+			name: "by selector: subset matcher",
+			args: []string{"-selector", "foo:bar", "-selector", "bar:baz", "-matchSelectorsOn", "subset"},
+			expectReq: &agentv1.ListAgentsRequest{
+				Filter: &agentv1.ListAgentsRequest_Filter{
+					BySelectorMatch: &types.SelectorMatch{
+						Selectors: []*types.Selector{
+							{Type: "foo", Value: "bar"},
+							{Type: "bar", Value: "baz"},
+						},
+						Match: types.SelectorMatch_MATCH_SUBSET,
+					},
+				},
+			},
+			existentAgents: testAgents,
+			expectedStdout: "Found 1 attested agent:\n\nSPIFFE ID         : spiffe://example.org/spire/agent/agent1",
+		},
+		{
+			name:               "List by selectors: Invalid matcher",
+			args:               []string{"-selector", "foo:bar", "-selector", "bar:baz", "-matchSelectorsOn", "NO-MATCHER"},
+			expectedReturnCode: 1,
+			expectedStderr:     "Error: unsupported match behavior\n",
+		},
+		{
+			name:               "List by selector using invalid selector",
+			args:               []string{"-selector", "invalid-selector"},
+			expectedReturnCode: 1,
+			expectedStderr:     "Error: error parsing selectors: selector \"invalid-selector\" must be formatted as type:value\n",
 		},
 		{
 			name:               "wrong UDS path",
@@ -223,6 +349,8 @@ func TestList(t *testing.T) {
 			test.server.agents = tt.existentAgents
 			test.server.err = tt.serverErr
 			returnCode := test.client.Run(append(test.args, tt.args...))
+
+			spiretest.RequireProtoEqual(t, tt.expectReq, test.server.gotListAgentRequest)
 			require.Contains(t, test.stdout.String(), tt.expectedStdout)
 			require.Equal(t, tt.expectedStderr, test.stderr.String())
 			require.Equal(t, tt.expectedReturnCode, returnCode)
@@ -338,8 +466,9 @@ func setupTest(t *testing.T, newClient func(*common_cli.Env) cli.Command) *agent
 type fakeAgentServer struct {
 	agentv1.UnimplementedAgentServer
 
-	agents []*types.Agent
-	err    error
+	agents              []*types.Agent
+	gotListAgentRequest *agentv1.ListAgentsRequest
+	err                 error
 }
 
 func (s *fakeAgentServer) DeleteAgent(ctx context.Context, req *agentv1.DeleteAgentRequest) (*emptypb.Empty, error) {
@@ -353,6 +482,7 @@ func (s *fakeAgentServer) CountAgents(ctx context.Context, req *agentv1.CountAge
 }
 
 func (s *fakeAgentServer) ListAgents(ctx context.Context, req *agentv1.ListAgentsRequest) (*agentv1.ListAgentsResponse, error) {
+	s.gotListAgentRequest = req
 	return &agentv1.ListAgentsResponse{
 		Agents: s.agents,
 	}, s.err

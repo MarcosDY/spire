@@ -23,8 +23,10 @@ func TestShowHelp(t *testing.T) {
     	The Entry ID of the records to show
   -federatesWith value
     	SPIFFE ID of a trust domain an entry is federate with. Can be used more than once
-  -matchOn string
-    	The match mode used when filtering by selector and federates with. Options: exact, any, superset and subset (default "superset")
+  -matchFederatesWithOn string
+    	The match mode used when filtering by federates with. Options: exact, any, superset and subset (default "any")
+  -matchSelectorsOn string
+    	The match mode used when filtering by selectors. Options: exact, any, superset and subset (default "superset")
   -parentID string
     	The Parent ID of the records to show
   -registrationUDSPath string
@@ -166,7 +168,7 @@ func TestShow(t *testing.T) {
 		},
 		{
 			name: "List by selectors: exact matcher",
-			args: []string{"-selector", "foo:bar", "-selector", "bar:baz", "-matchOn", "exact"},
+			args: []string{"-selector", "foo:bar", "-selector", "bar:baz", "-matchSelectorsOn", "exact"},
 			expListReq: &entryv1.ListEntriesRequest{
 				Filter: &entryv1.ListEntriesRequest_Filter{
 					BySelectors: &types.SelectorMatch{
@@ -185,7 +187,7 @@ func TestShow(t *testing.T) {
 		},
 		{
 			name: "List by selectors: superset matcher",
-			args: []string{"-selector", "foo:bar", "-selector", "bar:baz", "-matchOn", "superset"},
+			args: []string{"-selector", "foo:bar", "-selector", "bar:baz", "-matchSelectorsOn", "superset"},
 			expListReq: &entryv1.ListEntriesRequest{
 				Filter: &entryv1.ListEntriesRequest_Filter{
 					BySelectors: &types.SelectorMatch{
@@ -204,7 +206,7 @@ func TestShow(t *testing.T) {
 		},
 		{
 			name: "List by selectors: subset matcher",
-			args: []string{"-selector", "foo:bar", "-selector", "bar:baz", "-matchOn", "subset"},
+			args: []string{"-selector", "foo:bar", "-selector", "bar:baz", "-matchSelectorsOn", "subset"},
 			expListReq: &entryv1.ListEntriesRequest{
 				Filter: &entryv1.ListEntriesRequest_Filter{
 					BySelectors: &types.SelectorMatch{
@@ -223,7 +225,7 @@ func TestShow(t *testing.T) {
 		},
 		{
 			name: "List by selectors: Any matcher",
-			args: []string{"-selector", "foo:bar", "-selector", "bar:baz", "-matchOn", "any"},
+			args: []string{"-selector", "foo:bar", "-selector", "bar:baz", "-matchSelectorsOn", "any"},
 			expListReq: &entryv1.ListEntriesRequest{
 				Filter: &entryv1.ListEntriesRequest_Filter{
 					BySelectors: &types.SelectorMatch{
@@ -242,7 +244,7 @@ func TestShow(t *testing.T) {
 		},
 		{
 			name:   "List by selectors: Invalid matcher",
-			args:   []string{"-selector", "foo:bar", "-selector", "bar:baz", "-matchOn", "NO-MATCHER"},
+			args:   []string{"-selector", "foo:bar", "-selector", "bar:baz", "-matchSelectorsOn", "NO-MATCHER"},
 			expErr: "Error: unsupported match behavior\n",
 		},
 		{
@@ -268,7 +270,7 @@ func TestShow(t *testing.T) {
 				Filter: &entryv1.ListEntriesRequest_Filter{
 					ByFederatesWith: &types.FederatesWithMatch{
 						TrustDomains: []string{"spiffe://domain.test"},
-						Match:        types.FederatesWithMatch_MATCH_SUPERSET,
+						Match:        types.FederatesWithMatch_MATCH_ANY,
 					},
 				},
 			},
@@ -279,7 +281,7 @@ func TestShow(t *testing.T) {
 		},
 		{
 			name: "List by Federates With: exact matcher",
-			args: []string{"-federatesWith", "spiffe://domain.test", "-matchOn", "exact"},
+			args: []string{"-federatesWith", "spiffe://domain.test", "-matchFederatesWithOn", "exact"},
 			expListReq: &entryv1.ListEntriesRequest{
 				Filter: &entryv1.ListEntriesRequest_Filter{
 					ByFederatesWith: &types.FederatesWithMatch{
@@ -295,7 +297,7 @@ func TestShow(t *testing.T) {
 		},
 		{
 			name: "List by Federates With: Any matcher",
-			args: []string{"-federatesWith", "spiffe://domain.test", "-matchOn", "any"},
+			args: []string{"-federatesWith", "spiffe://domain.test", "-matchFederatesWithOn", "any"},
 			expListReq: &entryv1.ListEntriesRequest{
 				Filter: &entryv1.ListEntriesRequest_Filter{
 					ByFederatesWith: &types.FederatesWithMatch{
@@ -311,7 +313,7 @@ func TestShow(t *testing.T) {
 		},
 		{
 			name: "List by Federates With: superset matcher",
-			args: []string{"-federatesWith", "spiffe://domain.test", "-matchOn", "superset"},
+			args: []string{"-federatesWith", "spiffe://domain.test", "-matchFederatesWithOn", "superset"},
 			expListReq: &entryv1.ListEntriesRequest{
 				Filter: &entryv1.ListEntriesRequest_Filter{
 					ByFederatesWith: &types.FederatesWithMatch{
@@ -327,7 +329,7 @@ func TestShow(t *testing.T) {
 		},
 		{
 			name: "List by Federates With: subset matcher",
-			args: []string{"-federatesWith", "spiffe://domain.test", "-matchOn", "subset"},
+			args: []string{"-federatesWith", "spiffe://domain.test", "-matchFederatesWithOn", "subset"},
 			expListReq: &entryv1.ListEntriesRequest{
 				Filter: &entryv1.ListEntriesRequest_Filter{
 					ByFederatesWith: &types.FederatesWithMatch{
@@ -343,7 +345,7 @@ func TestShow(t *testing.T) {
 		},
 		{
 			name:   "List by Federates With: Invalid matcher",
-			args:   []string{"-federatesWith", "spiffe://domain.test", "-matchOn", "NO-MATCHER"},
+			args:   []string{"-federatesWith", "spiffe://domain.test", "-matchFederatesWithOn", "NO-MATCHER"},
 			expErr: "Error: unsupported match behavior\n",
 		},
 	} {

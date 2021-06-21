@@ -44,7 +44,11 @@ type showCommand struct {
 	// Whether or not the entry is for a downstream SPIRE server
 	downstream bool
 
-	matchOn string
+	// Match used when filtering by federates with
+	matchFederatesWithOn string
+
+	// Match used when filtering by selectors
+	matchSelectorsOn string
 
 	matchSelectorBehavior types.SelectorMatch_MatchBehavior
 
@@ -63,7 +67,8 @@ func (c *showCommand) AppendFlags(f *flag.FlagSet) {
 	f.StringVar(&c.entryID, "entryID", "", "The Entry ID of the records to show")
 	f.StringVar(&c.parentID, "parentID", "", "The Parent ID of the records to show")
 	f.StringVar(&c.spiffeID, "spiffeID", "", "The SPIFFE ID of the records to show")
-	f.StringVar(&c.matchOn, "matchOn", "superset", "The match mode used when filtering by selector and federates with. Options: exact, any, superset and subset")
+	f.StringVar(&c.matchFederatesWithOn, "matchFederatesWithOn", "any", "The match mode used when filtering by federates with. Options: exact, any, superset and subset")
+	f.StringVar(&c.matchSelectorsOn, "matchSelectorsOn", "superset", "The match mode used when filtering by selectors. Options: exact, any, superset and subset")
 	f.BoolVar(&c.downstream, "downstream", false, "A boolean value that, when set, indicates that the entry describes a downstream SPIRE server")
 	f.Var(&c.selectors, "selector", "A colon-delimited type:value selector. Can be used more than once")
 	f.Var(&c.federatesWith, "federatesWith", "SPIFFE ID of a trust domain an entry is federate with. Can be used more than once")
@@ -96,7 +101,7 @@ func (c *showCommand) validate() error {
 	}
 
 	if len(c.selectors) > 0 {
-		matchBehavior, err := parseToSelectorMatch(c.matchOn)
+		matchBehavior, err := parseToSelectorMatch(c.matchSelectorsOn)
 		if err != nil {
 			return err
 		}
@@ -104,7 +109,7 @@ func (c *showCommand) validate() error {
 	}
 
 	if len(c.federatesWith) > 0 {
-		matchBehavior, err := parseToFederatesWithMatch(c.matchOn)
+		matchBehavior, err := parseToFederatesWithMatch(c.matchFederatesWithOn)
 		if err != nil {
 			return err
 		}
