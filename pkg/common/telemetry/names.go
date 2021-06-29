@@ -124,6 +124,9 @@ const (
 	// Address tags some network address
 	Address = "address"
 
+	// Admin tags admin access
+	Admin = "admin"
+
 	// Agent SPIFFE ID
 	AgentID = "agent_id"
 
@@ -169,6 +172,9 @@ const (
 	// Count tags some basic count; should be used with other tags and clear messaging to add clarity
 	Count = "count"
 
+	// Csr represents a presented Csr in hashed format
+	Csr = "csr"
+
 	// CsrSpiffeID represents the SPIFFE ID in a Certificate Signing Request.
 	CsrSpiffeID = "csr_spiffe_id"
 
@@ -184,6 +190,9 @@ const (
 	// DNS name is a name which is resolvable with DNS
 	DNSName = "dns_name"
 
+	// Downstream tags if entry is a downstream
+	Downstream = "downstream"
+
 	// ElapsedTime tags some duration of time.
 	ElapsedTime = "elapsed_time"
 
@@ -198,6 +207,9 @@ const (
 	// Expiration tags an expiration time for some entity
 	Expiration = "expiration"
 
+	// ExpiresAt tags registration entry expiration
+	ExpiresAt = "expires_at"
+
 	// ExpiryCheckDuration tags duration for an expiry check; should be used with other tags
 	// to add clarity
 	ExpiryCheckDuration = "expiry_check_duration"
@@ -210,6 +222,9 @@ const (
 
 	// FederatedRemoved labels some count of federated bundles that have been removed from an entity
 	FederatedRemoved = "fed_rem"
+
+	// FederatesWith tags a federates with list
+	FederatedWith = "federates_with"
 
 	// Generation represents an objection generation (i.e. version)
 	Generation = "generation"
@@ -256,6 +271,9 @@ const (
 
 	// Path declares some logic path, likely on the file system
 	Path = "path"
+
+	// Payload tags a Payload
+	Payload = "payload"
 
 	// Peer ID is the SPIFFE ID of a peer
 	PeerID = "peer_id"
@@ -308,6 +326,9 @@ const (
 
 	// RetryInterval tags some interval for retry logic
 	RetryInterval = "retry_interval"
+
+	// RevisionNumber tags a regitration entry revision number
+	RevisionNumber = "revision_number"
 
 	// Schema tags database schema version
 	Schema = "schema"
@@ -370,6 +391,9 @@ const (
 
 	// SVIDUpdated tags that for some entity the SVID was updated
 	SVIDUpdated = "svid_updated"
+
+	// Token tags a token for an agent attesation
+	Token = "token"
 
 	// TTL functionality related to a time-to-live field; should be used
 	// with other tags to add clarity

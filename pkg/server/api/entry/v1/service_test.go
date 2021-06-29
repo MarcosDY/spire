@@ -15,6 +15,7 @@ import (
 	"github.com/spiffe/spire/pkg/common/telemetry"
 	"github.com/spiffe/spire/pkg/server/api"
 	"github.com/spiffe/spire/pkg/server/api/entry/v1"
+	"github.com/spiffe/spire/pkg/server/api/middleware"
 	"github.com/spiffe/spire/pkg/server/api/rpccontext"
 	"github.com/spiffe/spire/pkg/server/datastore"
 	"github.com/spiffe/spire/proto/spire/common"
@@ -1499,15 +1500,25 @@ func setupServiceTest(t *testing.T, ds datastore.DataStore) *serviceTest {
 		ef:      ef,
 	}
 
-	contextFn := func(ctx context.Context) context.Context {
+	ppMiddleware := middleware.Preprocess(func(ctx context.Context, fullMethod string, req interface{}) (context.Context, error) {
 		ctx = rpccontext.WithLogger(ctx, log)
 		if test.withCallerID {
 			ctx = rpccontext.WithCallerID(ctx, agentID)
 		}
-		return ctx
-	}
+		return ctx, nil
+	})
 
-	conn, done := spiretest.NewAPIServer(t, registerFn, contextFn)
+	unaryInterceptor, streamInterceptor := middleware.Interceptors(middleware.Chain(
+		ppMiddleware,
+		// Add audit log with uds tracking disabled
+		middleware.WithAuditLog(false),
+	))
+	server := grpc.NewServer(
+		grpc.UnaryInterceptor(unaryInterceptor),
+		grpc.StreamInterceptor(streamInterceptor),
+	)
+
+	conn, done := spiretest.NewAPIServerWithMiddleware(t, registerFn, server)
 	test.done = done
 	test.client = entryv1.NewEntryClient(conn)
 
