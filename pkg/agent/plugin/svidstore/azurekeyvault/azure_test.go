@@ -5,18 +5,19 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"net/http"
 	"testing"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/profiles/latest/keyvault/mgmt/keyvault"
 	kv "github.com/Azure/azure-sdk-for-go/services/keyvault/v7.1/keyvault"
 	"github.com/Azure/go-autorest/autorest"
+	"github.com/Azure/go-autorest/autorest/azure"
 	"github.com/Azure/go-autorest/autorest/to"
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/spiffe/spire/pkg/agent/plugin/svidstore"
 	"github.com/spiffe/spire/pkg/common/catalog"
 	"github.com/spiffe/spire/pkg/common/pemutil"
-	svidstorev1 "github.com/spiffe/spire/proto/spire/plugin/agent/svidstore/v1"
 	"github.com/spiffe/spire/test/plugintest"
 	"github.com/spiffe/spire/test/spiretest"
 	"github.com/stretchr/testify/assert"
@@ -193,35 +194,61 @@ func TestPutX509SVID(t *testing.T) {
 	x509Key, err := pemutil.ParseECPrivateKey([]byte(x509KeyPem))
 	require.NoError(t, err)
 
-	keyByte, err := x509.MarshalPKCS8PrivateKey(x509Key)
-	require.NoError(t, err)
-
-	successReq := &svidstorev1.PutX509SVIDRequest{
-		Svid: &svidstorev1.X509SVID{
-			SpiffeID:   "spiffe://example.org/lambda",
-			CertChain:  [][]byte{x509Cert.Raw},
-			PrivateKey: keyByte,
-			Bundle:     [][]byte{x509Bundle.Raw},
-			ExpiresAt:  123456,
+	expiresAt := time.Now()
+	successReq := &svidstore.X509SVID{
+		SVID: &svidstore.SVID{
+			SPIFFEID:   spiffeid.RequireFromString("spiffe://example.org/lambda"),
+			CertChain:  []*x509.Certificate{x509Cert},
+			PrivateKey: x509Key,
+			Bundle:     []*x509.Certificate{x509Bundle},
+			ExpiresAt:  expiresAt,
 		},
-		// TODO: update secrets
 		Metadata: []string{"secretname:secret1"},
-		FederatedBundles: map[string][]byte{
-			"federated1": federatedBundle.Raw,
+		FederatedBundles: map[string][]*x509.Certificate{
+			"federated1": {federatedBundle},
 		},
 	}
 
 	for _, tt := range []struct {
-		name       string
-		req        *svidstorev1.PutX509SVIDRequest
-		expectCode codes.Code
-		expectMsg  string
+		name         string
+		req          *svidstore.X509SVID
+		pluginConfig *Config
+		expectCode   codes.Code
+		expectMsg    string
 
 		mgmtClientConfig   *fakeMgmtConfig
 		serviceClienConfig *fakeServiceConfig
 	}{
 		{
-			name: "success",
+			name: "Create vault and secret",
+			req: &svidstore.X509SVID{
+				SVID: successReq.SVID,
+				Metadata: []string{
+					"secretname:secret1",
+					"secretvault:vault1",
+					"secretgroup:group1",
+					"secrettenantid:tenant1",
+					"secretlocation:location1",
+				},
+				FederatedBundles: successReq.FederatedBundles,
+			},
+			pluginConfig: &Config{
+				Location:       "configLocation",
+				ResourceGroup:  "configGroup",
+				SubscriptionID: "subsID",
+				TenantID:       "configTenantId",
+			},
+			mgmtClientConfig: &fakeMgmtConfig{
+				expectResourceGroupName: "group1",
+				expectVaultName:         "vault1",
+				expectParameters: keyvault.VaultCreateOrUpdateParameters{
+					Location: to.StringPtr("location1"),
+					Tags: map[string]*string{
+						"spire-svid": to.StringPtr("example.org"),
+					},
+					Properties: &keyvault.VaultProperties{},
+				},
+			},
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -242,28 +269,39 @@ func TestPutX509SVID(t *testing.T) {
 			p.hooks.createMgmtVaultClient = mgmtVaultClient.newClient
 			p.hooks.createServiceVaultClient = serviceClient.newClient
 
+			pluginConfig := tt.pluginConfig
+			if pluginConfig == nil {
+				pluginConfig = &Config{SubscriptionID: "subsID"}
+			}
+
 			var err error
 			options := []plugintest.Option{
 				plugintest.CaptureConfigureError(&err),
 				plugintest.CoreConfig(catalog.CoreConfig{
 					TrustDomain: spiffeid.RequireTrustDomainFromString("example.org"),
 				}),
-				plugintest.ConfigureJSON(&Config{SubscriptionID: "subID"}),
+				plugintest.ConfigureJSON(pluginConfig),
 			}
 			ss := new(svidstore.V1)
 			plugintest.Load(t, builtin(p), ss,
 				options...,
 			)
 
+			err = ss.PutX509SVID(ctx, tt.req)
+			spiretest.AssertGRPCStatus(t, err, tt.expectCode, tt.expectMsg)
+
+			// if tt.expectCode != codes.OK {
+			// return
+			// }
 		})
 	}
 }
 
 type fakeMgmtConfig struct {
-	noTag             bool
-	getErr            error
-	deleteErr         error
-	createOrUpdateErr error
+	noTag                    bool
+	getStatusCode            int
+	deleteStatusCode         int
+	createOrUpdateStatusCode int
 
 	expectResourceGroupName string
 	expectVaultName         string
@@ -281,52 +319,69 @@ func (f *fakeMgmtVaultClient) newClient(s string) (mgmtVaultClient, error) {
 }
 
 func (f *fakeMgmtVaultClient) Get(ctx context.Context, resourceGroupName string, vaultName string) (keyvault.Vault, error) {
-	if f.c.getErr != nil {
-		return keyvault.Vault{}, f.c.getErr
+	if f.c.getStatusCode != 0 {
+		return keyvault.Vault{
+			Response: createResponse(f.c.deleteStatusCode),
+		}, errors.New("oh no")
 	}
 
 	assert.Equal(f.t, f.c.expectResourceGroupName, resourceGroupName)
 	assert.Equal(f.t, f.c.expectVaultName, vaultName)
 
 	tags := map[string]string{}
-	if f.c.noTag {
-		tags["spire-svid"] = "true"
+	if !f.c.noTag {
+		tags["spire-svid"] = "example.org"
 	}
 
 	return keyvault.Vault{
-		ID:   to.StringPtr(fmt.Sprintf("id_%s", vaultName)),
-		Name: to.StringPtr(vaultName),
-		Tags: *to.StringMapPtr(tags),
+		Response: createResponse(http.StatusOK),
+		ID:       to.StringPtr(fmt.Sprintf("id_%s", vaultName)),
+		Name:     to.StringPtr(vaultName),
+		Tags:     *to.StringMapPtr(tags),
 	}, nil
 }
 
 func (f *fakeMgmtVaultClient) Delete(ctx context.Context, resourceGroupName string, vaultName string) (result autorest.Response, err error) {
-	if f.c.deleteErr != nil {
-		return autorest.Response{}, f.c.deleteErr
+	if f.c.deleteStatusCode != 0 {
+		return createResponse(f.c.deleteStatusCode), errors.New("oh no")
 	}
 
 	assert.Equal(f.t, f.c.expectResourceGroupName, resourceGroupName)
 	assert.Equal(f.t, f.c.expectVaultName, vaultName)
 
-	return autorest.Response{}, nil
+	return createResponse(http.StatusOK), nil
 }
 
 func (f *fakeMgmtVaultClient) CreateOrUpdate(ctx context.Context, resourceGroupName string, vaultName string, parameters keyvault.VaultCreateOrUpdateParameters) (keyvault.VaultsCreateOrUpdateFuture, error) {
-	if f.c.createOrUpdateErr != nil {
-		return keyvault.VaultsCreateOrUpdateFuture{}, f.c.createOrUpdateErr
+	if f.c.createOrUpdateStatusCode != 0 {
+		futureResponse, err := azure.NewFutureFromResponse(&http.Response{
+			StatusCode: f.c.createOrUpdateStatusCode,
+		})
+		assert.NoError(f.t, err)
+
+		return keyvault.VaultsCreateOrUpdateFuture{
+			FutureAPI: &futureResponse,
+		}, errors.New("oh no")
 	}
 
 	assert.Equal(f.t, f.c.expectResourceGroupName, resourceGroupName)
 	assert.Equal(f.t, f.c.expectVaultName, vaultName)
 	assert.Equal(f.t, f.c.expectParameters, parameters)
 
-	return keyvault.VaultsCreateOrUpdateFuture{}, nil
+	futureResponse, err := azure.NewFutureFromResponse(&http.Response{
+		StatusCode: http.StatusOK,
+	})
+	assert.NoError(f.t, err)
+
+	return keyvault.VaultsCreateOrUpdateFuture{
+		FutureAPI: &futureResponse,
+	}, nil
 }
 
 type fakeServiceConfig struct {
-	getSecretsErr   error
-	deleteSecretErr error
-	setSecretErr    error
+	getSecretsStatusCode   int
+	deleteSecretStatusCode int
+	setSecretStatusCode    int
 
 	secretItems []kv.SecretItem
 
@@ -345,38 +400,49 @@ func (f *fakeServiceClientVault) newClient() (serviceClientVault, error) {
 }
 
 func (f *fakeServiceClientVault) GetSecrets(ctx context.Context, vaultBaseURL string, maxresults *int32) (kv.SecretListResultPage, error) {
-	if f.c.getSecretsErr != nil {
-		return kv.SecretListResultPage{}, f.c.getSecretsErr
+	nextPage := func(context.Context, kv.SecretListResult) (kv.SecretListResult, error) {
+		return kv.SecretListResult{}, nil
+	}
+
+	if f.c.getSecretsStatusCode != 0 {
+		resultPage := kv.NewSecretListResultPage(kv.SecretListResult{
+			Response: createResponse(f.c.getSecretsStatusCode),
+			Value:    &f.c.secretItems,
+		}, nextPage)
+		return resultPage, errors.New("oh no")
 	}
 
 	assert.Equal(f.t, f.c.expectVaultBaseURL, vaultBaseURL)
 
-	nextPage := func(context.Context, kv.SecretListResult) (kv.SecretListResult, error) {
-		return kv.SecretListResult{}, nil
-	}
 	resultPage := kv.NewSecretListResultPage(kv.SecretListResult{
-		Value: &f.c.secretItems,
+		Response: createResponse(http.StatusOK),
+		Value:    &f.c.secretItems,
 	}, nextPage)
 
 	return resultPage, nil
 }
 
 func (f *fakeServiceClientVault) DeleteSecret(ctx context.Context, vaultBaseURL string, secretName string) (kv.DeletedSecretBundle, error) {
-	if f.c.deleteSecretErr != nil {
-		return kv.DeletedSecretBundle{}, f.c.deleteSecretErr
+	if f.c.deleteSecretStatusCode != 0 {
+		return kv.DeletedSecretBundle{
+			Response: createResponse(f.c.deleteSecretStatusCode),
+		}, errors.New("oh no")
 	}
 
 	assert.Equal(f.t, f.c.expectVaultBaseURL, vaultBaseURL)
 	assert.Equal(f.t, f.c.expectSecretName, secretName)
 
 	return kv.DeletedSecretBundle{
-		ID: to.StringPtr(fmt.Sprintf("id_%s", secretName)),
+		Response: createResponse(http.StatusOK),
+		ID:       to.StringPtr(fmt.Sprintf("id_%s", secretName)),
 	}, nil
 }
 
 func (f *fakeServiceClientVault) SetSecret(ctx context.Context, vaultBaseURL string, secretName string, parameters kv.SecretSetParameters) (kv.SecretBundle, error) {
-	if f.c.setSecretErr != nil {
-		return kv.SecretBundle{}, f.c.setSecretErr
+	if f.c.setSecretStatusCode != 0 {
+		return kv.SecretBundle{
+			Response: createResponse(f.c.setSecretStatusCode),
+		}, errors.New("oh no")
 	}
 
 	assert.Equal(f.t, f.c.expectVaultBaseURL, vaultBaseURL)
@@ -384,6 +450,15 @@ func (f *fakeServiceClientVault) SetSecret(ctx context.Context, vaultBaseURL str
 	assert.Equal(f.t, f.c.expectParameters, parameters)
 
 	return kv.SecretBundle{
-		ID: to.StringPtr(fmt.Sprintf("id_%s", secretName)),
+		Response: createResponse(http.StatusOK),
+		ID:       to.StringPtr(fmt.Sprintf("id_%s", secretName)),
 	}, nil
+}
+
+func createResponse(statusCode int) autorest.Response {
+	return autorest.Response{
+		Response: &http.Response{
+			StatusCode: statusCode,
+		},
+	}
 }

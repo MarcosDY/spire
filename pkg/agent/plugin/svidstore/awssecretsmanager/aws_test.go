@@ -521,7 +521,6 @@ func TestPutX509SVID(t *testing.T) {
 				return
 			}
 
-			require.NoError(t, err)
 			// Validate expected AWS api calls
 			var createSecretInput *secretsmanager.CreateSecretInput
 			if tt.expectCreateSecretInput != nil {

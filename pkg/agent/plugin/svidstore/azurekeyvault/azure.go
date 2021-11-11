@@ -125,6 +125,7 @@ func (p *KeyVaultPlugin) PutX509SVID(ctx context.Context, req *svidstorev1.PutX5
 
 	// response contains datails about `error` when call fails.
 	keyVault, err := p.mgmtVaultClient.Get(ctx, s.group, s.keyvault)
+	fmt.Printf("statusCODE: %v", keyVault.StatusCode)
 	switch keyVault.StatusCode {
 	case http.StatusOK:
 		p.log.With("vault", keyVault.Name).Debug("key vault found")
