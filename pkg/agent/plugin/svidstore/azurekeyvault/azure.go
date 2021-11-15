@@ -5,7 +5,6 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"sync"
 
 	"github.com/Azure/azure-sdk-for-go/profiles/latest/keyvault/mgmt/keyvault"
@@ -52,7 +51,14 @@ func builtin(p *KeyVaultPlugin) catalog.BuiltIn {
 }
 
 func New() *KeyVaultPlugin {
-	return &KeyVaultPlugin{}
+	return newPlugin(createAzureClient)
+}
+
+func newPlugin(newClient func(string) (client, error)) *KeyVaultPlugin {
+	p := &KeyVaultPlugin{}
+	p.hooks.createAzureClient = newClient
+
+	return p
 }
 
 type Config struct {
@@ -70,12 +76,10 @@ type KeyVaultPlugin struct {
 	config *Config
 	mtx    sync.RWMutex
 
-	mgmtVaultClient    mgmtVaultClient
-	serviceVaultClient serviceClientVault
-	td                 string
-	hooks              struct {
-		createMgmtVaultClient    func(string) (mgmtVaultClient, error)
-		createServiceVaultClient func() (serviceClientVault, error)
+	client client
+	td     string
+	hooks  struct {
+		createAzureClient func(string) (client, error)
 	}
 }
 
@@ -95,22 +99,16 @@ func (p *KeyVaultPlugin) Configure(ctx context.Context, req *configv1.ConfigureR
 		return nil, status.Error(codes.InvalidArgument, "subscription ID is required")
 	}
 
-	mgmtVaultClient, err := p.hooks.createMgmtVaultClient(config.SubscriptionID)
+	azureClient, err := p.hooks.createAzureClient(config.SubscriptionID)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to create management vault client: %v", err)
-	}
-
-	serviceVaultClient, err := p.hooks.createServiceVaultClient()
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to create service vault client: %v", err)
+		return nil, err
 	}
 
 	p.mtx.Lock()
 	defer p.mtx.Unlock()
 
 	p.config = config
-	p.mgmtVaultClient = mgmtVaultClient
-	p.serviceVaultClient = serviceVaultClient
+	p.client = azureClient
 	p.td = req.CoreConfiguration.TrustDomain
 
 	return &configv1.ConfigureResponse{}, nil
@@ -120,27 +118,25 @@ func (p *KeyVaultPlugin) Configure(ctx context.Context, req *configv1.ConfigureR
 func (p *KeyVaultPlugin) PutX509SVID(ctx context.Context, req *svidstorev1.PutX509SVIDRequest) (*svidstorev1.PutX509SVIDResponse, error) {
 	s, err := p.parseSelectors(req.Metadata)
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "invalid metadata: %v", err)
+		return nil, err
 	}
 
-	// response contains datails about `error` when call fails.
-	keyVault, err := p.mgmtVaultClient.Get(ctx, s.group, s.keyvault)
-	fmt.Printf("statusCODE: %v", keyVault.StatusCode)
-	switch keyVault.StatusCode {
-	case http.StatusOK:
+	keyVault, err := p.client.GetVault(ctx, s.group, s.keyvault)
+	switch status.Code(err) {
+	case codes.OK:
 		p.log.With("vault", keyVault.Name).Debug("key vault found")
 		if !validateTag(keyVault.Tags, p.td) {
-			return nil, status.Errorf(codes.InvalidArgument, "key vault %q does not contains 'spire-svid' tag", s.keyvault)
+			return nil, status.Error(codes.InvalidArgument, "secret is not managed by this SPIRE deployment")
 		}
 
-	case http.StatusNotFound:
+	case codes.NotFound:
 		p.log.With("vault", s.keyvault).Debug("key vault not found, creating...")
 		if err := p.createKeyVault(ctx, s); err != nil {
 			return nil, err
 		}
 
 	default:
-		return nil, status.Errorf(codes.Internal, "failed to get key vault %q: %v", s.keyvault, err)
+		return nil, err
 	}
 
 	// Add new secret to Key Vault
@@ -158,45 +154,45 @@ func (p *KeyVaultPlugin) DeleteX509SVID(ctx context.Context, req *svidstorev1.De
 	}
 
 	// response contains datails about `error` when call fails.
-	keyVault, err := p.mgmtVaultClient.Get(ctx, s.group, s.keyvault)
-	switch keyVault.StatusCode {
-	case http.StatusOK:
+	keyVault, err := p.client.GetVault(ctx, s.group, s.keyvault)
+	switch status.Code(err) {
+	case codes.OK:
 		p.log.With("vault", keyVault.Name).Debug("key vault found")
 		if !validateTag(keyVault.Tags, p.td) {
 			return nil, status.Errorf(codes.InvalidArgument, "key vault %q does not contains 'spire-svid' tag", s.keyvault)
 		}
 
-	case http.StatusNotFound:
+	case codes.NotFound:
 		p.log.With("vault", s.keyvault).Debug("key vault not found")
 		return &svidstorev1.DeleteX509SVIDResponse{}, nil
 
 	default:
-		return nil, status.Errorf(codes.Internal, "failed to get key vault %q: %v", s.keyvault, err)
+		return nil, err
 	}
 
 	vaultBaseURL := s.vaultBaseURL()
 	// Get only 2 secrets we want to verify it contains more than 1
-	secrets, err := p.serviceVaultClient.GetSecrets(ctx, vaultBaseURL, to.Int32Ptr(2))
+	secrets, err := p.client.GetSecrets(ctx, vaultBaseURL, to.Int32Ptr(2))
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to get secrets for key vault: %v", err)
+		return nil, err
 	}
 
-	if len(secrets.Values()) <= 1 {
-		if _, err := p.mgmtVaultClient.Delete(ctx, s.group, s.keyvault); err != nil {
-			return nil, status.Errorf(codes.Internal, "failed to delete key vault: %v", err)
+	if len(secrets) <= 1 {
+		if err := p.client.DeleteVault(ctx, s.group, s.keyvault); err != nil {
+			return nil, err
 		}
 
 		p.log.With("id", keyVault.ID).Debug("Key vault deleted")
 		return &svidstorev1.DeleteX509SVIDResponse{}, nil
 	}
 
-	resp, err := p.serviceVaultClient.DeleteSecret(ctx, vaultBaseURL, s.name)
-	switch resp.StatusCode {
-	case http.StatusOK:
+	resp, err := p.client.DeleteSecret(ctx, vaultBaseURL, s.name)
+	switch status.Code(err) {
+	case codes.OK:
 		p.log.With("id", resp.ID).Debug("Secret deleted")
 		return &svidstorev1.DeleteX509SVIDResponse{}, nil
 
-	case http.StatusNotFound:
+	case codes.NotFound:
 		p.log.With("secret", s.name).Debug("Secret already deleted")
 		return &svidstorev1.DeleteX509SVIDResponse{}, nil
 
@@ -226,7 +222,7 @@ func (p *KeyVaultPlugin) setSecret(ctx context.Context, req *svidstorev1.PutX509
 	expires := date.NewUnixTimeFromNanoseconds(cert.NotAfter.UnixNano())
 
 	// TODO: add var for vautl name and another for secret name
-	resp, err := p.serviceVaultClient.SetSecret(ctx, s.vaultBaseURL(), s.name, kv.SecretSetParameters{
+	resp, err := p.client.SetSecret(ctx, s.vaultBaseURL(), s.name, kv.SecretSetParameters{
 		Value:       to.StringPtr(string(secretBinary)),
 		ContentType: to.StringPtr("X509-SVID"),
 		SecretAttributes: &kv.SecretAttributes{
@@ -235,7 +231,7 @@ func (p *KeyVaultPlugin) setSecret(ctx context.Context, req *svidstorev1.PutX509
 		},
 	})
 	if err != nil {
-		return status.Errorf(codes.Internal, "failed to set secret: %v", err)
+		return err
 	}
 
 	p.log.With("id", resp.ID).Info("Secret updated")
@@ -256,9 +252,9 @@ func (p *KeyVaultPlugin) createKeyVault(ctx context.Context, s *secret) error {
 	}
 
 	// Get current user ID, it is required to create an access policy to allow current user to  get and set secrets.
-	userID, err := p.getCurrentUser(ctx, s.tenantID)
+	userID, err := p.client.getCurrentUser(ctx, s.tenantID)
 	if err != nil {
-		return status.Errorf(codes.Internal, "failed to get current user: %v", err)
+		return err
 	}
 
 	properties := &keyvault.VaultProperties{
@@ -285,31 +281,16 @@ func (p *KeyVaultPlugin) createKeyVault(ctx context.Context, s *secret) error {
 		},
 	}
 
-	_, err = p.mgmtVaultClient.CreateOrUpdate(ctx, s.group, s.keyvault, keyvault.VaultCreateOrUpdateParameters{
+	err = p.client.CreateOrUpdateVault(ctx, s.group, s.keyvault, keyvault.VaultCreateOrUpdateParameters{
 		Location:   &s.location,
 		Tags:       map[string]*string{"spire-svid": to.StringPtr(p.td)},
 		Properties: properties,
 	})
 	if err != nil {
-		return status.Errorf(codes.Internal, "failed to create secret: %v", err)
+		return err
 	}
 
 	return nil
-}
-
-// getCurrentUser gets current user ID.
-func (p *KeyVaultPlugin) getCurrentUser(ctx context.Context, tenantID string) (*string, error) {
-	client, err := createSignedInUserClient(tenantID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get Auth: %w", err)
-	}
-
-	user, err := client.Get(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	return user.ObjectID, nil
 }
 
 // parseSelectors parse selectors into 'secret', and set default values if required
@@ -319,18 +300,18 @@ func (p *KeyVaultPlugin) parseSelectors(metadata []string) (*secret, error) {
 		return nil, status.Errorf(codes.InvalidArgument, "failed to parse metadata: %v", err)
 	}
 
-	name, ok := data["secretname"]
+	name, ok := data["name"]
 	if !ok {
 		return nil, status.Error(codes.InvalidArgument, "secret name is required")
 	}
 
-	vault, ok := data["secretvault"]
+	vault, ok := data["vault"]
 	if !ok {
 		return nil, status.Error(codes.InvalidArgument, "secret vault is required")
 	}
 
 	group := p.config.ResourceGroup
-	if value, ok := data["secretgroup"]; ok {
+	if value, ok := data["group"]; ok {
 		group = value
 	}
 	if group == "" {
@@ -338,7 +319,7 @@ func (p *KeyVaultPlugin) parseSelectors(metadata []string) (*secret, error) {
 	}
 
 	tenantID := p.config.TenantID
-	if value, ok := data["secrettenantid"]; ok {
+	if value, ok := data["tenantid"]; ok {
 		tenantID = value
 	}
 	if tenantID == "" {
@@ -346,7 +327,7 @@ func (p *KeyVaultPlugin) parseSelectors(metadata []string) (*secret, error) {
 	}
 
 	location := p.config.Location
-	if value, ok := data["secretlocation"]; ok {
+	if value, ok := data["location"]; ok {
 		location = value
 	}
 
@@ -360,7 +341,7 @@ func (p *KeyVaultPlugin) parseSelectors(metadata []string) (*secret, error) {
 }
 
 // validateTag validates that tags contains 'spire-svid' and it is 'true'
-func validateTag(tags map[string]*string, td string) bool {
+func validateTag(tags map[string]string, td string) bool {
 	spireLabel, ok := tags["spire-svid"]
-	return ok && to.String(spireLabel) == td
+	return ok && spireLabel == td
 }
