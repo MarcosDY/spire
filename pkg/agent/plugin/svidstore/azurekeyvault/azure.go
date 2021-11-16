@@ -150,7 +150,7 @@ func (p *KeyVaultPlugin) PutX509SVID(ctx context.Context, req *svidstorev1.PutX5
 func (p *KeyVaultPlugin) DeleteX509SVID(ctx context.Context, req *svidstorev1.DeleteX509SVIDRequest) (*svidstorev1.DeleteX509SVIDResponse, error) {
 	s, err := p.parseSelectors(req.Metadata)
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "invalid metadata: %v", err)
+		return nil, err
 	}
 
 	// response contains datails about `error` when call fails.
@@ -159,7 +159,7 @@ func (p *KeyVaultPlugin) DeleteX509SVID(ctx context.Context, req *svidstorev1.De
 	case codes.OK:
 		p.log.With("vault", keyVault.Name).Debug("key vault found")
 		if !validateTag(keyVault.Tags, p.td) {
-			return nil, status.Errorf(codes.InvalidArgument, "key vault %q does not contains 'spire-svid' tag", s.keyvault)
+			return nil, status.Error(codes.InvalidArgument, "secret is not managed by this SPIRE deployment")
 		}
 
 	case codes.NotFound:
@@ -171,34 +171,47 @@ func (p *KeyVaultPlugin) DeleteX509SVID(ctx context.Context, req *svidstorev1.De
 	}
 
 	vaultBaseURL := s.vaultBaseURL()
+
+	resp, err := p.client.DeleteSecret(ctx, vaultBaseURL, s.name)
+	switch status.Code(err) {
+	case codes.OK:
+		p.log.With("id", resp.ID).Debug("Secret deleted")
+
+	case codes.NotFound:
+		p.log.With("secret", s.name).Debug("Secret already deleted")
+
+	default:
+		return nil, err
+	}
+
 	// Get only 2 secrets we want to verify it contains more than 1
 	secrets, err := p.client.GetSecrets(ctx, vaultBaseURL, to.Int32Ptr(2))
 	if err != nil {
 		return nil, err
 	}
 
-	if len(secrets) <= 1 {
+	if p.shouldRemoveVault(secrets, resp) {
 		if err := p.client.DeleteVault(ctx, s.group, s.keyvault); err != nil {
 			return nil, err
 		}
 
 		p.log.With("id", keyVault.ID).Debug("Key vault deleted")
-		return &svidstorev1.DeleteX509SVIDResponse{}, nil
 	}
 
-	resp, err := p.client.DeleteSecret(ctx, vaultBaseURL, s.name)
-	switch status.Code(err) {
-	case codes.OK:
-		p.log.With("id", resp.ID).Debug("Secret deleted")
-		return &svidstorev1.DeleteX509SVIDResponse{}, nil
+	return &svidstorev1.DeleteX509SVIDResponse{}, nil
+}
 
-	case codes.NotFound:
-		p.log.With("secret", s.name).Debug("Secret already deleted")
-		return &svidstorev1.DeleteX509SVIDResponse{}, nil
-
-	default:
-		return nil, status.Errorf(codes.Internal, "failed to delete secret: %v", err)
+func (p *KeyVaultPlugin) shouldRemoveVault(secrets []kv.SecretItem, resp *azureSecret) bool {
+	switch len(secrets) {
+	case 0:
+		return true
+	case 1:
+		if resp != nil && to.String(secrets[0].ID) == resp.ID {
+			return true
+		}
 	}
+
+	return false
 }
 
 // setSecret adds a new SVID as a secret an specified Key Vault

@@ -92,7 +92,7 @@ func TestConfigure(t *testing.T) {
 		expectClientErr error
 	}{
 		{
-			name:           "Config loaded successfully",
+			name:           "config loaded successfully",
 			location:       "location",
 			resourceGroup:  "group",
 			subscriptionID: "subsID",
@@ -105,20 +105,20 @@ func TestConfigure(t *testing.T) {
 			},
 		},
 		{
-			name:            "No subscriptionID",
+			name:            "no subscriptionID",
 			tenantID:        "tenantID",
 			expectCode:      codes.InvalidArgument,
 			expectMsgPrefix: "subscription ID is required",
 		},
 		{
-			name:            "Failed to create azure client",
+			name:            "failed to create azure client",
 			subscriptionID:  "subsID",
 			expectClientErr: status.Error(codes.Internal, "oh no"),
 			expectCode:      codes.Internal,
 			expectMsgPrefix: "oh no",
 		},
 		{
-			name:            "Malformed config",
+			name:            "malformed config",
 			customConfig:    "malformed config",
 			expectCode:      codes.InvalidArgument,
 			expectMsgPrefix: "unable to decode configuration:",
@@ -171,7 +171,7 @@ func TestConfigure(t *testing.T) {
 }
 
 func TestPutX509SVID(t *testing.T) {
-	tenantIDUUID, err := uuid.NewV4()
+	tenantID, err := uuid.NewV4()
 	require.NoError(t, err)
 
 	defaultUUID, err := uuid.NewV4()
@@ -205,7 +205,7 @@ func TestPutX509SVID(t *testing.T) {
 			"name:secret1",
 			"vault:vault1",
 			"group:group1",
-			"tenantid:" + tenantIDUUID.String(),
+			"tenantid:" + tenantID.String(),
 			"location:location1",
 		},
 		FederatedBundles: map[string][]*x509.Certificate{
@@ -246,7 +246,7 @@ func TestPutX509SVID(t *testing.T) {
 		expectGetUserReq *userReq
 	}{
 		{
-			name: "Create vault and secret",
+			name: "create vault and secret",
 			req:  successReq,
 			pluginConfig: &Config{
 				Location:       "configLocation",
@@ -263,7 +263,7 @@ func TestPutX509SVID(t *testing.T) {
 						"spire-svid": to.StringPtr("example.org"),
 					},
 					Properties: &keyvault.VaultProperties{
-						TenantID: &tenantIDUUID,
+						TenantID: &tenantID,
 						Sku: &keyvault.Sku{
 							Family: to.StringPtr("A"),
 							Name:   keyvault.Standard,
@@ -271,7 +271,7 @@ func TestPutX509SVID(t *testing.T) {
 						AccessPolicies: &[]keyvault.AccessPolicyEntry{
 							{
 								ObjectID: to.StringPtr("user-id"),
-								TenantID: &tenantIDUUID,
+								TenantID: &tenantID,
 								Permissions: &keyvault.Permissions{
 									Secrets: &[]keyvault.SecretPermissions{
 										// Get and List are not required, added them to verify they exists on UI
@@ -297,13 +297,13 @@ func TestPutX509SVID(t *testing.T) {
 					},
 				},
 			},
-			expectGetUserReq: &userReq{tenantID: tenantIDUUID.String()},
+			expectGetUserReq: &userReq{tenantID: tenantID.String()},
 			clientConfig: &fakeClientConfig{
 				getVaultErr: status.Error(codes.NotFound, "not found"),
 			},
 		},
 		{
-			name: "Use default configs when no selector set",
+			name: "use default configs when no selector set",
 			req: &svidstore.X509SVID{
 				SVID: successReq.SVID,
 				Metadata: []string{
@@ -367,7 +367,7 @@ func TestPutX509SVID(t *testing.T) {
 			},
 		},
 		{
-			name: "Vault exists, create secret",
+			name: "vault exists, create secret",
 			req:  successReq,
 			pluginConfig: &Config{
 				Location:       "configLocation",
@@ -394,7 +394,7 @@ func TestPutX509SVID(t *testing.T) {
 			clientConfig: &fakeClientConfig{},
 		},
 		{
-			name: "Malformed metadata",
+			name: "malformed metadata",
 			req: &svidstore.X509SVID{
 				SVID: successReq.SVID,
 				Metadata: []string{
@@ -406,13 +406,13 @@ func TestPutX509SVID(t *testing.T) {
 			expectMsg:  "svidstore(azure_keyvault): failed to parse metadata: metadata does not contain a colon: \"vault\"",
 		},
 		{
-			name: "Secret name required",
+			name: "secret name required",
 			req: &svidstore.X509SVID{
 				SVID: successReq.SVID,
 				Metadata: []string{
 					"vault:vault1",
 					"group:group1",
-					"tenantid:" + tenantIDUUID.String(),
+					"tenantid:" + tenantID.String(),
 				},
 				FederatedBundles: successReq.FederatedBundles,
 			},
@@ -420,13 +420,13 @@ func TestPutX509SVID(t *testing.T) {
 			expectMsg:  "svidstore(azure_keyvault): secret name is required",
 		},
 		{
-			name: "Vault name required",
+			name: "vault name required",
 			req: &svidstore.X509SVID{
 				SVID: successReq.SVID,
 				Metadata: []string{
 					"name:secret1",
 					"group:group1",
-					"tenantid:" + tenantIDUUID.String(),
+					"tenantid:" + tenantID.String(),
 				},
 				FederatedBundles: successReq.FederatedBundles,
 			},
@@ -434,13 +434,13 @@ func TestPutX509SVID(t *testing.T) {
 			expectMsg:  "svidstore(azure_keyvault): secret vault is required",
 		},
 		{
-			name: "Group name required",
+			name: "group name required",
 			req: &svidstore.X509SVID{
 				SVID: successReq.SVID,
 				Metadata: []string{
 					"name:secret1",
 					"vault:vault1",
-					"tenantid:" + tenantIDUUID.String(),
+					"tenantid:" + tenantID.String(),
 				},
 				FederatedBundles: successReq.FederatedBundles,
 			},
@@ -462,7 +462,7 @@ func TestPutX509SVID(t *testing.T) {
 			expectMsg:  "svidstore(azure_keyvault): secret tenant ID is required",
 		},
 		{
-			name: "Vault has no tag",
+			name: "vault has no tag",
 			req:  successReq,
 			clientConfig: &fakeClientConfig{
 				noTag: true,
@@ -475,7 +475,7 @@ func TestPutX509SVID(t *testing.T) {
 			expectMsg:  "svidstore(azure_keyvault): secret is not managed by this SPIRE deployment",
 		},
 		{
-			name: "Failed to get Vault",
+			name: "failed to get Vault",
 			req:  successReq,
 			clientConfig: &fakeClientConfig{
 				getVaultErr: status.Error(codes.Internal, "oh no"),
@@ -484,9 +484,9 @@ func TestPutX509SVID(t *testing.T) {
 			expectMsg:  "svidstore(azure_keyvault): oh no",
 		},
 		{
-			name:             "Failed to create Vault",
+			name:             "failed to create Vault",
 			req:              successReq,
-			expectGetUserReq: &userReq{tenantID: tenantIDUUID.String()},
+			expectGetUserReq: &userReq{tenantID: tenantID.String()},
 			clientConfig: &fakeClientConfig{
 				getVaultErr:            status.Error(codes.NotFound, "not found"),
 				createOrUpdateVaultErr: status.Error(codes.Internal, "oh no"),
@@ -495,14 +495,14 @@ func TestPutX509SVID(t *testing.T) {
 			expectMsg:  "svidstore(azure_keyvault): oh no",
 		},
 		{
-			name: "Location required when creating vault",
+			name: "location required when creating vault",
 			req: &svidstore.X509SVID{
 				SVID: successReq.SVID,
 				Metadata: []string{
 					"name:secret1",
 					"vault:vault1",
 					"group:group1",
-					"tenantid:" + tenantIDUUID.String(),
+					"tenantid:" + tenantID.String(),
 				},
 				FederatedBundles: successReq.FederatedBundles,
 			},
@@ -514,7 +514,7 @@ func TestPutX509SVID(t *testing.T) {
 			expectMsg:  "svidstore(azure_keyvault): location is required to create key vault",
 		},
 		{
-			name: "Invalid tenant ID",
+			name: "invalid tenant ID",
 			req: &svidstore.X509SVID{
 				SVID: successReq.SVID,
 				Metadata: []string{
@@ -533,7 +533,7 @@ func TestPutX509SVID(t *testing.T) {
 			expectMsg:  `svidstore(azure_keyvault): malformed tenant ID: uuid: incorrect UUID length 7 in string "invalid"`,
 		},
 		{
-			name: "Failed to get current user",
+			name: "failed to get current user",
 			req:  successReq,
 			clientConfig: &fakeClientConfig{
 				getVaultErr:       status.Error(codes.NotFound, "not found"),
@@ -543,7 +543,7 @@ func TestPutX509SVID(t *testing.T) {
 			expectMsg:  "svidstore(azure_keyvault): oh no",
 		},
 		{
-			name: "Failed to encode secret",
+			name: "failed to encode secret",
 			req: &svidstore.X509SVID{
 				SVID: &svidstore.SVID{
 					SPIFFEID:   spiffeid.RequireFromString("spiffe://example.org/secret"),
@@ -569,7 +569,7 @@ func TestPutX509SVID(t *testing.T) {
 			expectMsg:  "svidstore(azure_keyvault): failed to encode sercret:",
 		},
 		{
-			name: "Failed to set secret",
+			name: "failed to set secret",
 			req:  successReq,
 			pluginConfig: &Config{
 				Location:       "configLocation",
@@ -618,6 +618,7 @@ func TestPutX509SVID(t *testing.T) {
 			plugintest.Load(t, builtin(p), ss,
 				options...,
 			)
+			require.NoError(t, err)
 
 			err = ss.PutX509SVID(ctx, tt.req)
 			spiretest.AssertGRPCStatusHasPrefix(t, err, tt.expectCode, tt.expectMsg)
@@ -634,6 +635,260 @@ func TestPutX509SVID(t *testing.T) {
 
 			// validate get current user call
 			assert.Equal(t, tt.expectGetUserReq, azureClient.getUserReq)
+		})
+	}
+}
+
+func TestDeleteX509SVID(t *testing.T) {
+	tenantID, err := uuid.NewV4()
+	require.NoError(t, err)
+	successMetadata := []string{
+		"name:secret1",
+		"vault:vault1",
+		"group:group1",
+		"tenantid:" + tenantID.String(),
+		"location:location1",
+	}
+
+	for _, tt := range []struct {
+		name string
+
+		metadata        []string
+		expectCode      codes.Code
+		expectMsgPrefix string
+
+		clientConfig *fakeClientConfig
+
+		expectDeleteVaultReq  *vaultReq
+		expectGetVaultReq     *vaultReq
+		expectGetSecretsReq   *secretReq
+		expectDeleteSecretReq *secretReq
+	}{
+		{
+			name:     "vault no secret",
+			metadata: successMetadata,
+			clientConfig: &fakeClientConfig{
+				secretItems:     []kv.SecretItem{},
+				deleteSecretErr: status.Error(codes.NotFound, "not found"),
+			},
+			expectGetVaultReq: &vaultReq{
+				resourceGroupName: "group1",
+				vaultName:         "vault1",
+			},
+			expectGetSecretsReq: &secretReq{
+				vaultBaseURL: "https://secret1.vault.azure.net/",
+				maxResults:   to.Int32Ptr(2),
+			},
+			expectDeleteVaultReq: &vaultReq{
+				resourceGroupName: "group1",
+				vaultName:         "vault1",
+			},
+		},
+		{
+			name:     "vault single secret: delete",
+			metadata: successMetadata,
+			clientConfig: &fakeClientConfig{
+				secretItems: []kv.SecretItem{
+					{
+						// ID is the same as deleted secret
+						ID: to.StringPtr("id_secret1"),
+					},
+				},
+			},
+			expectGetVaultReq: &vaultReq{
+				resourceGroupName: "group1",
+				vaultName:         "vault1",
+			},
+			expectGetSecretsReq: &secretReq{
+				vaultBaseURL: "https://secret1.vault.azure.net/",
+				maxResults:   to.Int32Ptr(2),
+			},
+			expectDeleteSecretReq: &secretReq{
+				vaultBaseURL: "https://secret1.vault.azure.net/",
+				secretName:   "secret1",
+			},
+			expectDeleteVaultReq: &vaultReq{
+				resourceGroupName: "group1",
+				vaultName:         "vault1",
+			},
+		},
+		{
+			name:     "vault single secret: different id",
+			metadata: successMetadata,
+			clientConfig: &fakeClientConfig{
+				secretItems: []kv.SecretItem{
+					{
+						// ID is different to deleted secret
+						ID: to.StringPtr("id"),
+					},
+				},
+			},
+			expectGetVaultReq: &vaultReq{
+				resourceGroupName: "group1",
+				vaultName:         "vault1",
+			},
+			expectDeleteSecretReq: &secretReq{
+				vaultBaseURL: "https://secret1.vault.azure.net/",
+				secretName:   "secret1",
+			},
+			expectGetSecretsReq: &secretReq{
+				vaultBaseURL: "https://secret1.vault.azure.net/",
+				maxResults:   to.Int32Ptr(2),
+			},
+		},
+		{
+			name:     "vault with multiple secrets, only remove provided secret name",
+			metadata: successMetadata,
+			clientConfig: &fakeClientConfig{
+				secretItems: []kv.SecretItem{
+					{
+						ID: to.StringPtr("id1"),
+					},
+					{
+						ID: to.StringPtr("id2"),
+					},
+				}},
+			expectGetVaultReq: &vaultReq{
+				resourceGroupName: "group1",
+				vaultName:         "vault1",
+			},
+			expectGetSecretsReq: &secretReq{
+				vaultBaseURL: "https://secret1.vault.azure.net/",
+				maxResults:   to.Int32Ptr(2),
+			},
+			expectDeleteSecretReq: &secretReq{
+				vaultBaseURL: "https://secret1.vault.azure.net/",
+				secretName:   "secret1",
+			},
+		},
+		{
+			name:            "malformed metadata",
+			metadata:        []string{"name"},
+			expectCode:      codes.InvalidArgument,
+			expectMsgPrefix: "svidstore(azure_keyvault): failed to parse metadata: metadata does not contain a colon: \"name\"",
+		},
+		{
+			name:     "vault is not managed",
+			metadata: successMetadata,
+			clientConfig: &fakeClientConfig{
+				noTag: true,
+			},
+			expectGetVaultReq: &vaultReq{
+				resourceGroupName: "group1",
+				vaultName:         "vault1",
+			},
+			expectCode:      codes.InvalidArgument,
+			expectMsgPrefix: "svidstore(azure_keyvault): secret is not managed by this SPIRE deployment",
+		},
+		{
+			name:     "vault not found",
+			metadata: successMetadata,
+			clientConfig: &fakeClientConfig{
+				getVaultErr: status.Error(codes.NotFound, "not found"),
+			},
+		},
+		{
+			name:     "failed to get vault",
+			metadata: successMetadata,
+			clientConfig: &fakeClientConfig{
+				getVaultErr: status.Error(codes.Internal, "oh no"),
+			},
+			expectCode:      codes.Internal,
+			expectMsgPrefix: "svidstore(azure_keyvault): oh no",
+		},
+		{
+			name:     "failed to delete secret",
+			metadata: successMetadata,
+			clientConfig: &fakeClientConfig{
+				deleteSecretErr: status.Error(codes.Internal, "oh no"),
+			},
+			expectGetVaultReq: &vaultReq{
+				resourceGroupName: "group1",
+				vaultName:         "vault1",
+			},
+			expectCode:      codes.Internal,
+			expectMsgPrefix: "svidstore(azure_keyvault): oh no",
+		},
+		{
+			name:     "failed to get secrets",
+			metadata: successMetadata,
+			clientConfig: &fakeClientConfig{
+				getSecretsErr: status.Error(codes.Internal, "oh no"),
+			},
+			expectGetVaultReq: &vaultReq{
+				resourceGroupName: "group1",
+				vaultName:         "vault1",
+			},
+			expectDeleteSecretReq: &secretReq{
+				vaultBaseURL: "https://secret1.vault.azure.net/",
+				secretName:   "secret1",
+			},
+			expectCode:      codes.Internal,
+			expectMsgPrefix: "svidstore(azure_keyvault): oh no",
+		},
+		{
+			name:     "failed to delete vault",
+			metadata: successMetadata,
+			clientConfig: &fakeClientConfig{
+				secretItems: []kv.SecretItem{
+					{
+						// ID is the same as deleted secret
+						ID: to.StringPtr("id_secret1"),
+					},
+				},
+				deleteVaultErr: status.Error(codes.Internal, "oh no"),
+			},
+			expectGetVaultReq: &vaultReq{
+				resourceGroupName: "group1",
+				vaultName:         "vault1",
+			},
+			expectGetSecretsReq: &secretReq{
+				vaultBaseURL: "https://secret1.vault.azure.net/",
+				maxResults:   to.Int32Ptr(2),
+			},
+			expectDeleteSecretReq: &secretReq{
+				vaultBaseURL: "https://secret1.vault.azure.net/",
+				secretName:   "secret1",
+			},
+			expectCode:      codes.Internal,
+			expectMsgPrefix: "svidstore(azure_keyvault): oh no",
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+			defer cancel()
+
+			if tt.clientConfig == nil {
+				tt.clientConfig = &fakeClientConfig{}
+			}
+			azureClient := &fakeAzureClient{
+				c: tt.clientConfig,
+			}
+
+			p := newPlugin(azureClient.newClient)
+
+			var err error
+			options := []plugintest.Option{
+				plugintest.CaptureConfigureError(&err),
+				plugintest.CoreConfig(catalog.CoreConfig{
+					TrustDomain: spiffeid.RequireTrustDomainFromString("example.org"),
+				}),
+				plugintest.ConfigureJSON(&Config{SubscriptionID: "subsID"}),
+			}
+			ss := new(svidstore.V1)
+			plugintest.Load(t, builtin(p), ss,
+				options...,
+			)
+			require.NoError(t, err)
+
+			err = ss.DeleteX509SVID(ctx, tt.metadata)
+			spiretest.RequireGRPCStatus(t, err, tt.expectCode, tt.expectMsgPrefix)
+
+			// Validate what is send to Azure
+			assert.Equal(t, tt.expectGetVaultReq, azureClient.getVaultReq, "unexpected GetVault request")
+			assert.Equal(t, tt.expectDeleteVaultReq, azureClient.deleteVaultReq, "unexpected DeleteVault request")
+			assert.Equal(t, tt.expectDeleteSecretReq, azureClient.deleteSecretReq, "unexpected DeleteSecret request")
+			assert.Equal(t, tt.expectGetSecretsReq, azureClient.getSecretsReq, "unexpected GetSecrets request")
 		})
 	}
 }
