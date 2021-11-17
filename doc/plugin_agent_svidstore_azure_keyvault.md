@@ -34,11 +34,11 @@ Azure Key Vault stores secrets with a maximum size of 25k bytes each, that is a 
 ### Configuration
 
 | Configuration        | Description |  
-| -------------------- | ------------------------------------------------------------- |  
-| location             | default Azure location where the key vault should be created. |
-| resource_group       | default resource group.                                       |
-| subscription_id      | default subscription ID.                                      |
-| tenant_id            | default Azure Active Directory tenant ID that should be used for authenticating requests to the key vault. |
+| -------------------- | ------------------------------------------------------------ |  
+| location             | default Azure location where the key vault should be created |
+| resource_group       | default resource group                                       |
+| subscription_id      | default subscription ID. (Required)                          |
+| tenant_id            | default Azure Active Directory tenant ID that should be used for authenticating requests to the key vault |
 
 A sample cofiguration:
 
