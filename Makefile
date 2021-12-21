@@ -44,6 +44,12 @@ help:
 	@echo "  $(cyan)spire-agent-image$(reset)                     - build SPIRE agent Docker image"
 	@echo "  $(cyan)k8s-workload-registrar-image$(reset)          - build Kubernetes Workload Registrar Docker image"
 	@echo "  $(cyan)oidc-discovery-provider-image$(reset)         - build OIDC Discovery Provider Docker image"
+	@echo "$(bold)Windows docker image:$(reset)"
+	@echo "  $(cyan)images-windows$(reset)                        - build all SPIRE Docker images for windows"
+	@echo "  $(cyan)spire-server-image-windows$(reset)            - build SPIRE server Docker image for windows"
+	@echo "  $(cyan)spire-agent-image-windows$(reset)             - build SPIRE agent Docker image for windows"
+	@echo "  $(cyan)k8s-workload-registrar-image-windows$(reset)  - build Kubernetes Workload Registrar Docker image for windows"
+	@echo "  $(cyan)oidc-discovery-provider-image-windows$(reset) - build OIDC Discovery Provider Docker image for windows"
 	@echo "$(bold)Docker from scratch image:$(reset)"
 	@echo "  $(cyan)scratch-images$(reset)                        - build all SPIRE Docker from scratch images"
 	@echo "  $(cyan)spire-server-scratch-image$(reset)            - build SPIRE server Docker scratch image"
@@ -327,6 +333,33 @@ k8s-workload-registrar-image: Dockerfile
 oidc-discovery-provider-image: Dockerfile
 	docker build --build-arg goversion=$(go_version_full) --target oidc-discovery-provider -t oidc-discovery-provider .
 	docker tag oidc-discovery-provider:latest oidc-discovery-provider:latest-local
+
+#############################################################################
+# Docker Images
+#############################################################################
+
+.PHONY: images-windows
+images-windows: spire-server-image-windows spire-agent-image-windows k8s-workload-registrar-image-windows oidc-discovery-provider-image-windows
+
+.PHONY: spire-server-image-windows
+spire-server-image-windows: Dockerfile
+	docker build -f Dockerfile.windows --build-arg goversion=$(go_version_full) --target spire-server-windows -t spire-server-windows .
+	docker tag spire-server-windows:latest spire-server-windows:latest-local
+
+.PHONY: spire-agent-image-windows
+spire-agent-image-windows: Dockerfile
+	docker build -f Dockerfile.windows --build-arg goversion=$(go_version_full) --target spire-agent-windows -t spire-agent-windows .
+	docker tag spire-agent-windows:latest spire-agent-windows:latest-local
+
+.PHONY: k8s-workload-registrar-image-windows
+k8s-workload-registrar-image-windows: Dockerfile
+	docker build -f Dockerfile.windows --build-arg goversion=$(go_version_full) --target k8s-workload-registrar-windows -t k8s-workload-registrar-windows .
+	docker tag k8s-workload-registrar-windows:latest k8s-workload-registrar-windows:latest-local
+
+.PHONY: oidc-discovery-provider-image-windows
+oidc-discovery-provider-image-windows: Dockerfile
+	docker build -f Dockerfile.windows --build-arg goversion=$(go_version_full) --target oidc-discovery-provider-windows -t oidc-discovery-provider-windows .
+	docker tag oidc-discovery-provider-windows:latest oidc-discovery-provider-windows:latest-local
 
 #############################################################################
 # Docker Images FROM scratch
