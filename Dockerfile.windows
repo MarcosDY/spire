@@ -63,9 +63,9 @@ CMD Start-Service \""K8S Workload Registrar\"";
 
 # OIDC Discovery Provider
 FROM spire-base-windows AS oidc-discovery-provider-windows
-COPY --from=builder c:\\spire/bin\\oidc-discovery-provider.exe c:\\spire\\bin\\oidc-discovery-provider.exe
+COPY --from=builder-windows c:\\spire\\bin\\oidc-discovery-provider.exe c:\\spire\\bin\\oidc-discovery-provider.exe
 WORKDIR /opt/spire
-ENTRYPOINT ["/usr/bin/dumb-init", "/opt/spire/bin/oidc-discovery-provider"]
+SHELL ["powershell", "-Command", "$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue';"]
 RUN New-Service -name "\"OIDC Discovery Provider\"" -BinaryPathName '"c:\spire\bin\oidc-discovery-provider.exe"' -startuptype automatic; 
 RUN Set-ItemProperty "\"Registry::HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\OIDC Discovery Provider\"" -Name AllowRemoteConnection -Value 1
 CMD Start-Service \""OIDC Discovery Provider\""; 
