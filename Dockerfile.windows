@@ -1,0 +1,72 @@
+# Build stage
+ARG goversion
+
+# FROM golang:${goversion}-nanoserver-ltsc2022 as builder-windows
+FROM golang:${goversion}-windowsservercore-ltsc2022 as builder-windows
+SHELL ["powershell", "-Command", "$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue';"]
+# Install msys2 with required toolchain
+# msys2 does not works on nano server (https://github.com/msys2/MSYS2-packages/issues/1493)
+RUN [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; \
+  Invoke-WebRequest -UseBasicParsing -uri "https://github.com/msys2/msys2-installer/releases/download/nightly-x86_64/msys2-base-x86_64-latest.sfx.exe" -OutFile msys2.exe; \
+  .\msys2.exe -y -oC:\; \
+  Remove-Item msys2.exe ; \
+  function msys() { C:\msys64\usr\bin\bash.exe @('-lc') + @Args; } \
+  msys ' '; \
+  msys 'pacman --noconfirm -Syuu'; \
+  msys 'pacman --noconfirm -Syuu'; \
+  msys 'pacman --noconfirm -Sy --needed base-devel mingw-w64-x86_64-toolchain unzip'; \ 
+  msys 'pacman --noconfirm -Scc';
+WORKDIR c:\\
+# Configure path
+RUN $newPath = ('C:\msys64\usr\bin;C:\msys64\mingw64\bin;{0}' -f $env:PATH); \
+	Write-Host ('Updating PATH: {0}' -f $newPath); \
+	[Environment]::SetEnvironmentVariable('PATH', $newPath, [EnvironmentVariableTarget]::Machine);
+# Build SPIRE
+ADD go.mod c:\\spire\\go.mod
+WORKDIR c:\\spire 
+RUN go mod download
+ADD . c:\\spire
+RUN make build
+
+# Common base
+# TODO: nano server has a basic powershell, that is not able to create services
+# FROM mcr.microsoft.com/windows/nanoserver:ltsc2022 AS spire-base-windows
+FROM mcr.microsoft.com/windows/servercore:ltsc2022 AS spire-base-windows
+RUN mkdir -p c:\\spire\\bin
+
+# SPIRE Server
+FROM spire-base-windows AS spire-server-windows
+COPY --from=builder-windows C:/spire/bin/spire-server.exe C:/spire/bin/spire-server.exe
+WORKDIR C:/spire
+SHELL ["powershell", "-Command", "$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue';"]
+RUN New-Service -name "\"SPIRE Server\"" -BinaryPathName '"c:\spire\bin\spire-server.exe"' -startuptype automatic; 
+RUN Set-ItemProperty "\"Registry::HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\SPIRE Server\"" -Name AllowRemoteConnection -Value 1
+CMD Start-Service \""SPIRE Server\""; 
+
+# SPIRE Agent
+FROM spire-base-windows AS spire-agent-windows
+COPY --from=builder-windows C:\\spire\\bin\\spire-agent.exe C:\\spire\\bin\\spire-agent.exe
+WORKDIR C:\\spire
+SHELL ["powershell", "-Command", "$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue';"]
+RUN New-Service -name "\"SPIRE Agent\"" -BinaryPathName '"c:\spire\bin\spire-agent.exe"' -startuptype automatic; 
+RUN Set-ItemProperty "\"Registry::HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\SPIRE Agent\"" -Name AllowRemoteConnection -Value 1
+CMD Start-Service \""SPIRE Agent\""; 
+
+# K8S Workload Registrar
+FROM spire-base-windows AS k8s-workload-registrar-windows
+COPY --from=builder-windows C:\\spire\\bin\\k8s-workload-registrar.exe C:\\spire\\bin\\k8s-workload-registrar.exe
+WORKDIR c:\\spire
+SHELL ["powershell", "-Command", "$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue';"]
+RUN New-Service -name "\"K8S Workload Registrar\"" -BinaryPathName '"c:\spire\bin\k8s-workload-registrar.exe"' -startuptype automatic; 
+RUN Set-ItemProperty "\"Registry::HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\K8S Workload Registrar\"" -Name AllowRemoteConnection -Value 1
+CMD Start-Service \""K8S Workload Registrar\""; 
+
+# OIDC Discovery Provider
+FROM spire-base-windows AS oidc-discovery-provider-windows
+COPY --from=builder c:\\spire/bin\\oidc-discovery-provider.exe c:\\spire\\bin\\oidc-discovery-provider.exe
+WORKDIR /opt/spire
+ENTRYPOINT ["/usr/bin/dumb-init", "/opt/spire/bin/oidc-discovery-provider"]
+RUN New-Service -name "\"OIDC Discovery Provider\"" -BinaryPathName '"c:\spire\bin\oidc-discovery-provider.exe"' -startuptype automatic; 
+RUN Set-ItemProperty "\"Registry::HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\OIDC Discovery Provider\"" -Name AllowRemoteConnection -Value 1
+CMD Start-Service \""OIDC Discovery Provider\""; 
+
