@@ -37,7 +37,7 @@ RUN mkdir -p c:\\spire\\bin
 # SPIRE Server
 FROM spire-base-windows AS spire-server-windows
 COPY --from=builder-windows C:/spire/bin/spire-server.exe C:/spire/bin/spire-server.exe
-WORKDIR C:/spire
+WORKDIR C:\\spire
 ENTRYPOINT ["c:/spire/bin/spire-server.exe", "run"]
 CMD []
 
@@ -58,7 +58,7 @@ CMD []
 # OIDC Discovery Provider
 FROM spire-base-windows AS oidc-discovery-provider-windows
 COPY --from=builder-windows c:\\spire\\bin\\oidc-discovery-provider.exe c:\\spire\\bin\\oidc-discovery-provider.exe
-WORKDIR /opt/spire
+WORKDIR c:\\spire
 ENTRYPOINT ["c:/spire/bin/oidc-discovery-provider.exe"]
 CMD []
 
