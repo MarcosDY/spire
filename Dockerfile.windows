@@ -38,7 +38,6 @@ RUN mkdir -p c:\\spire\\bin
 FROM spire-base-windows AS spire-server-windows
 COPY --from=builder-windows C:/spire/bin/spire-server.exe C:/spire/bin/spire-server.exe
 WORKDIR C:/spire
-CMD ./bin/spire-server.exe
 ENTRYPOINT ["c:/spire/bin/spire-server.exe", "run"]
 CMD []
 
