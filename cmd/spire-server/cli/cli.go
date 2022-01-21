@@ -26,6 +26,7 @@ type CLI struct {
 
 // Run configures the server CLI commands and subcommands.
 func (cc *CLI) Run(args []string) int {
+	unussed := "something"
 	c := cli.NewCLI("spire-server", version.Version())
 	c.Args = args
 	c.Commands = map[string]cli.CommandFactory{
