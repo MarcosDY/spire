@@ -30,9 +30,11 @@ RUN make build
 
 # Common base
 # TODO: nano server has a basic powershell, that is not able to create services
-FROM mcr.microsoft.com/windows/nanoserver:ltsc2022 AS spire-base-windows
+# FROM mcr.microsoft.com/windows/nanoserver:20H2-amd64 AS spire-base-windows
 # FROM mcr.microsoft.com/windows/servercore:ltsc2022 AS spire-base-windows
-RUN mkdir -p c:\\spire\\bin
+FROM mcr.microsoft.com/windows/servercore:ltsc2019 AS spire-base-windows
+RUN mkdir c:\\spire\\bin
+RUN mkdir c:\\spire\\data
 
 # SPIRE Server
 FROM spire-base-windows AS spire-server-windows
