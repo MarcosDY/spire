@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -66,6 +67,7 @@ type agentConfig struct {
 	ServerAddress                 string    `hcl:"server_address"`
 	ServerPort                    int       `hcl:"server_port"`
 	SocketPath                    string    `hcl:"socket_path"`
+	TCPSocketPort                 int       `hcl:"tcp_socket_port"`
 	TrustBundlePath               string    `hcl:"trust_bundle_path"`
 	TrustBundleURL                string    `hcl:"trust_bundle_url"`
 	TrustDomain                   string    `hcl:"trust_domain"`
@@ -254,13 +256,14 @@ func parseFlags(name string, args []string, output io.Writer) (*agentConfig, err
 	flags.StringVar(&c.LogLevel, "logLevel", "", "'debug', 'info', 'warn', or 'error'")
 	flags.StringVar(&c.ServerAddress, "serverAddress", "", "IP address or DNS name of the SPIRE server")
 	flags.IntVar(&c.ServerPort, "serverPort", 0, "Port number of the SPIRE server")
-	flags.StringVar(&c.SocketPath, "socketPath", "", "Path to bind the SPIRE Agent API socket to")
 	flags.StringVar(&c.TrustDomain, "trustDomain", "", "The trust domain that this agent belongs to")
 	flags.StringVar(&c.TrustBundlePath, "trustBundle", "", "Path to the SPIRE server CA bundle")
 	flags.StringVar(&c.TrustBundleURL, "trustBundleUrl", "", "URL to download the SPIRE server CA bundle")
 	flags.BoolVar(&c.AllowUnauthenticatedVerifiers, "allowUnauthenticatedVerifiers", false, "If true, the agent permits the retrieval of X509 certificate bundles by unregistered clients")
 	flags.BoolVar(&c.InsecureBootstrap, "insecureBootstrap", false, "If true, the agent bootstraps without verifying the server's identity")
 	flags.BoolVar(&c.ExpandEnv, "expandEnv", false, "Expand environment variables in SPIRE config file")
+
+	parsePlatformFlags(flags, c)
 
 	err := flags.Parse(args)
 	if err != nil {
@@ -377,10 +380,19 @@ func NewAgentConfig(c *Config, logOptions []log.Option, allowUnknownConfig bool)
 	}
 	ac.TrustDomain = td
 
-	ac.BindAddress = &net.UnixAddr{
-		Name: c.Agent.SocketPath,
-		Net:  "unix",
+	var bindAddress net.Addr
+	if runtime.GOOS == "windows" {
+		bindAddress, err = net.ResolveTCPAddr("tcp", fmt.Sprintf("127.0.0.1:%d", c.Agent.TCPSocketPort))
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		bindAddress, err = net.ResolveUnixAddr("unix", c.Agent.SocketPath)
+		if err != nil {
+			return nil, err
+		}
 	}
+	ac.BindAddress = bindAddress
 
 	if c.Agent.AdminSocketPath != "" {
 		socketPathAbs, err := filepath.Abs(c.Agent.SocketPath)

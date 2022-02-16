@@ -27,7 +27,7 @@ type Server interface {
 }
 
 type Endpoints struct {
-	addr              *net.UnixAddr
+	addr              net.Addr
 	log               logrus.FieldLogger
 	metrics           telemetry.Metrics
 	workloadAPIServer workload_pb.SpiffeWorkloadAPIServer
@@ -119,7 +119,17 @@ func (e *Endpoints) ListenAndServe(ctx context.Context) error {
 	secret_v3.RegisterSecretDiscoveryServiceServer(server, e.sdsv3Server)
 	grpc_health_v1.RegisterHealthServer(server, e.healthServer)
 
-	l, err := e.createUDSListener()
+	var l net.Listener
+	var err error
+	switch e.addr.Network() {
+	case "unix":
+		l, err = e.createUDSListener()
+	case "tcp":
+		l, err = e.createTCPListener()
+	default:
+		return net.UnknownNetworkError(e.addr.Network())
+	}
+
 	if err != nil {
 		return err
 	}
@@ -150,7 +160,7 @@ func (e *Endpoints) createUDSListener() (net.Listener, error) {
 		Log: e.log,
 	}
 
-	l, err := unixListener.ListenUnix(e.addr.Network(), e.addr)
+	l, err := unixListener.ListenUnix(e.addr.Network(), e.addr.(*net.UnixAddr))
 	if err != nil {
 		return nil, fmt.Errorf("create UDS listener: %w", err)
 	}
@@ -158,5 +168,18 @@ func (e *Endpoints) createUDSListener() (net.Listener, error) {
 	if err := os.Chmod(e.addr.String(), os.ModePerm); err != nil {
 		return nil, fmt.Errorf("unable to change UDS permissions: %w", err)
 	}
+	return l, nil
+}
+
+func (e *Endpoints) createTCPListener() (net.Listener, error) {
+	tcpListener := &peertracker.ListenerFactory{
+		Log: e.log,
+	}
+
+	l, err := tcpListener.ListenTCP(e.addr.Network(), e.addr.(*net.TCPAddr))
+	if err != nil {
+		return nil, fmt.Errorf("create TCP listener: %w", err)
+	}
+
 	return l, nil
 }

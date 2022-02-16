@@ -3,7 +3,9 @@ package api
 import (
 	"context"
 	"flag"
+	"fmt"
 	"path/filepath"
+	"runtime"
 	"time"
 
 	"github.com/spiffe/go-spiffe/v2/proto/spiffe/workload"
@@ -23,11 +25,14 @@ type workloadClientMaker func(ctx context.Context, socketPath string, timeout ti
 
 // newClients is the default client maker
 func newWorkloadClient(ctx context.Context, socketPath string, timeout time.Duration) (*workloadClient, error) {
-	socketPath, err := filepath.Abs(socketPath)
-	if err != nil {
-		return nil, err
+	if runtime.GOOS != "windows" {
+		sp, err := filepath.Abs(socketPath)
+		if err != nil {
+			return nil, err
+		}
+		socketPath = sp
 	}
-	conn, err := grpc.DialContext(ctx, "unix:"+socketPath, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.DialContext(ctx, socketPath, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return nil, err
 	}
@@ -60,9 +65,10 @@ type adapter struct {
 	clientsMaker workloadClientMaker
 	cmd          command
 
-	socketPath string
-	timeout    cli.DurationFlag
-	flags      *flag.FlagSet
+	socketPath    string
+	tcpSocketPort int
+	timeout       cli.DurationFlag
+	flags         *flag.FlagSet
 }
 
 // adaptCommand converts a command into one conforming to the Command interface from github.com/mitchellh/cli
@@ -77,6 +83,7 @@ func adaptCommand(env *cli.Env, clientsMaker workloadClientMaker, cmd command) *
 	fs := flag.NewFlagSet(cmd.name(), flag.ContinueOnError)
 	fs.SetOutput(env.Stderr)
 	fs.StringVar(&a.socketPath, "socketPath", common.DefaultSocketPath, "Path to the SPIRE Agent API socket")
+	fs.IntVar(&a.tcpSocketPort, "tcpSpcketPort", 8082, "Port number of the local address to bind the SPIRE Agent API socket to")
 	fs.Var(&a.timeout, "timeout", "Time to wait for a response")
 	a.cmd.appendFlags(fs)
 	a.flags = fs
@@ -92,7 +99,13 @@ func (a *adapter) Run(args []string) int {
 		return 1
 	}
 
-	clients, err := a.clientsMaker(ctx, a.socketPath, time.Duration(a.timeout))
+	var socketPath string
+	if runtime.GOOS == "windows" {
+		socketPath = fmt.Sprintf("127.0.0.1:%d", a.tcpSocketPort)
+	} else {
+		socketPath = a.socketPath
+	}
+	clients, err := a.clientsMaker(ctx, socketPath, time.Duration(a.timeout))
 	if err != nil {
 		_ = a.env.ErrPrintln(err)
 		return 1

@@ -3,11 +3,13 @@ package run
 import (
 	"bytes"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -678,8 +680,13 @@ func TestNewAgentConfig(t *testing.T) {
 				c.Agent.SocketPath = "foo"
 			},
 			test: func(t *testing.T, c *agent.Config) {
-				require.Equal(t, "foo", c.BindAddress.Name)
-				require.Equal(t, "unix", c.BindAddress.Net)
+				switch runtime.GOOS {
+				case "windows":
+					t.Skip()
+				default:
+					require.Equal(t, "foo", c.BindAddress.(*net.UnixAddr).Name)
+					require.Equal(t, "unix", c.BindAddress.(*net.UnixAddr).Net)
+				}
 			},
 		},
 		{
@@ -835,8 +842,8 @@ func TestNewAgentConfig(t *testing.T) {
 				c.Agent.AdminSocketPath = "/tmp/admin.sock"
 			},
 			test: func(t *testing.T, c *agent.Config) {
-				require.Equal(t, "/tmp/workload/workload.sock", c.BindAddress.Name)
-				require.Equal(t, "unix", c.BindAddress.Net)
+				require.Equal(t, "/tmp/workload/workload.sock", c.BindAddress.(*net.UnixAddr).Name)
+				require.Equal(t, "unix", c.BindAddress.(*net.UnixAddr).Net)
 				require.Equal(t, "/tmp/admin.sock", c.AdminBindAddress.Name)
 				require.Equal(t, "unix", c.AdminBindAddress.Net)
 			},
