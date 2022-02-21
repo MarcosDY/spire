@@ -356,6 +356,33 @@ oidc-discovery-provider-scratch-image: Dockerfile
 	docker tag oidc-discovery-provider-scratch:latest oidc-discovery-provider-scratch:latest-local
 
 #############################################################################
+# Docker Images
+#############################################################################
+
+.PHONY: images-windows
+images-windows: spire-server-image-windows spire-agent-image-windows k8s-workload-registrar-image-windows oidc-discovery-provider-image-windows
+
+.PHONY: spire-server-image-windows
+spire-server-image-windows: Dockerfile
+	docker build -f Dockerfile.windows --build-arg goversion=$(go_version_full) --target spire-server-windows -t spire-server-windows .
+	docker tag spire-server-windows:latest spire-server-windows:latest-local
+
+.PHONY: spire-agent-image-windows
+spire-agent-image-windows: Dockerfile
+	docker build -f Dockerfile.windows --build-arg goversion=$(go_version_full) --target spire-agent-windows -t spire-agent-windows .
+	docker tag spire-agent-windows:latest spire-agent-windows:latest-local
+
+.PHONY: k8s-workload-registrar-image-windows
+k8s-workload-registrar-image-windows: Dockerfile
+	docker build -f Dockerfile.windows --build-arg goversion=$(go_version_full) --target k8s-workload-registrar-windows -t k8s-workload-registrar-windows .
+	docker tag k8s-workload-registrar-windows:latest k8s-workload-registrar-windows:latest-local
+
+.PHONY: oidc-discovery-provider-image-windows
+oidc-discovery-provider-image-windows: Dockerfile
+	docker build -f Dockerfile.windows --build-arg goversion=$(go_version_full) --target oidc-discovery-provider-windows -t oidc-discovery-provider-windows .
+	docker tag oidc-discovery-provider-windows:latest oidc-discovery-provider-windows:latest-local
+
+#############################################################################
 # Code cleanliness
 #############################################################################
 
