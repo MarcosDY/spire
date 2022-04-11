@@ -70,6 +70,8 @@ type dockerPluginConfig struct {
 	// ContainerIDCGroupMatchers is a list of patterns used to discover container IDs from cgroup entries.
 	// See the documentation for cgroup.NewContainerIDFinder in the cgroup subpackage for more information.
 	ContainerIDCGroupMatchers []string `hcl:"container_id_cgroup_matchers"`
+	// DockerHost is the host URI used to connect Docker API (default: "npipe:////./pipe/docker_engine").
+	DockerHost string `hcl:"docker_host"`
 }
 
 func (p *Plugin) SetLogger(log hclog.Logger) {
@@ -80,14 +82,12 @@ func (p *Plugin) Attest(ctx context.Context, req *workloadattestorv1.AttestReque
 	p.mtx.RLock()
 	defer p.mtx.RUnlock()
 
-	cgroupList, err := cgroups.GetCgroups(req.Pid, p.fs)
-	if err != nil {
-		return nil, err
-	}
-
-	containerID, err := getContainerIDFromCGroups(p.containerIDFinder, cgroupList)
+	fmt.Printf("----- Starting: %v\n", req.Pid)
+	containerID, err := getContainerID(req.Pid)
+	fmt.Printf("----- containerID : %v\n", containerID)
 	switch {
 	case err != nil:
+		fmt.Printf("----- failed to get ocntianer ID : %v\n", err)
 		return nil, err
 	case containerID == "":
 		// Not a docker workload. Nothing more to do.
@@ -96,6 +96,7 @@ func (p *Plugin) Attest(ctx context.Context, req *workloadattestorv1.AttestReque
 
 	var container types.ContainerJSON
 	err = p.retryer.Retry(ctx, func() error {
+		fmt.Println("Before inspect")
 		container, err = p.docker.ContainerInspect(ctx, containerID)
 		if err != nil {
 			return err
@@ -132,9 +133,14 @@ func (p *Plugin) Configure(ctx context.Context, req *configv1.ConfigureRequest) 
 		return nil, err
 	}
 
+	if err := validateOS(config); err != nil {
+		return nil, err
+	}
+
 	var opts []dockerclient.Opt
-	if config.DockerSocketPath != "" {
-		opts = append(opts, dockerclient.WithHost(config.DockerSocketPath))
+	dockerHost := getDockerHost(config)
+	if dockerHost != "" {
+		opts = append(opts, dockerclient.WithHost(dockerHost))
 	}
 	switch {
 	case config.DockerVersion != "":
