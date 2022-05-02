@@ -160,6 +160,30 @@ jobs:
           name: images
           path: images.tar.gz
 
+  images-windows:
+    name: images (windows)
+    runs-on: windows-2022
+    needs: artifact-windows
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Download artifacts
+        uses: actions/download-artifact@v2
+        with:
+          name: bin-windows
+          path: ./bin/
+      - name: Build images
+        run: make images-windows
+      - name: Export images
+        run: |
+          docker save spire-server-windows:latest-local spire-agent-windows:latest-local oidc-discovery-provider-windows:latest-local -o images-windows.tar
+          gzip images-windows.tar
+      - name: Archive images
+        uses: actions/upload-artifact@v2
+        with:
+          name: images-windows
+          path: images-windows.tar.gz
+
   scratch-images:
     runs-on: ubuntu-18.04
     needs: [cache-deps]
