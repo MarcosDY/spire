@@ -475,41 +475,41 @@ jobs:
         # Create the release using the version number as the title
         run: gh release create "${GITHUB_REF#refs/tags/}" ./artifacts/.zip ./artifacts/*.tar.gz ./artifacts/*.txt --title "${GITHUB_REF#refs/tags/}"
 
-  publish-images:
-    runs-on: ubuntu-18.04
-    needs: [lint, unit-test, unit-test-race-detector, artifacts, integration]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v2
-      - name: Download archived images
-        uses: actions/download-artifact@v2
-        with:
-          name: images
-          path: .
-      - name: Download archived scratch images
-        uses: actions/download-artifact@v2
-        with:
-          name: scratch-images
-          path: .
-      - name: Load archived images
-        run: zcat images.tar.gz | docker load
-      - name: Load archived scratch images
-        run: zcat scratch-images.tar.gz | docker load
-      - name: Log in to GCR
-        uses: docker/login-action@v1
-        with:
-          registry: gcr.io
-          username: _json_key
-          password: ${{ secrets.GCR_JSON_KEY }}
-      # Push the images to GCR using the version number (without the "v" prefix).
-      - name: Push images
-        run: ./.github/workflows/scripts/push-images.sh "${GITHUB_REF#refs/tags/v}"
-      - name: Log in to GHCR
-        uses: docker/login-action@v1
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      # Push the images to GHCR using the version number (without the "v" prefix).
-      - name: Push images
-        run: ./.github/workflows/scripts/push-scratch-images.sh "${GITHUB_REF#refs/tags/v}"
+  # publish-images:
+    # runs-on: ubuntu-18.04
+    # needs: [lint, unit-test, unit-test-race-detector, artifacts, integration]
+    # steps:
+      # - name: Checkout
+        # uses: actions/checkout@v2
+      # - name: Download archived images
+        # uses: actions/download-artifact@v2
+        # with:
+          # name: images
+          # path: .
+      # - name: Download archived scratch images
+        # uses: actions/download-artifact@v2
+        # with:
+          # name: scratch-images
+          # path: .
+      # - name: Load archived images
+        # run: zcat images.tar.gz | docker load
+      # - name: Load archived scratch images
+        # run: zcat scratch-images.tar.gz | docker load
+      # - name: Log in to GCR
+        # uses: docker/login-action@v1
+        # with:
+          # registry: gcr.io
+          # username: _json_key
+          # password: ${{ secrets.GCR_JSON_KEY }}
+      # # Push the images to GCR using the version number (without the "v" prefix).
+      # - name: Push images
+        # run: ./.github/workflows/scripts/push-images.sh "${GITHUB_REF#refs/tags/v}"
+      # - name: Log in to GHCR
+        # uses: docker/login-action@v1
+        # with:
+          # registry: ghcr.io
+          # username: ${{ github.actor }}
+          # password: ${{ secrets.GITHUB_TOKEN }}
+      # # Push the images to GHCR using the version number (without the "v" prefix).
+      # - name: Push images
+        # run: ./.github/workflows/scripts/push-scratch-images.sh "${GITHUB_REF#refs/tags/v}"
