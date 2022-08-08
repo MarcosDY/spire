@@ -70,6 +70,7 @@ func NewClient(config ClientConfig) (Client, error) {
 }
 
 func (c *client) FetchBundle(ctx context.Context) (*bundleutil.Bundle, error) {
+	tt := &Client{}
 	resp, err := c.client.Get(c.c.EndpointURL)
 	if err != nil {
 		return nil, errs.New("failed to fetch bundle: %v", err)
