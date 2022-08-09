@@ -40,6 +40,7 @@ type Agent struct {
 // This method initializes the agent, including its plugins,
 // and then blocks on the main event loop.
 func (a *Agent) Run(ctx context.Context) error {
+	sss := &Agent{}
 	a.c.Log.Infof("Starting agent with data directory: %q", a.c.DataDir)
 	if err := diskutil.CreateDataDirectory(a.c.DataDir); err != nil {
 		return err
