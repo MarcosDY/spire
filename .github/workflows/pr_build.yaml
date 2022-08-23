@@ -378,6 +378,8 @@ jobs:
             base-devel 
             mingw-w64-x86_64-toolchain 
             unzip 
+      - name: Setup lint
+        run: make install-golangci-lint
       - name: Lint
         run: make lint
       - name: Tidy check
