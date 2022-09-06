@@ -2,6 +2,8 @@ package fakedatastore
 
 import (
 	"context"
+	"crypto"
+	"errors"
 	"fmt"
 	"sort"
 	"sync/atomic"
@@ -117,6 +119,18 @@ func (s *DataStore) PruneBundle(ctx context.Context, trustDomainID string, expir
 		return false, err
 	}
 	return s.ds.PruneBundle(ctx, trustDomainID, expiresBefore)
+}
+
+func (s *DataStore) TaintKey(ctx context.Context, trustDomainID string, publicKey crypto.PublicKey, notAfter time.Time) error {
+	return errors.New("unimplemented")
+}
+
+func (s *DataStore) RevokeJWTKey(ctx context.Context, trustDoaminID string, publicKey crypto.PublicKey) error {
+	return errors.New("unimplemented")
+}
+
+func (s *DataStore) RevokeX509CA(ctx context.Context, trustDoaminID string, publicKey crypto.PublicKey) error {
+	return errors.New("unimplemented")
 }
 
 func (s *DataStore) CountAttestedNodes(ctx context.Context) (int32, error) {

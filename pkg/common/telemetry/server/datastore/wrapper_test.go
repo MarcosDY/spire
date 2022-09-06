@@ -2,6 +2,7 @@ package datastore
 
 import (
 	"context"
+	"crypto"
 	"errors"
 	"reflect"
 	"strings"
@@ -387,6 +388,19 @@ func (ds *fakeDataStore) UpdateAttestedNode(context.Context, *common.AttestedNod
 
 func (ds *fakeDataStore) UpdateBundle(context.Context, *common.Bundle, *common.BundleMask) (*common.Bundle, error) {
 	return &common.Bundle{}, ds.err
+}
+
+// Keys
+func (ds *fakeDataStore) TaintKey(ctx context.Context, trustDomainID string, publicKey crypto.PublicKey, notAfter time.Time) error {
+	return ds.err
+}
+
+func (ds *fakeDataStore) RevokeJWTKey(ctx context.Context, trustDoaminID string, publicKey crypto.PublicKey) error {
+	return ds.err
+}
+
+func (ds *fakeDataStore) RevokeX509CA(ctx context.Context, trustDoaminID string, publicKey crypto.PublicKey) error {
+	return ds.err
 }
 
 func (ds *fakeDataStore) UpdateRegistrationEntry(context.Context, *common.RegistrationEntry, *common.RegistrationEntryMask) (*common.RegistrationEntry, error) {
