@@ -3,6 +3,8 @@ package sqlstore
 import (
 	"bytes"
 	"context"
+	"crypto"
+	"crypto/x509"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -20,6 +22,7 @@ import (
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/spiffe/spire-api-sdk/proto/spire/api/types"
 	"github.com/spiffe/spire/pkg/common/bundleutil"
+	"github.com/spiffe/spire/pkg/common/cryptoutil"
 	"github.com/spiffe/spire/pkg/common/protoutil"
 	"github.com/spiffe/spire/pkg/common/telemetry"
 	"github.com/spiffe/spire/pkg/server/datastore"
@@ -196,6 +199,36 @@ func (ds *Plugin) PruneBundle(ctx context.Context, trustDomainID string, expires
 	}
 
 	return changed, nil
+}
+
+// TaintKey add a key to tainted list on bundle
+func (ds *Plugin) TaintKey(ctx context.Context, trustDoaminID string, publicKey crypto.PublicKey, notAfter time.Time) error {
+	if err := ds.withReadModifyWriteTx(ctx, func(tx *gorm.DB) (err error) {
+		return taintKey(tx, trustDoaminID, publicKey, notAfter)
+	}); err != nil {
+		return err
+	}
+	return nil
+}
+
+// RevokeJWTAuthority remove a public key from bundle
+func (ds *Plugin) RevokeJWTKey(ctx context.Context, trustDoaminID string, publicKey crypto.PublicKey) error {
+	if err := ds.withReadModifyWriteTx(ctx, func(tx *gorm.DB) (err error) {
+		return revokeJWTKey(tx, trustDoaminID, publicKey)
+	}); err != nil {
+		return err
+	}
+	return nil
+}
+
+// RevokeX509CA remove a Root CA from bundle
+func (ds *Plugin) RevokeX509CA(ctx context.Context, trustDoaminID string, publicKey crypto.PublicKey) error {
+	if err := ds.withReadModifyWriteTx(ctx, func(tx *gorm.DB) (err error) {
+		return revokeX509CA(tx, trustDoaminID, publicKey)
+	}); err != nil {
+		return err
+	}
+	return nil
 }
 
 // CreateAttestedNode stores the given attested node
@@ -765,6 +798,144 @@ func createBundle(tx *gorm.DB, bundle *common.Bundle) (*common.Bundle, error) {
 	return bundle, nil
 }
 
+func taintKey(tx *gorm.DB, trustDomainID string, publicKey crypto.PublicKey, expiresAt time.Time) error {
+	fmt.Printf("=============== inside taint key: %v", trustDomainID)
+
+	model := &Bundle{}
+	if err := tx.Find(model, "trust_domain = ?", trustDomainID).Error; err != nil {
+		return sqlError.Wrap(err)
+	}
+	fmt.Println("=============== bundle found")
+
+	bundle := &common.Bundle{}
+	err := proto.Unmarshal(model.Data, bundle)
+	if err != nil {
+		return fmt.Errorf("failed to unmarshal bundle: %w", err)
+	}
+
+	fmt.Printf("================== tainted keys len before: %v\n", len(bundle.TaintedKeys))
+
+	for _, taintedKey := range bundle.TaintedKeys {
+		taintedPublicKey, _ := x509.ParsePKIXPublicKey(taintedKey.PkixBytes)
+		if ok, _ := cryptoutil.PublicKeyEqual(publicKey, taintedPublicKey); ok {
+			return errors.New("key is already tained")
+		}
+	}
+
+	pkixBytes, err := x509.MarshalPKIXPublicKey(publicKey)
+	if err != nil {
+		return fmt.Errorf("failed to marshal public key: %w", err)
+	}
+
+	bundle.TaintedKeys = append(bundle.TaintedKeys, &common.TaintedKey{
+		PkixBytes: pkixBytes,
+		NotAfter:  expiresAt.Unix(),
+		TaintedAt: time.Now().Unix(),
+	})
+
+	fmt.Printf("================== tainted keys len: %v\n", len(bundle.TaintedKeys))
+	for i, tt := range bundle.TaintedKeys {
+		fmt.Printf("----------- Tainted %v: %v\n", i, tt.NotAfter)
+	}
+
+	// TODO: apply mask?
+	newModel, err := bundleToModel(bundle)
+	if err != nil {
+		return fmt.Errorf("failed to parse bundle to model: %w", err)
+	}
+
+	model.Data = newModel.Data
+
+	fmt.Printf("================== after parse: %v\n", model.TrustDomain)
+	if err := tx.Save(model).Error; err != nil {
+		fmt.Printf("================== oh no: %v \n", err)
+		return sqlError.Wrap(err)
+	}
+
+	return nil
+}
+
+func revokeX509CA(tx *gorm.DB, trustDomainID string, publicKey crypto.PublicKey) error {
+	fmt.Println("******************** revoke")
+	model := &Bundle{}
+	if err := tx.Find(model, "trust_domain = ?", trustDomainID).Error; err != nil {
+		return sqlError.Wrap(err)
+	}
+	fmt.Println("******************** found")
+
+	bundle := &common.Bundle{}
+	err := proto.Unmarshal(model.Data, bundle)
+	if err != nil {
+		return fmt.Errorf("failed to unmarshal bundle: %w", err)
+	}
+
+	found := false
+	var rootCAs []*common.Certificate
+	for _, ca := range bundle.RootCas {
+		cert, err := x509.ParseCertificate(ca.DerBytes)
+		if err != nil {
+			return fmt.Errorf("failed to parse certificate: %w", err)
+		}
+
+		if ok, _ := cryptoutil.PublicKeyEqual(cert.PublicKey, publicKey); ok {
+			found = true
+			fmt.Println("******************** found")
+			continue
+		}
+		rootCAs = append(rootCAs, ca)
+	}
+	bundle.RootCas = rootCAs
+
+	if found {
+		if _, err := updateBundle(tx, bundle, nil); err != nil {
+			return fmt.Errorf("failed to update bundle: %w", err)
+		}
+
+		return nil
+	}
+
+	return errors.New("no root CA found for given key")
+}
+
+func revokeJWTKey(tx *gorm.DB, trustDomainID string, publicKey crypto.PublicKey) error {
+	model := &Bundle{}
+	if err := tx.Find(model, "trust_domain = ?", trustDomainID).Error; err != nil {
+		return sqlError.Wrap(err)
+	}
+
+	bundle := &common.Bundle{}
+	err := proto.Unmarshal(model.Data, bundle)
+	if err != nil {
+		return fmt.Errorf("failed to unmarshal bundle: %w", err)
+	}
+
+	found := false
+	var publicKeys []*common.PublicKey
+	for _, key := range bundle.JwtSigningKeys {
+		pKey, err := x509.ParsePKIXPublicKey(key.PkixBytes)
+		if err != nil {
+			return fmt.Errorf("failed to parse public key: %w", err)
+		}
+
+		if ok, _ := cryptoutil.PublicKeyEqual(pKey, publicKey); ok {
+			found = true
+			continue
+		}
+		publicKeys = append(publicKeys, key)
+	}
+	bundle.JwtSigningKeys = publicKeys
+
+	if found {
+		if _, err := updateBundle(tx, bundle, nil); err != nil {
+			return fmt.Errorf("failed to update bundle: %w", err)
+		}
+
+		return nil
+	}
+
+	return errors.New("no JWT Signing key found for given key")
+}
+
 func updateBundle(tx *gorm.DB, newBundle *common.Bundle, mask *common.BundleMask) (*common.Bundle, error) {
 	newModel, err := bundleToModel(newBundle)
 	if err != nil {
@@ -810,6 +981,10 @@ func applyBundleMask(model *Bundle, newBundle *common.Bundle, inputMask *common.
 		bundle.JwtSigningKeys = newBundle.JwtSigningKeys
 	}
 
+	if inputMask.TaintedKeys {
+		bundle.TaintedKeys = newBundle.TaintedKeys
+	}
+
 	newModel, err := bundleToModel(bundle)
 	if err != nil {
 		return nil, nil, err
@@ -850,6 +1025,7 @@ func appendBundle(tx *gorm.DB, b *common.Bundle) (*common.Bundle, error) {
 		return nil, err
 	}
 
+	fmt.Printf("================ APPEND BUNDLE: %v\n", newModel.TrustDomain)
 	// fetch existing or create new
 	model := &Bundle{}
 	result := tx.Find(model, "trust_domain = ?", newModel.TrustDomain)
@@ -929,6 +1105,7 @@ func deleteBundle(tx *gorm.DB, trustDomainID string, mode datastore.DeleteMode) 
 // fetchBundle returns the bundle matching the specified Trust Domain.
 func fetchBundle(tx *gorm.DB, trustDomainID string) (*common.Bundle, error) {
 	model := new(Bundle)
+	fmt.Printf("============= fetch bundle: %v\n", trustDomainID)
 	err := tx.Find(model, "trust_domain = ?", trustDomainID).Error
 	switch {
 	case errors.Is(err, gorm.ErrRecordNotFound):
@@ -940,6 +1117,10 @@ func fetchBundle(tx *gorm.DB, trustDomainID string) (*common.Bundle, error) {
 	bundle, err := modelToBundle(model)
 	if err != nil {
 		return nil, err
+	}
+	fmt.Printf("--------------------- BUNDLE: %+v\n", bundle)
+	for i, r := range bundle.TaintedKeys {
+		fmt.Printf("--------------------- TaintedKEy %v: %v\n", i, r.TaintedAt)
 	}
 
 	return bundle, nil

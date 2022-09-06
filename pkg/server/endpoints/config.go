@@ -18,6 +18,7 @@ import (
 	debugv1 "github.com/spiffe/spire/pkg/server/api/debug/v1"
 	entryv1 "github.com/spiffe/spire/pkg/server/api/entry/v1"
 	healthv1 "github.com/spiffe/spire/pkg/server/api/health/v1"
+	localauthorityv1 "github.com/spiffe/spire/pkg/server/api/localauthority/v1"
 	svidv1 "github.com/spiffe/spire/pkg/server/api/svid/v1"
 	trustdomainv1 "github.com/spiffe/spire/pkg/server/api/trustdomain/v1"
 	"github.com/spiffe/spire/pkg/server/authpolicy"
@@ -162,6 +163,11 @@ func (c *Config) makeAPIServers(entryFetcher api.AuthorizedEntryFetcher) APIServ
 			TrustDomain:     c.TrustDomain,
 			DataStore:       ds,
 			BundleRefresher: c.BundleManager,
+		}),
+		LocalAuthorityServer: localauthorityv1.New(localauthorityv1.Config{
+			TrustDomain: c.TrustDomain,
+			DataStore:   ds,
+			Manager:     c.Manager,
 		}),
 	}
 }

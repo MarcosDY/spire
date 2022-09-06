@@ -61,4 +61,22 @@ func StartUpdateBundleCall(m telemetry.Metrics) *telemetry.CallCounter {
 	return telemetry.StartCall(m, telemetry.Datastore, telemetry.Bundle, telemetry.Update)
 }
 
+// StartTaintKeyCall return metric
+// for server's datastore, on tainting a bundle key.
+func StartTaintKeyCall(m telemetry.Metrics) *telemetry.CallCounter {
+	return telemetry.StartCall(m, telemetry.Datastore, telemetry.Bundle, telemetry.Taint)
+}
+
+// StartRevokeX509CACall return metric
+// for server's datastore, on revoking a X.509 CA from bundle.
+func StartRevokeX509CACall(m telemetry.Metrics) *telemetry.CallCounter {
+	return telemetry.StartCall(m, telemetry.Datastore, telemetry.Bundle, telemetry.X509, telemetry.Revoke)
+}
+
+// StartRevokeJWTKeyCall return metric
+// for server's datastore, on revoking a JWT Signing Key from bundle.
+func StartRevokeJWTKeyCall(m telemetry.Metrics) *telemetry.CallCounter {
+	return telemetry.StartCall(m, telemetry.Datastore, telemetry.Bundle, telemetry.JWT, telemetry.Revoke)
+}
+
 // End Call Counters

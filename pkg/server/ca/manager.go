@@ -53,6 +53,21 @@ const (
 	publishJWKTimeout = 5 * time.Second
 )
 
+type AutorityUpdater interface {
+	// JWT
+	GetJWTAuthorities() []*KeyState
+	PrepareJWTAuthority(ctx context.Context) (*KeyState, error)
+	ActivateJWTAuthority() (*KeyState, error)
+	TaintJWTAuthority(ctx context.Context) (*KeyState, error)
+	RevokeJWTAuthority(ctx context.Context) (*KeyState, error)
+	// X509
+	GetX509Authorities() []*KeyState
+	PrepareX509Authority(ctx context.Context) (*KeyState, error)
+	ActivateX509Authority() (*KeyState, error)
+	TaintX509Authority(ctx context.Context) (*KeyState, error)
+	RevokeX509Authority(ctx context.Context) (*KeyState, error)
+}
+
 type ManagedCA interface {
 	SetX509CA(*X509CA)
 	SetJWTKey(*JWTKey)
@@ -161,6 +176,193 @@ func (m *Manager) Run(ctx context.Context) error {
 	return err
 }
 
+type KeyStatus int
+
+const (
+	KeyStatusUnset KeyStatus = iota
+	Active
+	Prepared
+	Old
+)
+
+type KeyState struct {
+	Status    KeyStatus
+	PublicKey crypto.PublicKey
+}
+
+func (m *Manager) GetJWTAuthorities() []*KeyState {
+	var authorities []*KeyState
+
+	if m.currentJWTKey.publicKey != nil {
+		authorities = append(authorities, &KeyState{
+			PublicKey: m.currentJWTKey.publicKey,
+			Status:    Active,
+		})
+	}
+
+	if m.nextJWTKey.publicKey != nil {
+		status := Prepared
+		if m.nextJWTKey.IsEmpty() {
+			status = Old
+		}
+		authorities = append(authorities, &KeyState{
+			PublicKey: m.nextJWTKey.publicKey,
+			Status:    status,
+		})
+	}
+
+	return authorities
+}
+
+func (m *Manager) PrepareJWTAuthority(ctx context.Context) (*KeyState, error) {
+	if err := m.prepareJWTKey(ctx, m.nextJWTKey); err != nil {
+		return nil, err
+	}
+
+	return &KeyState{
+		PublicKey: m.nextJWTKey.publicKey,
+		Status:    Prepared,
+	}, nil
+}
+
+func (m *Manager) ActivateJWTAuthority() (*KeyState, error) {
+	if m.nextJWTKey.IsEmpty() {
+		return nil, errors.New("no prepared authority found")
+	}
+
+	m.currentJWTKey, m.nextJWTKey = m.nextJWTKey, m.currentJWTKey
+	m.nextJWTKey.Reset()
+	m.activateJWTKey()
+
+	return &KeyState{
+		Status:    Active,
+		PublicKey: m.currentJWTKey.publicKey,
+	}, nil
+}
+
+func (m *Manager) TaintJWTAuthority(ctx context.Context) (*KeyState, error) {
+	nextJWTKey := m.nextJWTKey
+	if !nextJWTKey.IsEmpty() {
+		return nil, errors.New("unable to taint a prepared key")
+	}
+
+	ds := m.c.Catalog.GetDataStore()
+	if err := ds.TaintKey(ctx, m.c.TrustDomain.IDString(), nextJWTKey.publicKey, nextJWTKey.notAfter); err != nil {
+		return nil, fmt.Errorf("failed to persist tainted key: %w", err)
+	}
+
+	return &KeyState{
+		Status:    Old,
+		PublicKey: nextJWTKey.publicKey,
+	}, nil
+}
+
+func (m *Manager) RevokeJWTAuthority(ctx context.Context) (*KeyState, error) {
+	nextJWTKey := m.nextJWTKey
+	if !nextJWTKey.IsEmpty() {
+		return nil, errors.New("unable to revoke a prepared key")
+	}
+
+	ds := m.c.Catalog.GetDataStore()
+	if err := ds.RevokeJWTKey(ctx, m.c.TrustDomain.IDString(), nextJWTKey.publicKey); err != nil {
+		return nil, fmt.Errorf("failed to revoke JWT authority: %w", err)
+	}
+
+	return &KeyState{
+		Status:    Old,
+		PublicKey: nextJWTKey.publicKey,
+	}, nil
+}
+
+func (m *Manager) GetX509Authorities() []*KeyState {
+	var authorities []*KeyState
+
+	if m.currentX509CA.publicKey != nil {
+		authorities = append(authorities, &KeyState{
+			PublicKey: m.currentX509CA.publicKey,
+			Status:    Active,
+		})
+	}
+
+	if m.nextX509CA.publicKey != nil {
+		status := Prepared
+		if m.nextX509CA.IsEmpty() {
+			status = Old
+		}
+		authorities = append(authorities, &KeyState{
+			PublicKey: m.nextX509CA.publicKey,
+			Status:    status,
+		})
+	}
+
+	return authorities
+}
+
+func (m *Manager) PrepareX509Authority(ctx context.Context) (*KeyState, error) {
+	if err := m.prepareX509CA(ctx, m.nextX509CA); err != nil {
+		return nil, err
+	}
+
+	return &KeyState{
+		PublicKey: m.nextX509CA.publicKey,
+		Status:    Prepared,
+	}, nil
+}
+
+func (m *Manager) ActivateX509Authority() (*KeyState, error) {
+	if m.nextX509CA.IsEmpty() {
+		return nil, errors.New("no prepared authority found")
+	}
+
+	m.currentX509CA, m.nextX509CA = m.nextX509CA, m.currentX509CA
+	m.nextX509CA.Reset()
+	m.activateX509CA()
+
+	return &KeyState{
+		Status:    Active,
+		PublicKey: m.currentX509CA.publicKey,
+	}, nil
+}
+
+func (m *Manager) TaintX509Authority(ctx context.Context) (*KeyState, error) {
+	nextX509CA := m.nextX509CA
+	if !nextX509CA.IsEmpty() {
+		return nil, errors.New("unable to taint a prepared key")
+	}
+
+	m.c.Log.Debugf("TD: %q\n", m.c.TrustDomain.String())
+	m.c.Log.Debugf("newxt: %v\n", nextX509CA)
+	m.c.Log.Debugf("newxt: %v\n", nextX509CA.publicKey != nil)
+	m.c.Log.Debugf("X509CA: %v\n", nextX509CA.x509CA)
+
+	ds := m.c.Catalog.GetDataStore()
+	if err := ds.TaintKey(ctx, m.c.TrustDomain.IDString(), nextX509CA.publicKey, nextX509CA.notAfter); err != nil {
+		return nil, fmt.Errorf("failed to persist tainted key: %w", err)
+	}
+
+	return &KeyState{
+		Status:    Old,
+		PublicKey: nextX509CA.publicKey,
+	}, nil
+}
+
+func (m *Manager) RevokeX509Authority(ctx context.Context) (*KeyState, error) {
+	nextX509CA := m.nextX509CA
+	if !nextX509CA.IsEmpty() {
+		return nil, errors.New("unable to revoke a prepared key")
+	}
+
+	ds := m.c.Catalog.GetDataStore()
+	if err := ds.RevokeX509CA(ctx, m.c.TrustDomain.IDString(), nextX509CA.publicKey); err != nil {
+		return nil, fmt.Errorf("failed to revoke X.509 authority: %w", err)
+	}
+
+	return &KeyState{
+		Status:    Old,
+		PublicKey: nextX509CA.publicKey,
+	}, nil
+}
+
 func (m *Manager) rotateEvery(ctx context.Context, interval time.Duration) error {
 	ticker := m.c.Clock.Ticker(interval)
 	defer ticker.Stop()
@@ -264,6 +466,8 @@ func (m *Manager) prepareX509CA(ctx context.Context, slot *x509CASlot) (err erro
 
 	slot.issuedAt = now
 	slot.x509CA = x509CA
+	slot.publicKey = signer.Public()
+	slot.notAfter = x509CA.Certificate.NotAfter
 
 	if err := m.journal.AppendX509CA(slot.id, slot.issuedAt, slot.x509CA); err != nil {
 		log.WithError(err).Error("Unable to append X509 CA to journal")
@@ -358,6 +562,8 @@ func (m *Manager) prepareJWTKey(ctx context.Context, slot *jwtKeySlot) (err erro
 
 	slot.issuedAt = now
 	slot.jwtKey = jwtKey
+	slot.notAfter = slot.jwtKey.NotAfter
+	slot.publicKey = signer.Public()
 
 	if err := m.journal.AppendJWTKey(slot.id, slot.issuedAt, slot.jwtKey); err != nil {
 		log.WithError(err).Error("Unable to append JWT key to journal")
@@ -941,9 +1147,11 @@ func jwtKeyKmKeyID(id string) string {
 }
 
 type x509CASlot struct {
-	id       string
-	issuedAt time.Time
-	x509CA   *X509CA
+	id        string
+	issuedAt  time.Time
+	publicKey crypto.PublicKey
+	notAfter  time.Time
+	x509CA    *X509CA
 }
 
 func newX509CASlot(id string) *x509CASlot {
@@ -973,9 +1181,11 @@ func (s *x509CASlot) ShouldActivateNext(now time.Time) bool {
 }
 
 type jwtKeySlot struct {
-	id       string
-	issuedAt time.Time
-	jwtKey   *JWTKey
+	id        string
+	issuedAt  time.Time
+	publicKey crypto.PublicKey
+	notAfter  time.Time
+	jwtKey    *JWTKey
 }
 
 func newJWTKeySlot(id string) *jwtKeySlot {

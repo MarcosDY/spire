@@ -302,6 +302,19 @@ pruneRootCA:
 		newBundle.JwtSigningKeys = append(newBundle.JwtSigningKeys, jwtSigningKey)
 	}
 
+	log.WithField(telemetry.Count, len(bundle.TaintedKeys)).Debug("Tainted keys")
+	for _, tainedKey := range bundle.TaintedKeys {
+		notAfter := time.Unix(tainedKey.NotAfter, 0)
+		if !notAfter.After(expiration) {
+			log.WithFields(logrus.Fields{
+				telemetry.Expiration: notAfter,
+			}).Info("Pruning tained key due to expiration")
+			changed = true
+			continue
+		}
+		newBundle.TaintedKeys = append(newBundle.TaintedKeys, tainedKey)
+	}
+
 	if len(newBundle.RootCas) == 0 {
 		log.Warn("Pruning halted; all known CA certificates have expired")
 		return nil, false, errors.New("would prune all certificates")

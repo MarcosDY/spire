@@ -132,6 +132,18 @@ message PublicKey {
     int64 not_after = 3;
 }
 
+/** TainedKey represents a key that was marked as tainted */
+message TaintedKey {
+    /** PKIX encoded key data */
+    bytes pkix_bytes = 1;
+
+    /** key tainted at (seconds since unix epoch) */
+    int64 tainted_at = 2;
+
+    /** this key can be removed after (seconds since unix epoch) */
+    int64 not_after = 3;
+}
+
 message Bundle {
     /** the SPIFFE ID of the trust domain the bundle belongs to */
     string trust_domain_id = 1;
@@ -145,12 +157,16 @@ message Bundle {
     /** refresh hint is a hint, in seconds, on how often a bundle consumer
      * should poll for bundle updates */
     int64 refresh_hint = 4;
+
+    /** list of tainted keys */ 
+    repeated TaintedKey tainted_keys = 5;
 }
 
 message BundleMask {
     bool root_cas = 1;
     bool jwt_signing_keys = 2;
     bool refresh_hint = 3;
+    bool tainted_keys = 4;
 }
 
 message AttestedNodeMask{

@@ -1,6 +1,7 @@
 package dscache
 
 import (
+	"crypto"
 	"sync"
 	"time"
 
@@ -101,6 +102,27 @@ func (ds *DatastoreCache) SetBundle(ctx context.Context, b *common.Bundle) (bund
 		ds.invalidateBundleEntry(b.TrustDomainId)
 	}
 	return
+}
+
+func (ds *DatastoreCache) TaintKey(ctx context.Context, trustDomainID string, publicKey crypto.PublicKey, notAfter time.Time) error {
+	if err := ds.DataStore.TaintKey(ctx, trustDomainID, publicKey, notAfter); err == nil {
+		ds.invalidateBundleEntry(trustDomainID)
+	}
+	return nil
+}
+
+func (ds *DatastoreCache) RevokeX509CA(ctx context.Context, trustDomainID string, publicKey crypto.PublicKey) error {
+	if err := ds.DataStore.RevokeX509CA(ctx, trustDomainID, publicKey); err == nil {
+		ds.invalidateBundleEntry(trustDomainID)
+	}
+	return nil
+}
+
+func (ds *DatastoreCache) RevokeJWTKey(ctx context.Context, trustDomainID string, publicKey crypto.PublicKey) error {
+	if err := ds.DataStore.RevokeJWTKey(ctx, trustDomainID, publicKey); err == nil {
+		ds.invalidateBundleEntry(trustDomainID)
+	}
+	return nil
 }
 
 func (ds *DatastoreCache) invalidateBundleEntry(trustDomainID string) {

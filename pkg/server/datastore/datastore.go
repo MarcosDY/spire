@@ -2,6 +2,7 @@ package datastore
 
 import (
 	"context"
+	"crypto"
 	"net/url"
 	"time"
 
@@ -22,6 +23,11 @@ type DataStore interface {
 	PruneBundle(ctx context.Context, trustDomainID string, expiresBefore time.Time) (changed bool, err error)
 	SetBundle(context.Context, *common.Bundle) (*common.Bundle, error)
 	UpdateBundle(context.Context, *common.Bundle, *common.BundleMask) (*common.Bundle, error)
+
+	// Keys
+	TaintKey(ctx context.Context, trustDomainID string, publicKey crypto.PublicKey, notAfter time.Time) error
+	RevokeJWTKey(ctx context.Context, trustDoaminID string, publicKey crypto.PublicKey) error
+	RevokeX509CA(ctx context.Context, trustDoaminID string, publicKey crypto.PublicKey) error
 
 	// Entries
 	CountRegistrationEntries(context.Context) (int32, error)

@@ -14,6 +14,7 @@ import (
 	"github.com/spiffe/spire/cmd/spire-server/cli/token"
 	"github.com/spiffe/spire/cmd/spire-server/cli/validate"
 	"github.com/spiffe/spire/cmd/spire-server/cli/x509"
+	"github.com/spiffe/spire/cmd/spire-server/cli/x509authority"
 	"github.com/spiffe/spire/pkg/common/log"
 	"github.com/spiffe/spire/pkg/common/version"
 )
@@ -109,6 +110,21 @@ func (cc *CLI) Run(args []string) int {
 		},
 		"validate": func() (cli.Command, error) {
 			return validate.NewValidateCommand(), nil
+		},
+		"localauthority x509 get": func() (cli.Command, error) {
+			return x509authority.NewGetCommand(), nil
+		},
+		"localauthority x509 activate": func() (cli.Command, error) {
+			return x509authority.NewActivateCommand(), nil
+		},
+		"localauthority x509 prepare": func() (cli.Command, error) {
+			return x509authority.NewPrepareCommand(), nil
+		},
+		"localauthority x509 taint": func() (cli.Command, error) {
+			return x509authority.NewTaintCommand(), nil
+		},
+		"localauthority x509 revoke": func() (cli.Command, error) {
+			return x509authority.NewRevokeCommand(), nil
 		},
 	}
 

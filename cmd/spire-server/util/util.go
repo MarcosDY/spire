@@ -14,6 +14,7 @@ import (
 	agentv1 "github.com/spiffe/spire-api-sdk/proto/spire/api/server/agent/v1"
 	bundlev1 "github.com/spiffe/spire-api-sdk/proto/spire/api/server/bundle/v1"
 	entryv1 "github.com/spiffe/spire-api-sdk/proto/spire/api/server/entry/v1"
+	localauthorityv1 "github.com/spiffe/spire-api-sdk/proto/spire/api/server/localauthority/v1"
 	svidv1 "github.com/spiffe/spire-api-sdk/proto/spire/api/server/svid/v1"
 	trustdomainv1 "github.com/spiffe/spire-api-sdk/proto/spire/api/server/trustdomain/v1"
 	api_types "github.com/spiffe/spire-api-sdk/proto/spire/api/types"
@@ -48,6 +49,7 @@ type ServerClient interface {
 	NewSVIDClient() svidv1.SVIDClient
 	NewTrustDomainClient() trustdomainv1.TrustDomainClient
 	NewHealthClient() grpc_health_v1.HealthClient
+	NewLocalAuthorityClient() localauthorityv1.LocalAuthorityClient
 }
 
 func NewServerClient(addr net.Addr) (ServerClient, error) {
@@ -88,6 +90,10 @@ func (c *serverClient) NewTrustDomainClient() trustdomainv1.TrustDomainClient {
 
 func (c *serverClient) NewHealthClient() grpc_health_v1.HealthClient {
 	return grpc_health_v1.NewHealthClient(c.conn)
+}
+
+func (c *serverClient) NewLocalAuthorityClient() localauthorityv1.LocalAuthorityClient {
+	return localauthorityv1.NewLocalAuthorityClient(c.conn)
 }
 
 // Pluralizer concatenates `singular` to `msg` when `val` is one, and
