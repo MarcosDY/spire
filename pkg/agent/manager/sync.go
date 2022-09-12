@@ -88,6 +88,8 @@ func (m *manager) updateCache(ctx context.Context, update *cache.UpdateEntries, 
 		case existingEntry != nil && existingEntry.RevisionNumber != newEntry.RevisionNumber:
 			// Registration entry has been updated
 			outdated++
+		// TODO: we must add a way to notify agent that it needs to rotate SVIDs since intermediate
+		// certificate key is tainted
 		default:
 			// SVID is good
 			return false

@@ -144,6 +144,8 @@ func (r *rotator) rotateSVIDIfNeeded(ctx context.Context) (err error) {
 		return fmt.Errorf("unexpected value type: %T", r.state.Value())
 	}
 
+	// TODO: we must add a way to make SVID rotate in case a key associated with actual intermediate
+	// is tainted
 	if rotationutil.ShouldRotateX509(r.clk.Now(), state.SVID[0]) {
 		if state.Reattestable && fflag.IsSet(fflag.FlagReattestToRenew) {
 			err = r.reattest(ctx)
