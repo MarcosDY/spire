@@ -63,11 +63,11 @@ require (
 	github.com/uber-go/tally/v4 v4.1.2
 	github.com/zeebo/errs v1.3.0
 	golang.org/x/crypto v0.0.0-20220525230936-793ad666bf5e
-	golang.org/x/net v0.0.0-20220728211354-c7608f3a8462
+	golang.org/x/net v0.0.0-20220909164309-bea034e7d591
 	golang.org/x/sync v0.0.0-20220601150217-0de741cfad7f
 	golang.org/x/sys v0.0.0-20220731174439-a90be440212d
 	golang.org/x/time v0.0.0-20220722155302-e5dcc9cfc0b9
-	google.golang.org/api v0.94.0
+	google.golang.org/api v0.96.0
 	google.golang.org/genproto v0.0.0-20220810155839-1856144b1d9c
 	google.golang.org/grpc v1.49.0
 	google.golang.org/protobuf v1.28.1
