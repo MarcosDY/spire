@@ -21,7 +21,7 @@ jobs:
       - name: Setup dep cache
         uses: actions/cache@v3
         with:
-          path: $GOPATH/pkg/mod
+          path: ~/go/pkg/mod
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
       - name: Pull go deps
         run: go mod download
@@ -40,7 +40,7 @@ jobs:
       - name: Load cached deps
         uses: actions/cache@v3
         with:
-          path: $GOPATH/pkg/mod
+          path: ~/go/pkg/mod
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
       - name: Setup build tool cache
         uses: actions/cache@v3
@@ -74,7 +74,7 @@ jobs:
       - name: Load cached deps
         uses: actions/cache@v3
         with:
-          path: $GOPATH/pkg/mod
+          path: ~/go/pkg/mod
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
       - name: Run unit tests
         run: ./.github/workflows/scripts/run_unit_tests.sh
@@ -93,7 +93,7 @@ jobs:
       - name: Load cached deps
         uses: actions/cache@v3
         with:
-          path: $GOPATH/pkg/mod
+          path: ~/go/pkg/mod
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
       - name: Run unit tests
         run: ./.github/workflows/scripts/run_unit_tests_under_race_detector.sh
@@ -112,7 +112,7 @@ jobs:
       - name: Load cached deps
         uses: actions/cache@v3
         with:
-          path: ~$GOPATH/pkg/mod
+          path: ~/go/pkg/mod
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
       - name: Load cached build tools
         uses: actions/cache@v3
@@ -143,7 +143,7 @@ jobs:
       - name: Load cached deps
         uses: actions/cache@v3
         with:
-          path: $GOPATH/pkg/mod
+          path: ~/go/pkg/mod
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
       - name: Load cached build tools
         uses: actions/cache@v3
@@ -199,7 +199,7 @@ jobs:
       - name: Load cached deps
         uses: actions/cache@v3
         with:
-          path: $GOPATH/pkg/mod
+          path: ~/go/pkg/mod
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
       - name: Load cached build tools
         uses: actions/cache@v3
@@ -243,7 +243,7 @@ jobs:
       - name: Load cached deps
         uses: actions/cache@v3
         with:
-          path: $GOPATH/pkg/mod
+          path: ~/go/pkg/mod
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
       - name: Load cached build tools
         uses: actions/cache@v3
