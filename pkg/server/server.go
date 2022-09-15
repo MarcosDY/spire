@@ -69,6 +69,7 @@ func (s *Server) run(ctx context.Context) (err error) {
 	}).Info("Configured")
 
 	// TODO: Add a single line to run a test
+	// ANOTHER
 	// create the data directory if needed
 	if err := diskutil.CreateDataDirectory(s.config.DataDir); err != nil {
 		return err
