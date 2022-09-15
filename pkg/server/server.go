@@ -68,6 +68,7 @@ func (s *Server) run(ctx context.Context) (err error) {
 		telemetry.DataDir:  s.config.DataDir,
 	}).Info("Configured")
 
+	// TODO: Add a single line to run a test
 	// create the data directory if needed
 	if err := diskutil.CreateDataDirectory(s.config.DataDir); err != nil {
 		return err
