@@ -434,7 +434,7 @@ jobs:
       - name: Load cached deps
         uses: actions/cache@v3
         with:
-          path:${{ env.GOMODCACHE }} 
+          path: ${{ env.GOMODCACHE }} 
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
       - name: Load cached build tools
         uses: actions/cache@v3
