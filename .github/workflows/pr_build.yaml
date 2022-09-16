@@ -379,7 +379,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-tools-
       - name: DIR
-        run: tree .build/
+        run: dir -R .build
       - name: Lint
         run: make lint
       - name: Tidy check
