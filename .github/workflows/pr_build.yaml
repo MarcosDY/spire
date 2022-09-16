@@ -380,8 +380,12 @@ jobs:
             ${{ runner.os }}-tools-
       - name: DIR
         run: dir -R .build
+      - name: golangci-dir
+        run: dir -R .build/windows-x86_64/golangci_lint
       - name: Lint
         run: make lint
+      - name: DIR_AFTER
+        run: dir -R .build
       - name: Tidy check
         run: make tidy-check
       - name: Generate check

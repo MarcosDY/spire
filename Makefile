@@ -423,6 +423,7 @@ endif
 lint: lint-code
 
 lint-code: $(golangci_lint_bin)
+        @echo "golangci_lint_cache: $(golangci_lint_cache)"
 	$(E)PATH="$(go_bin_dir):$(PATH)" GOLANGCI_LINT_CACHE="$(golangci_lint_cache)" $(golangci_lint_bin) run ./...
 
 
