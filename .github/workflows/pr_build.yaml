@@ -356,6 +356,16 @@ jobs:
         uses: actions/setup-go@v3
         with:
           go-version: ${{ env.GO_VERSION }}
+      - name: Install msys2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            git
+            base-devel 
+            mingw-w64-x86_64-toolchain 
+            unzip 
       - name: Load cached deps
         uses: actions/cache@v3
         with:
@@ -368,17 +378,9 @@ jobs:
           key: ${{ runner.os }}-tools-${{ github.sha }}
           restore-keys: |
             ${{ runner.os }}-tools-
-      - name: Install msys2
-        uses: msys2/setup-msys2@v2
-        with:
-          msystem: MINGW64
-          update: true
-          install: >-
-            git
-            base-devel 
-            mingw-w64-x86_64-toolchain 
-            unzip 
       - name: DIR
+        run: dir ~/
+      - name: DIR2
         run: dir ~/go/pkg/mod
       - name: Lint
         run: make lint
