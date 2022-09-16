@@ -371,6 +371,13 @@ jobs:
         with:
           path: ~/go/pkg/mod
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+      - name: Setup golangci-lint cache
+        uses: actions/cache@v3
+        with:
+          path: .build/windows-x86_64/golangci_lint
+          key: ${{ runner.os }}-golangci-v1.48.0
+          restore-keys: |
+            ${{ runner.os }}-golangci
       - name: Setup build tool cache
         uses: actions/cache@v3
         with:
@@ -378,10 +385,10 @@ jobs:
           key: ${{ runner.os }}-tools-${{ github.sha }}
           restore-keys: |
             ${{ runner.os }}-tools-
-      - name: DIR
-        run: dir -R .build
-      - name: golangci-dir
-        run: dir -R .build/windows-x86_64/golangci_lint
+      # - name: DIR
+        # run: dir -R .build
+      # - name: golangci-dir
+        # run: dir -R .build/windows-x86_64/golangci_lint
       - name: Lint
         run: make lint
       - name: DIR_AFTER
