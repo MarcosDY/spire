@@ -293,7 +293,7 @@ jobs:
       - name: Load cached deps
         uses: actions/cache@v3
         with:
-          path: ~\go\pkg\mod
+          path: ~/go/pkg/mod
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
       - name: Load cached build tools
         uses: actions/cache@v3
@@ -337,7 +337,7 @@ jobs:
       - name: Setup dep cache
         uses: actions/cache@v3
         with:
-          path: ~\go\pkg\mod
+          path: ~/go/pkg/mod
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
       - name: Pull go deps
         run: go mod download
@@ -359,7 +359,7 @@ jobs:
       - name: Load cached deps
         uses: actions/cache@v3
         with:
-          path: ~\go\pkg\mod
+          path: ~/go/pkg/mod
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
       - name: Setup build tool cache
         uses: actions/cache@v3
@@ -379,7 +379,7 @@ jobs:
             mingw-w64-x86_64-toolchain 
             unzip 
       - name: DIR
-        run: dir ~\go\pkg\mod
+        run: dir ~/go/pkg/mod
       - name: Lint
         run: make lint
       - name: Tidy check
@@ -404,7 +404,7 @@ jobs:
       - name: Load cached deps
         uses: actions/cache@v3
         with:
-          path: ~\go\pkg\mod
+          path: ~/go/pkg/mod
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
       - name: Install msys2
         uses: msys2/setup-msys2@v2
@@ -436,7 +436,7 @@ jobs:
       - name: Load cached deps
         uses: actions/cache@v3
         with:
-          path: ~\go\pkg\mod
+          path: ~/go/pkg/mod
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
       - name: Load cached build tools
         uses: actions/cache@v3
