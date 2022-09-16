@@ -25,6 +25,7 @@ func newCreateCommand(env *common_cli.Env) cli.Command {
 }
 
 type createCommand struct {
+
 	// Path to an optional data file. If set, other
 	// opts will be ignored.
 	path string
@@ -89,6 +90,7 @@ func (c *createCommand) AppendFlags(f *flag.FlagSet) {
 
 func (c *createCommand) Run(ctx context.Context, env *common_cli.Env, serverClient util.ServerClient) error {
 	if err := c.validate(); err != nil {
+
 		return err
 	}
 
@@ -102,6 +104,8 @@ func (c *createCommand) Run(ctx context.Context, env *common_cli.Env, serverClie
 	if err != nil {
 		return err
 	}
+
+	cc := c.admin
 
 	succeeded, failed, err := createEntries(ctx, serverClient.NewEntryClient(), entries)
 	if err != nil {
