@@ -35,6 +35,7 @@ import (
 )
 
 const (
+	// TODO: what a good comment
 	invalidTrustDomainAttestedNode = "An attested node with trust domain '%v' has been detected, " +
 		"which does not match the configured trust domain of '%v'. Agents may need to be reconfigured to use new trust domain"
 	invalidTrustDomainRegistrationEntry = "a registration entry with trust domain '%v' has been detected, " +
