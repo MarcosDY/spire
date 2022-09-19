@@ -2,7 +2,7 @@ module github.com/spiffe/spire
 
 go 1.19
 
-replace github.com/spiffe/spire-api-sdk => github.com/MarcosDY/spire-api-sdk v1.0.0-pre.0.20220824173043-d314bebb2f01
+replace github.com/spiffe/spire-api-sdk => github.com/MarcosDY/spire-api-sdk v1.0.0-pre.0.20220915160346-7ea4fb786f6d
 
 require (
 	cloud.google.com/go/secretmanager v1.8.0

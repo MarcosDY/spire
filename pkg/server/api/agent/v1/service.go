@@ -496,6 +496,24 @@ func (s *Service) CreateJoinToken(ctx context.Context, req *agentv1.CreateJoinTo
 	return &types.JoinToken{Value: req.Token, ExpiresAt: expiry.Unix()}, nil
 }
 
+func (s *Service) PushStatus(ctx context.Context, req *agentv1.PushStatusRequest) (*agentv1.PushStatusResponse, error) {
+	log := rpccontext.Logger(ctx)
+	log.WithField("serial", req.AuthoritySerial).Debug("request recieved")
+
+	tdBundle, err := s.ds.FetchBundle(ctx, s.td.IDString())
+	if err != nil {
+		return nil, api.MakeErr(log, codes.Internal, "failed to get trustdomain bundle", err)
+	}
+
+	resp := &agentv1.PushStatusResponse{}
+
+	for _, tainedKey := range tdBundle.TaintedKeys {
+
+	}
+
+	return nil, status.Error(codes.Unimplemented, "unimplemented")
+}
+
 func (s *Service) createJoinTokenRegistrationEntry(ctx context.Context, token string, agentID string) error {
 	parentID, err := joinTokenID(s.td, token)
 	if err != nil {
