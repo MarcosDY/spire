@@ -11,6 +11,7 @@ import (
 	"github.com/spiffe/spire/pkg/agent/manager/cache"
 	"github.com/spiffe/spire/pkg/agent/workloadkey"
 	"github.com/spiffe/spire/pkg/common/bundleutil"
+	"github.com/spiffe/spire/pkg/common/cryptoutil"
 	"github.com/spiffe/spire/pkg/common/rotationutil"
 	"github.com/spiffe/spire/pkg/common/telemetry"
 	telemetry_agent "github.com/spiffe/spire/pkg/common/telemetry/agent"
@@ -73,6 +74,7 @@ func (m *manager) updateCache(ctx context.Context, update *cache.UpdateEntries, 
 	// the values in `update` now belong to the cache. DO NOT MODIFY.
 	var expiring int
 	var outdated int
+	var tainted int
 	c.UpdateEntries(update, func(existingEntry, newEntry *common.RegistrationEntry, svid *cache.X509SVID) bool {
 		switch {
 		case svid == nil:
@@ -88,8 +90,9 @@ func (m *manager) updateCache(ctx context.Context, update *cache.UpdateEntries, 
 		case existingEntry != nil && existingEntry.RevisionNumber != newEntry.RevisionNumber:
 			// Registration entry has been updated
 			outdated++
-		// TODO: we must add a way to notify agent that it needs to rotate SVIDs since intermediate
-		// certificate key is tainted
+		case m.isX509SVIDTainted(svid.Chain[1]):
+			log.WithField("SPIFFEID", svid.Chain[0].URIs[0].String()).Debug("======== TAINTED!!!!")
+			tainted++
 		default:
 			// SVID is good
 			return false
@@ -107,8 +110,24 @@ func (m *manager) updateCache(ctx context.Context, update *cache.UpdateEntries, 
 		telemetry_agent.AddCacheManagerOutdatedSVIDsSample(m.c.Metrics, cacheType, float32(outdated))
 		log.WithField(telemetry.OutdatedSVIDs, outdated).Debug("Updating SVIDs with outdated attributes in cache")
 	}
+	if tainted > 0 {
+		// telemetry_agent.AddCacheManagerOutdatedSVIDsSample(m.c.Metrics, cacheType, float32(outdated))
+		log.WithField("taintedSVIDs", tainted).Debug("Updating SVIDs with tainted key in cache")
+	}
 
 	return m.updateSVIDs(ctx, log, c)
+}
+
+func (m *manager) isX509SVIDTainted(cert *x509.Certificate) bool {
+	taintedKeys := m.getTaintedKeys()
+	for _, taintedKey := range taintedKeys {
+		// cryptoutil.PublicKeyEqual(taintedKey, cert.PublicKey)
+		if ok, _ := cryptoutil.PublicKeyEqual(taintedKey, cert.PublicKey); ok {
+			return true
+		}
+	}
+
+	return false
 }
 
 func (m *manager) updateSVIDs(ctx context.Context, log logrus.FieldLogger, c SVIDCache) error {
@@ -204,6 +223,22 @@ func (m *manager) fetchSVIDs(ctx context.Context, csrs []csrRequest) (_ *cache.U
 	return &cache.UpdateSVIDs{
 		X509SVIDs: byEntryID,
 	}, nil
+}
+
+func (m *manager) pushStatus(ctx context.Context) error {
+	// Search for bundle
+	bundle := m.svid.State().SVID[1]
+
+	// TODO: Add metrics
+	agentStatus, err := m.client.PushStatus(ctx, bundle.SerialNumber.String())
+	if err != nil {
+		return err
+	}
+
+	m.setTaintedKeys(agentStatus.TaintedKeys)
+	m.svid.SetTaintedKeys(agentStatus.TaintedKeys)
+
+	return nil
 }
 
 // fetchEntries fetches entries that the agent is entitled to, divided in lists, one for regular entries and

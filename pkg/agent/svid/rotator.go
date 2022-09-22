@@ -16,6 +16,7 @@ import (
 	"github.com/spiffe/spire/pkg/agent/common/backoff"
 	"github.com/spiffe/spire/pkg/agent/plugin/keymanager"
 	"github.com/spiffe/spire/pkg/common/bundleutil"
+	"github.com/spiffe/spire/pkg/common/cryptoutil"
 	"github.com/spiffe/spire/pkg/common/fflag"
 	"github.com/spiffe/spire/pkg/common/nodeutil"
 	"github.com/spiffe/spire/pkg/common/rotationutil"
@@ -32,6 +33,9 @@ type Rotator interface {
 	Subscribe() observer.Stream
 	GetRotationMtx() *sync.RWMutex
 	SetRotationFinishedHook(func())
+	// TODO: it is temporal we may create a common package where we keep
+	// tainted keys and push status
+	SetTaintedKeys([]crypto.PublicKey)
 }
 
 type Client interface {
@@ -58,6 +62,8 @@ type rotator struct {
 
 	// Hook that will be called when the SVID rotation finishes
 	rotationFinishedHook func()
+
+	taintedKeys []crypto.PublicKey
 }
 
 type State struct {
@@ -73,6 +79,10 @@ func (r *rotator) Run(ctx context.Context) error {
 	r.c.Log.Debug("Stopping SVID rotator")
 	r.client.Release()
 	return err
+}
+
+func (r *rotator) SetTaintedKeys(taintedKeys []crypto.PublicKey) {
+	r.taintedKeys = taintedKeys
 }
 
 func (r *rotator) runRotation(ctx context.Context) error {
@@ -146,7 +156,7 @@ func (r *rotator) rotateSVIDIfNeeded(ctx context.Context) (err error) {
 
 	// TODO: we must add a way to make SVID rotate in case a key associated with actual intermediate
 	// is tainted
-	if rotationutil.ShouldRotateX509(r.clk.Now(), state.SVID[0]) {
+	if rotationutil.ShouldRotateX509(r.clk.Now(), state.SVID[0]) || r.isTainted(state.SVID[1]) {
 		if state.Reattestable && fflag.IsSet(fflag.FlagReattestToRenew) {
 			err = r.reattest(ctx)
 		} else {
@@ -159,6 +169,16 @@ func (r *rotator) rotateSVIDIfNeeded(ctx context.Context) (err error) {
 	}
 
 	return err
+}
+
+func (r *rotator) isTainted(cert *x509.Certificate) bool {
+	for _, taintedKey := range r.taintedKeys {
+		if ok, _ := cryptoutil.PublicKeyEqual(cert.PublicKey, taintedKey); ok {
+			return true
+		}
+	}
+
+	return false
 }
 
 // reattest goes through the full attestation process with the server and gets a new SVID.

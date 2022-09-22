@@ -160,6 +160,7 @@ func RateLimits(config RateLimitConfig) map[string]api.RateLimiter {
 		"/spire.api.server.agent.v1.Agent/AttestAgent":                                   attestLimit,
 		"/spire.api.server.agent.v1.Agent/RenewAgent":                                    csrLimit,
 		"/spire.api.server.agent.v1.Agent/CreateJoinToken":                               noLimit,
+		"/spire.api.server.agent.v1.Agent/PushStatus":                                    noLimit,
 		"/spire.api.server.trustdomain.v1.TrustDomain/ListFederationRelationships":       noLimit,
 		"/spire.api.server.trustdomain.v1.TrustDomain/GetFederationRelationship":         noLimit,
 		"/spire.api.server.trustdomain.v1.TrustDomain/BatchCreateFederationRelationship": noLimit,

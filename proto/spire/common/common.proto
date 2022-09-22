@@ -132,7 +132,7 @@ message PublicKey {
     int64 not_after = 3;
 }
 
-/** TainedKey represents a key that was marked as tainted */
+/** TaintedKey represents a key that was marked as tainted */
 message TaintedKey {
     /** PKIX encoded key data */
     bytes pkix_bytes = 1;

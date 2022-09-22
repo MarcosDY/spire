@@ -36,6 +36,10 @@ type X509SVID struct {
 	ExpiresAt int64
 }
 
+type AgentStatus struct {
+	TaintedKeys []crypto.PublicKey
+}
+
 type JWTSVID struct {
 	Token     string
 	IssuedAt  time.Time
@@ -47,6 +51,7 @@ type Client interface {
 	RenewSVID(ctx context.Context, csr []byte) (*X509SVID, error)
 	NewX509SVIDs(ctx context.Context, csrs map[string][]byte) (map[string]*X509SVID, error)
 	NewJWTSVID(ctx context.Context, entryID string, audience []string) (*JWTSVID, error)
+	PushStatus(ctx context.Context, authoritySerial string) (*AgentStatus, error)
 
 	// Release releases any resources that were held by this Client, if any.
 	Release()
@@ -182,6 +187,38 @@ func (c *client) RenewSVID(ctx context.Context, csr []byte) (*X509SVID, error) {
 	return &X509SVID{
 		CertChain: certChain,
 		ExpiresAt: resp.Svid.ExpiresAt,
+	}, nil
+}
+
+func (c *client) PushStatus(ctx context.Context, authoritySerial string) (*AgentStatus, error) {
+	ctx, cancel := context.WithTimeout(ctx, rpcTimeout)
+	defer cancel()
+
+	agentClient, connection, err := c.newAgentClient(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer connection.Release()
+
+	resp, err := agentClient.PushStatus(ctx, &agentv1.PushStatusRequest{
+		AuthoritySerial: authoritySerial,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	var taintedKeys []crypto.PublicKey
+	for _, taintedKey := range resp.TaintedKeys {
+		key, err := x509.ParsePKIXPublicKey(taintedKey)
+		if err != nil {
+			return nil, err
+		}
+	
+		taintedKeys = append(taintedKeys, key)
+	}
+
+	return &AgentStatus{
+		TaintedKeys: taintedKeys,
 	}, nil
 }
 

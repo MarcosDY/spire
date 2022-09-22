@@ -505,13 +505,14 @@ func (s *Service) PushStatus(ctx context.Context, req *agentv1.PushStatusRequest
 		return nil, api.MakeErr(log, codes.Internal, "failed to get trustdomain bundle", err)
 	}
 
-	resp := &agentv1.PushStatusResponse{}
-
-	for _, tainedKey := range tdBundle.TaintedKeys {
-
+	var taintedKeys [][]byte
+	for _, taintedKey := range tdBundle.TaintedKeys {
+		taintedKeys = append(taintedKeys, taintedKey.PkixBytes)
 	}
 
-	return nil, status.Error(codes.Unimplemented, "unimplemented")
+	return &agentv1.PushStatusResponse{
+		TaintedKeys: taintedKeys,
+	}, nil
 }
 
 func (s *Service) createJoinTokenRegistrationEntry(ctx context.Context, token string, agentID string) error {

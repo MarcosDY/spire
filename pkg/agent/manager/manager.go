@@ -2,6 +2,7 @@ package manager
 
 import (
 	"context"
+	"crypto"
 	"crypto/x509"
 	"errors"
 	"fmt"
@@ -142,6 +143,8 @@ type manager struct {
 
 	// Cache for 'storable' SVIDs
 	svidStoreCache *storecache.Cache
+
+	taintedKeys []crypto.PublicKey
 }
 
 func (m *manager) Initialize(ctx context.Context) error {
@@ -274,6 +277,10 @@ func (m *manager) runSynchronizer(ctx context.Context) error {
 			return nil
 		}
 
+		if err := m.pushStatus(ctx); err != nil {
+			m.c.Log.WithError(err).Error("Push status failed")
+		}
+
 		err := m.synchronize(ctx)
 		switch {
 		case err != nil && nodeutil.ShouldAgentReattest(err):
@@ -322,6 +329,20 @@ func (m *manager) GetLastSync() time.Time {
 	defer m.mtx.RUnlock()
 
 	return m.lastSync
+}
+
+func (m *manager) getTaintedKeys() []crypto.PublicKey {
+	m.mtx.RLock()
+	defer m.mtx.RUnlock()
+
+	return m.taintedKeys
+}
+
+func (m *manager) setTaintedKeys(taintedKeys []crypto.PublicKey) {
+	m.mtx.Lock()
+	defer m.mtx.Unlock()
+
+	m.taintedKeys = taintedKeys
 }
 
 func (m *manager) GetBundle() *cache.Bundle {
