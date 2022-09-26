@@ -330,15 +330,11 @@ func (m *Manager) TaintX509Authority(ctx context.Context) (*KeyState, error) {
 		return nil, errors.New("unable to taint a prepared key")
 	}
 
-	m.c.Log.Debugf("TD: %q\n", m.c.TrustDomain.String())
-	m.c.Log.Debugf("newxt: %v\n", nextX509CA)
-	m.c.Log.Debugf("newxt: %v\n", nextX509CA.publicKey != nil)
-	m.c.Log.Debugf("X509CA: %v\n", nextX509CA.x509CA)
-
 	ds := m.c.Catalog.GetDataStore()
 	if err := ds.TaintKey(ctx, m.c.TrustDomain.IDString(), nextX509CA.publicKey, nextX509CA.notAfter); err != nil {
 		return nil, fmt.Errorf("failed to persist tainted key: %w", err)
 	}
+	m.c.Log.Debug("Key tainted successfully")
 
 	return &KeyState{
 		Status:    Old,

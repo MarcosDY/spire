@@ -122,7 +122,6 @@ func (s *Service) ReactivateJWTAuthoriry(context.Context, *localauthorityv1.Reac
 
 func (s *Service) GetX509AuthorityState(ctx context.Context, _ *localauthorityv1.GetX509AuthorityStateRequest) (*localauthorityv1.GetX509AuthorityStateResponse, error) {
 	log := rpccontext.Logger(ctx)
-	log.Debug("!!!!!!! INSIDE")
 
 	var states []*localauthorityv1.AuthorityState
 	for _, authority := range s.m.GetX509Authorities() {
