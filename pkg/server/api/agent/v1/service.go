@@ -498,7 +498,6 @@ func (s *Service) CreateJoinToken(ctx context.Context, req *agentv1.CreateJoinTo
 
 func (s *Service) PushStatus(ctx context.Context, req *agentv1.PushStatusRequest) (*agentv1.PushStatusResponse, error) {
 	log := rpccontext.Logger(ctx)
-	log.WithField("serial", req.AuthoritySerial).Debug("request recieved")
 
 	tdBundle, err := s.ds.FetchBundle(ctx, s.td.IDString())
 	if err != nil {

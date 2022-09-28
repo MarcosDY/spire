@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto"
 	"crypto/x509"
+	"encoding/pem"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -90,7 +91,7 @@ func (m *manager) updateCache(ctx context.Context, update *cache.UpdateEntries, 
 		case existingEntry != nil && existingEntry.RevisionNumber != newEntry.RevisionNumber:
 			// Registration entry has been updated
 			outdated++
-		case m.isX509SVIDTainted(svid.Chain[1]):
+		case m.isX509SVIDTainted(svid.Chain):
 			log.WithField("SPIFFEID", svid.Chain[0].URIs[0].String()).Debug("======== TAINTED!!!!")
 			tainted++
 		default:
@@ -112,22 +113,79 @@ func (m *manager) updateCache(ctx context.Context, update *cache.UpdateEntries, 
 	}
 	if tainted > 0 {
 		// telemetry_agent.AddCacheManagerOutdatedSVIDsSample(m.c.Metrics, cacheType, float32(outdated))
-		log.WithField("taintedSVIDs", tainted).Debug("Updating SVIDs with tainted key in cache")
+		log.WithField("tainted_svid", tainted).Debug("Updating SVIDs with tainted key in cache")
 	}
 
 	return m.updateSVIDs(ctx, log, c)
 }
 
-func (m *manager) isX509SVIDTainted(cert *x509.Certificate) bool {
+func (m *manager) isX509SVIDTainted(svid []*x509.Certificate) bool {
 	taintedKeys := m.getTaintedKeys()
+	if len(taintedKeys) == 0 {
+		return false
+	}
+
+	rootCA, err := m.getSVIDBundle(svid)
+	if err != nil {
+		m.c.Log.WithError(err).Debug("Failed to get SVID bundle")
+		// TODO: bundle is lost
+		return true
+	}
+
 	for _, taintedKey := range taintedKeys {
-		// cryptoutil.PublicKeyEqual(taintedKey, cert.PublicKey)
-		if ok, _ := cryptoutil.PublicKeyEqual(taintedKey, cert.PublicKey); ok {
+		if ok, err := cryptoutil.PublicKeyEqual(rootCA.PublicKey, taintedKey); ok {
 			return true
+		} else if err != nil {
+			m.c.Log.WithError(err).Error("Failed to validate equal")
 		}
 	}
 
 	return false
+}
+
+func getPublicKeyBlock(k []byte) string {
+	block := &pem.Block{
+		Type:  "PUBLIC KEY",
+		Bytes: k,
+	}
+	return string(pem.EncodeToMemory(block))
+}
+
+func (m *manager) getSVIDBundle(svid []*x509.Certificate) (*x509.Certificate, error) {
+	rootCAs := x509.NewCertPool()
+	for _, eachCA := range m.cache.Bundle().RootCAs() {
+		rootCAs.AddCert(eachCA)
+	}
+
+	intermediates := x509.NewCertPool()
+	for _, eachIntermediate := range svid[1:] {
+		intermediates.AddCert(eachIntermediate)
+	}
+
+	chain, err := svid[0].Verify(x509.VerifyOptions{Roots: rootCAs, Intermediates: intermediates})
+	if err != nil {
+		return nil, err
+	}
+
+	// // SVID has intermediate
+	// if len(svid) > 1 {
+	// m.c.Log.Debug("from SVID")
+	// return svid[1], nil
+	// }
+
+	// leaf := svid[0]
+	// for i, rootCA := range m.cache.Bundle().RootCAs() {
+	// certPool := x509.NewCertPool()
+	// certPool.AddCert(rootCA)
+
+	// _, err := leaf.Verify(x509.VerifyOptions{Roots: certPool})
+	// if err == nil {
+	// m.c.Log.WithField("position", i).Debug("from bundles")
+	// return rootCA, nil
+	// }
+	// }
+
+	return chain[0][1], nil
 }
 
 func (m *manager) updateSVIDs(ctx context.Context, log logrus.FieldLogger, c SVIDCache) error {
@@ -226,8 +284,7 @@ func (m *manager) fetchSVIDs(ctx context.Context, csrs []csrRequest) (_ *cache.U
 }
 
 func (m *manager) pushStatus(ctx context.Context) error {
-	// Search for bundle
-	bundle := m.svid.State().SVID[1]
+	bundle := m.getSVIDSigner(m.svid.State().SVID)
 
 	// TODO: Add metrics
 	agentStatus, err := m.client.PushStatus(ctx, bundle.SerialNumber.String())
@@ -239,6 +296,14 @@ func (m *manager) pushStatus(ctx context.Context) error {
 	m.svid.SetTaintedKeys(agentStatus.TaintedKeys)
 
 	return nil
+}
+
+func (m *manager) getSVIDSigner(svid []*x509.Certificate) *x509.Certificate {
+	if len(svid) > 1 {
+		return svid[1]
+	}
+
+	return m.GetBundle().RootCAs()[0]
 }
 
 // fetchEntries fetches entries that the agent is entitled to, divided in lists, one for regular entries and

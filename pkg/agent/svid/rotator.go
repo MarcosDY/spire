@@ -156,7 +156,14 @@ func (r *rotator) rotateSVIDIfNeeded(ctx context.Context) (err error) {
 
 	// TODO: we must add a way to make SVID rotate in case a key associated with actual intermediate
 	// is tainted
-	if rotationutil.ShouldRotateX509(r.clk.Now(), state.SVID[0]) || r.isTainted(state.SVID[1]) {
+
+	// isTainted := r.isTainted(state.SVID[1]
+	b, err := r.getSVIDBundle(state.SVID)
+	if err != nil {
+		return fmt.Errorf("failed to get bundle: %w", err)
+	}
+
+	if rotationutil.ShouldRotateX509(r.clk.Now(), state.SVID[0]) || r.isTainted(b) {
 		if state.Reattestable && fflag.IsSet(fflag.FlagReattestToRenew) {
 			err = r.reattest(ctx)
 		} else {
@@ -169,6 +176,32 @@ func (r *rotator) rotateSVIDIfNeeded(ctx context.Context) (err error) {
 	}
 
 	return err
+}
+
+func (r *rotator) getSVIDBundle(svid []*x509.Certificate) (*x509.Certificate, error) {
+	// SVID has intermediate
+	if len(svid) > 1 {
+		return svid[1], nil
+	}
+	bundle, err := r.getBundle()
+	if err != nil {
+		return nil, err
+	}
+
+	leaf := svid[0]
+
+	for _, rootCA := range bundle.RootCAs() {
+		certPool := x509.NewCertPool()
+		certPool.AddCert(rootCA)
+
+		_, err := leaf.Verify(x509.VerifyOptions{Roots: certPool})
+		if err == nil {
+			return rootCA, nil
+		}
+	}
+	// bundle.
+
+	return nil, errors.New("no bundle found")
 }
 
 func (r *rotator) isTainted(cert *x509.Certificate) bool {
