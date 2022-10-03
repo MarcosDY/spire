@@ -22,7 +22,6 @@ import (
 	workloadattestorv1 "github.com/spiffe/spire-plugin-sdk/proto/spire/plugin/agent/workloadattestor/v1"
 	configv1 "github.com/spiffe/spire-plugin-sdk/proto/spire/service/common/config/v1"
 	"github.com/spiffe/spire/pkg/agent/common/cgroups"
-	"github.com/spiffe/spire/pkg/agent/plugin/workloadattestor/k8s/sigstore"
 	"github.com/spiffe/spire/pkg/common/catalog"
 	"github.com/spiffe/spire/pkg/common/pemutil"
 	"github.com/spiffe/spire/pkg/common/telemetry"
@@ -161,21 +160,13 @@ type k8sConfig struct {
 	NodeName                   string
 	ReloadInterval             time.Duration
 
-	sigstoreConfig *sigstoreConfig
-
 	Client     *kubeletClient
 	LastReload time.Time
 }
 
-// sigstoreConfig holds the sigstore configuration distilled from HCL
-type sigstoreConfig struct {
-	RekorURL                  string
-	SkippedImages             []string
-	AllowedSubjectListEnabled bool
-	AllowedSubjects           []string
-}
-
 type ContainerHelper interface {
+	Configure(config *HCLConfig, log hclog.Logger) error
+	GetOSSelectors(ctx context.Context, log hclog.Logger, containerStatus *corev1.ContainerStatus) ([]string, error)
 	GetPodUIDAndContainerID(pID int32, log hclog.Logger) (types.UID, string, error)
 }
 
@@ -191,24 +182,18 @@ type Plugin struct {
 
 	mu     sync.RWMutex
 	config *k8sConfig
-
-	sigstore sigstore.Sigstore
 }
 
 func New() *Plugin {
 	return &Plugin{
-		fs:       cgroups.OSFileSystem{},
-		clock:    clock.New(),
-		getenv:   os.Getenv,
-		sigstore: nil,
+		fs:     cgroups.OSFileSystem{},
+		clock:  clock.New(),
+		getenv: os.Getenv,
 	}
 }
 
 func (p *Plugin) SetLogger(log hclog.Logger) {
 	p.log = log
-	if p.sigstore != nil {
-		p.sigstore.SetLogger(log)
-	}
 }
 
 func (p *Plugin) Attest(ctx context.Context, req *workloadattestorv1.AttestRequest) (*workloadattestorv1.AttestResponse, error) {
@@ -258,15 +243,14 @@ func (p *Plugin) Attest(ctx context.Context, req *workloadattestorv1.AttestReque
 				}
 				selectors := getSelectorValuesFromPodInfo(&item, lookupStatus)
 
-				if p.config.sigstoreConfig != nil {
-					log.Debug("Attemping to get signature info for container", telemetry.ContainerName, lookupStatus.Name)
-					sigstoreSelectors, err := p.sigstore.AttestContainerSignatures(ctx, lookupStatus)
-					if err != nil {
-						log.Error("Error retrieving signature payload", "error", err)
-						return nil, status.Errorf(codes.Internal, "error retrieving signature payload: %v", err)
-					}
-					selectors = append(selectors, sigstoreSelectors...)
+				osSelector, err := p.c.GetOSSelectors(ctx, log, lookupStatus)
+				switch {
+				case err != nil:
+					return nil, err
+				case len(osSelector) > 0:
+					selectors = append(selectors, osSelector...)
 				}
+
 				attestResponse = &workloadattestorv1.AttestResponse{
 					SelectorValues: selectors,
 				}
@@ -340,8 +324,8 @@ func (p *Plugin) Configure(ctx context.Context, req *configv1.ConfigureRequest) 
 		return nil, status.Error(codes.InvalidArgument, "cannot use both the read-only and secure port")
 	}
 
-	containerHelper, err := createHelper(p)
-	if err != nil {
+	containerHelper := createHelper(p)
+	if err := containerHelper.Configure(config, p.log); err != nil {
 		return nil, err
 	}
 
@@ -375,59 +359,14 @@ func (p *Plugin) Configure(ctx context.Context, req *configv1.ConfigureRequest) 
 		ReloadInterval:             reloadInterval,
 	}
 
-	// set experimental flags
-	if config.Experimental != nil && config.Experimental.Sigstore != nil {
-		c.sigstoreConfig = &sigstoreConfig{
-			RekorURL:                  config.Experimental.Sigstore.RekorURL,
-			SkippedImages:             config.Experimental.Sigstore.SkippedImages,
-			AllowedSubjectListEnabled: config.Experimental.Sigstore.AllowedSubjectListEnabled,
-			AllowedSubjects:           config.Experimental.Sigstore.AllowedSubjects,
-		}
-	}
-
 	if err := p.reloadKubeletClient(c); err != nil {
 		return nil, err
-	}
-
-	if c.sigstoreConfig != nil {
-		if p.sigstore == nil {
-			newcache := sigstore.NewCache(maximumAmountCache)
-			p.sigstore = sigstore.New(newcache, nil)
-			p.sigstore.SetLogger(p.log)
-		}
-		if err := p.configureSigstore(c, p.sigstore); err != nil {
-			return nil, err
-		}
 	}
 
 	// Set the config
 	p.setConfig(c)
 	p.setContainerHelper(containerHelper)
 	return &configv1.ConfigureResponse{}, nil
-}
-
-func (p *Plugin) configureSigstore(config *k8sConfig, sigstore sigstore.Sigstore) error {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	// Configure sigstore settings
-	sigstore.ClearSkipList()
-	imageIDList := []string{}
-	if config.sigstoreConfig.SkippedImages != nil {
-		imageIDList = append(imageIDList, config.sigstoreConfig.SkippedImages...)
-	}
-	sigstore.AddSkippedImage(imageIDList)
-	sigstore.EnableAllowSubjectList(config.sigstoreConfig.AllowedSubjectListEnabled)
-	sigstore.ClearAllowedSubjects()
-	if config.sigstoreConfig.AllowedSubjects != nil {
-		for _, subject := range config.sigstoreConfig.AllowedSubjects {
-			sigstore.AddAllowedSubject(subject)
-		}
-	}
-	if err := p.sigstore.SetRekorURL(config.sigstoreConfig.RekorURL); err != nil {
-		return status.Errorf(codes.InvalidArgument, "failed to parse Rekor URL: %v", err)
-	}
-	return nil
 }
 
 func (p *Plugin) setConfig(config *k8sConfig) {

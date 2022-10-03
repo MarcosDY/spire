@@ -4,6 +4,7 @@
 package k8s
 
 import (
+	"context"
 	"log"
 	"regexp"
 	"strings"
@@ -11,8 +12,11 @@ import (
 
 	"github.com/hashicorp/go-hclog"
 	"github.com/spiffe/spire/pkg/agent/common/cgroups"
+	"github.com/spiffe/spire/pkg/agent/plugin/workloadattestor/k8s/sigstore"
+	"github.com/spiffe/spire/pkg/common/telemetry"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 )
 
@@ -24,14 +28,32 @@ func (p *Plugin) defaultTokenPath() string {
 	return defaultTokenPath
 }
 
-func createHelper(c *Plugin) (ContainerHelper, error) {
+func createHelper(p *Plugin) ContainerHelper {
 	return &containerHelper{
-		fs: c.fs,
-	}, nil
+		fs: p.fs,
+	}
+}
+
+func (h *containerHelper) Configure(config *HCLConfig, log hclog.Logger) error {
+	// set experimental flags
+	if config.Experimental != nil && config.Experimental.Sigstore != nil {
+		if h.sigstoreClient == nil {
+			newcache := sigstore.NewCache(maximumAmountCache)
+			h.sigstoreClient = sigstore.New(newcache, nil)
+		}
+
+		if err := configureSigstoreClient(h.sigstoreClient, config.Experimental.Sigstore, log); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 type containerHelper struct {
-	fs cgroups.FileSystem
+	// TODO: add mutex
+	fs             cgroups.FileSystem
+	sigstoreClient sigstore.Sigstore
 }
 
 func (h *containerHelper) GetPodUIDAndContainerID(pID int32, _ hclog.Logger) (types.UID, string, error) {
@@ -41,6 +63,21 @@ func (h *containerHelper) GetPodUIDAndContainerID(pID int32, _ hclog.Logger) (ty
 	}
 
 	return getPodUIDAndContainerIDFromCGroups(cgroups)
+}
+
+func (h *containerHelper) GetOSSelectors(ctx context.Context, log hclog.Logger, containerStatus *corev1.ContainerStatus) ([]string, error) {
+	var selectors []string
+	if h.sigstoreClient != nil {
+		log.Debug("Attemping to get signature info for container", telemetry.ContainerName, containerStatus.Name)
+		sigstoreSelectors, err := h.sigstoreClient.AttestContainerSignatures(ctx, containerStatus)
+		if err != nil {
+			log.Error("Error retrieving signature payload", "error", err)
+			return nil, status.Errorf(codes.Internal, "error retrieving signature payload: %v", err)
+		}
+		selectors = append(selectors, sigstoreSelectors...)
+	}
+
+	return selectors, nil
 }
 
 func getPodUIDAndContainerIDFromCGroups(cgroups []cgroups.Cgroup) (types.UID, string, error) {
@@ -178,4 +215,24 @@ func canonicalizePodUID(uid string) types.UID {
 
 func isNotPod(itemPodUID, podUID types.UID) bool {
 	return podUID != "" && itemPodUID != podUID
+}
+
+func configureSigstoreClient(client sigstore.Sigstore, c *SigstoreHCLConfig, log hclog.Logger) error {
+	// Configure sigstore settings
+	client.ClearSkipList()
+	if c.SkippedImages != nil {
+		client.AddSkippedImage(c.SkippedImages)
+	}
+	client.EnableAllowSubjectList(c.AllowedSubjectListEnabled)
+	client.SetLogger(log)
+	client.ClearAllowedSubjects()
+	if c.AllowedSubjects != nil {
+		for _, subject := range c.AllowedSubjects {
+			client.AddAllowedSubject(subject)
+		}
+	}
+	if err := client.SetRekorURL(c.RekorURL); err != nil {
+		return status.Errorf(codes.InvalidArgument, "failed to parse Rekor URL: %v", err)
+	}
+	return nil
 }
