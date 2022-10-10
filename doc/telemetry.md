@@ -19,12 +19,12 @@ The following metrics are emitted:
 | Call Counter | `datastore`, `bundle`, `create`             |                   | The Datastore is creating a bundle.                                                   |
 | Call Counter | `datastore`, `bundle`, `delete`             |                   | The Datastore is deleting a bundle.                                                   |
 | Call Counter | `datastore`, `bundle`, `fetch`              |                   | The Datastore is fetching a bundle.                                                   |
-| Call Counter | `datastore`, `bundle`, `list`               |                   | The Datastore is listing bundles.                                                     |                                                 
-| Call Counter | `datastore`, `bundle`, `prune`              |                   | The Datastore is pruning a bundle.                                                    |                                                    
-| Call Counter | `datastore`, `bundle`, `set`                |                   | The Datastore is setting a bundle.                                                    |                                                   
-| Call Counter | `datastore`, `bundle`, `update`             |                   | The Datastore is updating a bundle.                                                   |                                                   
-| Call Counter | `datastore`, `join_token`, `create`         |                   | The Datastore is creating a join token.                                               |                                              
-| Call Counter | `datastore`, `join_token`, `delete`         |                   | The Datastore is deleting a join token.                                               |                                              
+| Call Counter | `datastore`, `bundle`, `list`               |                   | The Datastore is listing bundles.                                                     |
+| Call Counter | `datastore`, `bundle`, `prune`              |                   | The Datastore is pruning a bundle.                                                    |
+| Call Counter | `datastore`, `bundle`, `set`                |                   | The Datastore is setting a bundle.                                                    |
+| Call Counter | `datastore`, `bundle`, `update`             |                   | The Datastore is updating a bundle.                                                   |
+| Call Counter | `datastore`, `join_token`, `create`         |                   | The Datastore is creating a join token.                                               |
+| Call Counter | `datastore`, `join_token`, `delete`         |                   | The Datastore is deleting a join token.                                               |
 | Call Counter | `datastore`, `join_token`, `fetch`          |                   | The Datastore is fetching a join token.                                               |                                              |
 | Call Counter | `datastore`, `join_token`, `prune`          |                   | The Datastore is pruning join tokens.                                                 |                                               |
 | Call Counter | `datastore`, `node`, `count`                |                   | The Datastore is counting nodes.                                                      |
@@ -72,7 +72,7 @@ The following metrics are emitted:
 | Gauge        | `sds_api`, `connections`                   |            | The number of active connection that the SDS API has.                     |
 | Counter      | `workload_api`, `bundles_update`, `jwt`    |            | The Workload API has successfully updated a JWT bundle.                   |
 | Counter      | `workload_api`, `connection`               |            | The Workload API has successfully established a new connection.           |
-| Gauge        | `workload_api`, `connections`              |            | The number of active connections that the Workload API has.               | 
+| Gauge        | `workload_api`, `connections`              |            | The number of active connections that the Workload API has.               |
 | Sample       | `workload_api`, `discovered_selectors`     |            | The number of selectors discovered during a workload attestation process. |
 | Call Counter | `workload_api`, `workload_attestation`     |            | The Workload API is performing a workload attestation.                    |
 | Call Counter | `workload_api`, `workload_attestor`        | `attestor` | The Workload API is invoking a given attestor.                            |

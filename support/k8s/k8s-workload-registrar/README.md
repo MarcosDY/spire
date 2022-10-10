@@ -14,7 +14,6 @@ The registrar has the following command line flags:
 |-----------|------------------------------------------------------------------|-------------------------------|
 | `-config` | Path on disk to the [HCL Configuration](#hcl-configuration) file | `k8s-workload-registrar.conf` |
 
-
 ### HCL Configuration
 
 The configuration file is a **required** by the registrar. It contains
@@ -49,7 +48,7 @@ For CRD configuration directives see [CRD Mode Configuration](mode-crd/README.md
 
 ### Example
 
-```
+```hcl
 log_level = "debug"
 trust_domain = "domain.test"
 server_socket_path = "/tmp/spire-server/private/api.sock"
@@ -57,6 +56,7 @@ cluster = "production"
 ```
 
 ## Workload Registration
+
 When running in reconcile or crd mode with `pod_controller=true` entries will be automatically created for
 Pods. The available workload registration modes are:
 
@@ -71,7 +71,6 @@ For `crd` mode, if neither `pod_label` nor `pod_annotation`
 workload registration mode is selected,
 `identity_template` is used with a default configuration:
 `ns/{{.Pod.Namespace}}/sa/{{.Pod.ServiceAccount}}`
-
 
 It may take several seconds for newly created SVIDs to become available to workloads.
 
@@ -106,7 +105,7 @@ SPIFFE ID of the form
 pod came in with the service account `blog` in the `production` namespace, the
 following registration entry would be created:
 
-```
+```shell
 Entry ID      : 200d8b19-8334-443d-9494-f65d0ad64eb5
 SPIFFE ID     : spiffe://example.org/ns/production/sa/blog
 Parent ID     : ...
@@ -123,7 +122,7 @@ was configured with the `spire-workload` label and a pod came in with
 `spire-workload=example-workload`, the following registration entry would be
 created:
 
-```
+```shell
 Entry ID      : 200d8b19-8334-443d-9494-f65d0ad64eb5
 SPIFFE ID     : spiffe://example.org/example-workload
 Parent ID     : ...
@@ -143,7 +142,7 @@ was configured with the `spiffe.io/spiffe-id` annotation and a pod came in with
 `spiffe.io/spiffe-id: production/example-workload`, the following registration entry would be
 created:
 
-```
+```shell
 Entry ID      : 200d8b19-8334-443d-9494-f65d0ad64eb5
 SPIFFE ID     : spiffe://example.org/production/example-workload
 Parent ID     : ...
@@ -166,7 +165,6 @@ the registrar deployment.
 
 If it is deployed as a container within the SPIRE server pod then it talks to SPIRE server via a Unix domain socket. It will need access to a
 shared volume containing the socket file.
-
 
 ### Reconcile Mode Configuration
 

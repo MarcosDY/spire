@@ -50,13 +50,13 @@ Defenses against this are:
 
 A sample configuration:
 
-```
-	WorkloadAttestor "unix" {
-		plugin_data {
-		}
-	}
+```hcl
+ WorkloadAttestor "unix" {
+  plugin_data {
+  }
+ }
 ```
 
-### Platform support
+## Platform support
 
 This plugin is only supported on Unix systems.

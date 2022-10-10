@@ -19,7 +19,7 @@ This plugin requires an allow list of ProjectID from which nodes can be attested
 
 A sample configuration:
 
-```
+```hcl
     NodeAttestor "gcp_iit" {
         plugin_data {
             projectid_allow_list = ["project-123"]
@@ -62,12 +62,15 @@ corresponding selector will still have a trailing colon (i.e.
 `gcp_iit:label:<key>:`, `gcp_iit:metadata:<key>:`)
 
 ## Authenticating with the Google Compute Engine API
+
 The plugin uses the Application Default Credentials to authenticate with the Google Compute Engine API, as documented by [Setting Up Authentication For Server to Server](https://cloud.google.com/docs/authentication/production). When SPIRE Server is running inside GCP, it will use the default service account credentials available to the instance it is running under. When running outside GCP, or if non-default credentials are needed, the path to the service account file containing the credentials may be specified using the `GOOGLE_APPLICATION_CREDENTIALS` environment variable or the `service_account_file` configurable (see Configuration).
 
 The service account must have IAM permissions and Authorization Scopes granting access to the following APIs:
+
 * [compute.instances.get](https://cloud.google.com/compute/docs/reference/rest/v1/instances/get)
 
 ## Security Considerations
+
 The Instance Identity Token, which this attestor leverages to prove node identity, is available to any process running on the node by default. As a result, it is possible for non-agent code running on a node to attest to the SPIRE Server, allowing it to obtain any workload identity that the node is authorized to run.
 
 While many operators choose to configure their systems to block access to the Instance Identity Token, the SPIRE project cannot guarantee this posture. To mitigate the associated risk, the `gcp_iit` node attestor implements Trust On First Use (or TOFU) semantics. For any given node, attestation may occur only once. Subsequent attestation attempts will be rejected.
