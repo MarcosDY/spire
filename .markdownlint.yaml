@@ -1,0 +1,14 @@
+MD013:
+  line_length: 80
+  heading_line_length: 80
+  code_blocks: false
+  # Ignore tables
+  tables: false
+  headings: true
+  headers: true
+  strict: false
+  stern: false
+MD024:
+  siblings_only: true
+# we use emphasis on all node attestors
+MD036: false
