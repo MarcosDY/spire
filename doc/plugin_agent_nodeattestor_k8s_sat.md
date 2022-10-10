@@ -6,9 +6,11 @@ The `k8s_sat` plugin attests nodes running in inside of Kubernetes. The agent
 reads and provides the signed service account token to the server.
 
 *Note: If your cluster supports [Service Account Token Volume Projection](https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/#service-account-token-volume-projection)
-you should instead consider using the `k8s_psat` attestor due to the [security considerations](#security-considerations) below.*
+you should instead consider using the `k8s_psat` attestor due to the
+[security considerations](#security-considerations) below.*
 
-The server-side `k8s_sat` plugin generates a one-time UUID and generates a SPIFFE ID with the form:
+The server-side `k8s_sat` plugin generates a one-time UUID and generates a
+SPIFFE ID with the form:
 
 ```xml
 spiffe://<trust_domain>/spire/agent/k8s_sat/<cluster>/<UUID>
@@ -21,7 +23,8 @@ The main configuration accepts the following values:
 | `cluster`     | Name of the cluster. It must correspond to a cluster configured in the server plugin. |
 | `token_path`  | Path to the service account token on disk                                             | "/var/run/secrets/kubernetes.io/serviceaccount/token" |
 
-The token path defaults to the default location Kubernetes uses to place the token and should not need to be overridden in most cases.
+The token path defaults to the default location Kubernetes uses to place the
+token and should not need to be overridden in most cases.
 
 A sample configuration with the default token path:
 

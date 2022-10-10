@@ -4,10 +4,11 @@
 
 The `k8s_psat` plugin attests nodes running inside of Kubernetes. The agent
 reads and provides the signed projected service account token (PSAT) to the server.
-In addition to service account data, PSAT embeds the pod name and UID on its claims. This allows
-SPIRE to create more fine-grained attestation policies for agents.
+In addition to service account data, PSAT embeds the pod name and UID on its claims.
+This allows SPIRE to create more fine-grained attestation policies for agents.
 
-The server-side `k8s_psat` plugin will generate a SPIFFE ID on behalf of the agent of the form:
+The server-side `k8s_psat` plugin will generate a SPIFFE ID on behalf of the
+agent of the form:
 
 ```xml
 spiffe://<trust_domain>/spire/agent/k8s_psat/<cluster>/<node_UID>
@@ -55,4 +56,8 @@ A full example of this attestor is provided in [the SPIRE examples repository](h
 
 ## Considerations
 
-This attestor is based on two Kubernetes beta features (since k8s v1.12): TokenRequest and TokenRequestProjection. TokenRequest exposes the ability to obtain finely scoped service account tokens from the Kubernetes API Server. TokenRequestProjection facilitates the automatic creation and mounting of such a token into a container.
+This attestor is based on two Kubernetes beta features (since k8s v1.12):
+TokenRequest and TokenRequestProjection. TokenRequest exposes the ability to
+obtain finely scoped service account tokens from the Kubernetes API Server.
+TokenRequestProjection facilitates the automatic creation and mounting of such
+a token into a container.

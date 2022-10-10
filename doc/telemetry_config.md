@@ -1,6 +1,8 @@
 # Telemetry configuration
 
-If telemetry is desired, it may be configured by using a dedicated `telemetry { ... }` section. The following metrics collectors are currently supported:
+If telemetry is desired, it may be configured by using a dedicated
+`telemetry { ... }` section. The following metrics collectors are currently
+supported:
 
 - Prometheus
 - Statsd
@@ -8,7 +10,9 @@ If telemetry is desired, it may be configured by using a dedicated `telemetry { 
 - M3
 - In-Memory
 
-You may use all, some, or none of the collectors. The following collectors support multiple declarations in the event that you want to send metrics to more than one collector:
+You may use all, some, or none of the collectors. The following collectors
+support multiple declarations in the event that you want to send metrics to more
+than one collector:
 
 - Statsd
 - DogStatsd
@@ -94,4 +98,5 @@ telemetry {
 
 ## Supported metrics
 
-See the [Telemetry document](telemetry.md) for a list of all the supported metrics.
+See the [Telemetry document](telemetry.md) for a list of all the supported
+metrics.

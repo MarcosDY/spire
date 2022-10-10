@@ -1,10 +1,15 @@
 # Server plugin: UpstreamAuthority "spire"
 
-The `spire` plugin uses credentials fetched from the Workload API to call an upstream SPIRE server in the same trust domain, requesting an intermediate signing certificate to use as the server's X.509 signing authority.
+The `spire` plugin uses credentials fetched from the Workload API to call an
+upstream SPIRE server in the same trust domain, requesting an intermediate
+signing certificate to use as the server's X.509 signing authority.
 
-The SVIDs minted in a nested configuration are valid in the entire trust domain, not only in the scope of the server that originated the SVID.
+The SVIDs minted in a nested configuration are valid in the entire trust domain,
+not only in the scope of the server that originated the SVID.
 
-In the case of X509-SVID, this is easily achieved because of the chaining semantics that X.509 has. On the other hand, for JWT-SVID, this capability is accomplished by propagating every JWT-SVID public signing key to the whole topology.
+In the case of X509-SVID, this is easily achieved because of the chaining
+semantics that X.509 has. On the other hand, for JWT-SVID, this capability is
+accomplished by propagating every JWT-SVID public signing key to the whole topology.
 
 The plugin accepts the following configuration options:
 

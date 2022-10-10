@@ -1,6 +1,7 @@
 # Agent plugin: SVIDStore "gcp_secretmanager"
 
-The `gcp_secretmanager` plugin stores in [Google cloud Secret Manager](https://cloud.google.com/secret-manager) the resulting X509-SVIDs of the entries that the agent is entitled to.
+The `gcp_secretmanager` plugin stores in [Google cloud Secret Manager](https://cloud.google.com/secret-manager)
+the resulting X509-SVIDs of the entries that the agent is entitled to.
 
 ## Secret format
 
@@ -30,7 +31,8 @@ secretmanager.secrets.update
 secretmanager.versions.add
 ```
 
-Please note that this plugin does not require permission to read secret payloads stored on secret version.
+Please note that this plugin does not require permission to read secret payloads
+stored on secret version.
 
 ## Configuration
 
@@ -50,9 +52,13 @@ A sample configuration:
 
 ## IAM Policy
 
-It is possible to add an IAM Policy when creating a new secret. This is done using the `role` and `serviceaccount` selectors, which must be configured together.
-The secret will have the inherited IAM Policy together with the new policy, with a single Binding created. The Binding will use the provided role together with service account as unique member.
-In case that a role/serviceaccount is not set, the secret will use inherited policies from Secret Manager.
+It is possible to add an IAM Policy when creating a new secret. This is done
+using the `role` and `serviceaccount` selectors, which must be configured together.
+The secret will have the inherited IAM Policy together with the new policy, with
+a single Binding created. The Binding will use the provided role together with
+service account as unique member.
+In case that a role/serviceaccount is not set, the secret will use inherited
+policies from Secret Manager.
 
 ```yaml
 bindings:
@@ -63,7 +69,10 @@ bindings:
 
 ## Store selectors
 
-Selectors are used on `storable` entries to describre metadata that is needed by `gcp_secretmanager` in order to store secrets in Google Cloud Secret manager. In case that a `required` selector is not provided, the plugin will return an error at execution time.
+Selectors are used on `storable` entries to describre metadata that is needed by
+`gcp_secretmanager` in order to store secrets in Google Cloud Secret manager. In
+case that a `required` selector is not provided, the plugin will return an error
+at execution time.
 
 | Selector                           | Example                                                                          | Required | Description                                                                |
 |------------------------------------|----------------------------------------------------------------------------------|----------|----------------------------------------------------------------------------|

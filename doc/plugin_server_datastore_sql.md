@@ -1,6 +1,7 @@
 # Server plugin: DataStore "sql"
 
-The `sql` plugin implements SQL based data storage for the SPIRE server using SQLite, PostgreSQL or MySQL databases.
+The `sql` plugin implements SQL based data storage for the SPIRE server using
+SQLite, PostgreSQL or MySQL databases.
 
 | Configuration        | Description                                                                                                                                                                                                                                                                        |
 |----------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
@@ -15,8 +16,9 @@ The `sql` plugin implements SQL based data storage for the SPIRE server using SQ
 | conn_max_lifetime    | The maximum amount of time a connection may be reused (default: unlimited)                                                                                                                                                                                                         |
 | disable_migration    | True to disable auto-migration functionality. Use of this flag allows finer control over when datastore migrations occur and coordination of the migration of a datastore shared with a SPIRE Server cluster. Only available for databases from SPIRE Code version 0.9.0 or later. |
 
-For more information on the `max_open_conns`, `max_idle_conns`, and `conn_max_lifetime`, refer to the
-documentation for the Go [`database/sql`](https://golang.org/pkg/database/sql/#DB) package.
+For more information on the `max_open_conns`, `max_idle_conns`, and `conn_max_lifetime`,
+refer to the documentation for the Go [`database/sql`](https://golang.org/pkg/database/sql/#DB)
+package.
 
 ## Database configurations
 
@@ -34,7 +36,8 @@ Save database in memory:
 connection_string="file:memdb?mode=memory&cache=shared"
 ```
 
-If you are compiling SPIRE from source, please see [SQLite and CGO](#sqlite-and-cgo) for additional information.
+If you are compiling SPIRE from source, please see [SQLite and CGO](#sqlite-and-cgo)
+for additional information.
 
 #### Sample configuration
 
@@ -49,7 +52,8 @@ If you are compiling SPIRE from source, please see [SQLite and CGO](#sqlite-and-
 
 ### `database_type = "postgres"`
 
-The `connection_string` for the PostreSQL database connection consists of the number of configuration options separated by spaces.
+The `connection_string` for the PostreSQL database connection consists of the
+number of configuration options separated by spaces.
 
 For example:
 
@@ -67,7 +71,8 @@ connection_string="dbname=postgres user=postgres password=password host=localhos
 * port - The port to bind to. (default is 5432)
 * sslmode - Whether or not to use SSL (default is require, this is not
   the default for libpq)
-* fallback_application_name - An application_name to fall back to if one isn't provided.
+* fallback_application_name - An application_name to fall back to if one isn't
+provided.
 * connect_timeout - Maximum wait for connection, in seconds. Zero or
   not specified means wait indefinitely.
 * sslcert - Cert file location. The file must contain PEM encoded data.
@@ -98,7 +103,8 @@ connection_string="dbname=postgres user=postgres password=password host=localhos
 
 ### `database_type = "mysql"`
 
-The `connection_string` for the MySQL database connection consists of the number of configuration options (optional parts marked by square brackets):
+The `connection_string` for the MySQL database connection consists of the number
+of configuration options (optional parts marked by square brackets):
 
 ```text
 username[:password]@][protocol[(address)]]/dbname[?param1=value1&...&paramN=valueN]
@@ -110,7 +116,8 @@ For example:
 connection_string="username:password@tcp(localhost:3306)/dbname?parseTime=true"
 ```
 
-Consult the [MySQL driver repository](https://github.com/go-sql-driver/mysql#usage) for more `connection_string` options.
+Consult the [MySQL driver repository](https://github.com/go-sql-driver/mysql#usage)
+for more `connection_string` options.
 
 #### Configuration Options
 
@@ -120,7 +127,10 @@ Consult the [MySQL driver repository](https://github.com/go-sql-driver/mysql#usa
 * address - The host to connect to. Values that start with / are for unix
   domain sockets. (default is localhost)
 
-If you need to use custom Root CA, just specify `root_ca_path` in the plugin config. Similarly, if you need to use client certificates, specify `client_key_path` and `client_cert_path`. Other options can be configured via [tls](https://github.com/go-sql-driver/mysql#tls) params in the `connection_string` options.
+If you need to use custom Root CA, just specify `root_ca_path` in the plugin
+config. Similarly, if you need to use client certificates, specify `client_key_path`
+and `client_cert_path`. Other options can be configured via [tls](https://github.com/go-sql-driver/mysql#tls)
+params in the `connection_string` options.
 
 #### Sample configuration
 
@@ -135,8 +145,13 @@ If you need to use custom Root CA, just specify `root_ca_path` in the plugin con
 
 #### Read Only connection
 
-Read Only connection will be used when the optional `ro_connection_string` is set. The formatted string takes the same form as connection_string. This option is not applicable for SQLite3.
+Read Only connection will be used when the optional `ro_connection_string` is set.
+The formatted string takes the same form as connection_string. This option is
+not applicable for SQLite3.
 
 ## SQLite and CGO
 
-SQLite support requires the use of CGO. This is not a concern for users downloading SPIRE or using the offical SPIRE container images. However, if you are building SPIRE from the source code, please note that compiling SPIRE without CGO (e.g. `CGO_ENABLED=0`) will disable SQLite support.
+SQLite support requires the use of CGO. This is not a concern for users
+downloading SPIRE or using the offical SPIRE container images. However, if you
+are building SPIRE from the source code, please note that compiling SPIRE
+without CGO (e.g. `CGO_ENABLED=0`) will disable SQLite support.

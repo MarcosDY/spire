@@ -1,7 +1,9 @@
 # Upstream Authority "vault" Plugin
 
-The vault plugin signs intermediate CA certificates for SPIRE using the Vault PKI Engine.
-The plugin does not support the `PublishJWTKey` RPC and is therefore not appropriate for use in nested SPIRE topologies where JWT-SVIDs are in use.
+The vault plugin signs intermediate CA certificates for SPIRE using the Vault
+PKI Engine.
+The plugin does not support the `PublishJWTKey` RPC and is therefore not
+appropriate for use in nested SPIRE topologies where JWT-SVIDs are in use.
 
 ## Configuration
 
@@ -19,13 +21,16 @@ The plugin accepts the following configuration options:
 | approle_auth     | struct |  | Configuration for the AppRole authentication method | |
 | k8s_auth         | struct |  | Configuration for the Kubernetes authentication method | |
 
-The plugin supports **Client Certificate**, **Token** and **AppRole** authentication methods.
+The plugin supports **Client Certificate**, **Token** and **AppRole**
+authentication methods.
 
 - **Client Certificate** method authenticates to Vault using a TLS client certificate.
 - **Token** method authenticates to Vault using the token in a HTTP Request header.
-- **AppRole** method authenticates to Vault using a RoleID and SecretID that are issued from Vault.
+- **AppRole** method authenticates to Vault using a RoleID and SecretID that are
+issued from Vault.
 
-The [`ca_ttl` SPIRE Server configurable](https://github.com/spiffe/spire/blob/main/doc/spire_server.md#server-configuration-file) should be less than or equal to the Vault's PKI secret engine TTL.
+The [`ca_ttl` SPIRE Server configurable](https://github.com/spiffe/spire/blob/main/doc/spire_server.md#server-configuration-file)
+should be less than or equal to the Vault's PKI secret engine TTL.
 To configure the TTL value, tune the engine.
 
 e.g.
@@ -34,7 +39,8 @@ e.g.
 vault secrets tune -max-lease-ttl=8760h pki
 ```
 
-The configured token needs to be attached to a policy that has at least the following capabilities:
+The configured token needs to be attached to a policy that has at least the
+following capabilities:
 
 ```hcl
 path "pki/root/sign-intermediate" {

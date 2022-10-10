@@ -45,7 +45,8 @@ databindings file.
 
 ### Rego policy
 
-The rego policy defines how input to the policy engine is evaluated to produce the result used by SPIRE server for authorization decisions.
+The rego policy defines how input to the policy engine is evaluated to produce
+the result used by SPIRE server for authorization decisions.
 
 This is defined by the result object:
 

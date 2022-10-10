@@ -1,7 +1,9 @@
 # Server plugin: UpstreamAuthority "aws_pca"
 
-The `aws_pca` plugin uses a certificate authority from AWS Certificate Manager (ACM)
-Private Certificate Authority (PCA) to sign intermediate signing certificates for SPIRE Server.
+The `aws_pca` plugin uses a certificate authority from AWS Certificate Manager
+(ACM)
+Private Certificate Authority (PCA) to sign intermediate signing certificates
+for SPIRE Server.
 
 The plugin accepts the following configuration options:
 
@@ -15,11 +17,19 @@ The plugin accepts the following configuration options:
 | endpoint                  | (Optional) Endpoint as hostname or fully-qualified URI that overrides the default endpoint.  See [AWS SDK Config docs](https://docs.aws.amazon.com/sdk-for-go/api/aws/#Config) for more information.                                                     |
 | supplemental_bundle_path  | (Optional) Path to a file containing PEM-encoded CA certificates that should be additionally included in the bundle.                                                                                                                                     |
 
-The plugin will attempt to load AWS credentials using the default provider chain. This includes credentials from environment variables, shared credentials files, and EC2 instance roles. See [Specifying Credentials](https://docs.aws.amazon.com/sdk-for-go/v1/developer-guide/configuring-sdk.html#specifying-credentials) for the full default credentials chain.
+The plugin will attempt to load AWS credentials using the default provider chain.
+This includes credentials from environment variables, shared credentials files,
+and EC2 instance roles. See [Specifying Credentials](https://docs.aws.amazon.com/sdk-for-go/v1/developer-guide/configuring-sdk.html#specifying-credentials)
+for the full default credentials chain.
 
-See [AWS Certificate Manager Private Certificate Authority](https://aws.amazon.com/certificate-manager/private-certificate-authority/) for more details on ACM Private Certificate Authority.
+See [AWS Certificate Manager Private Certificate Authority](https://aws.amazon.com/certificate-manager/private-certificate-authority/)
+for more details on ACM Private Certificate Authority.
 
-> Note: A Private Certificate Authority from ACM cannot have it's private key rotated and maintain the same ARN. As a result, restarting SPIRE server is currently required to change which CA from ACM is signing the intermediate CA for SPIRE. It's recommended to use a persisting key store for SPIRE so that existing intermediate signing certificates are maintained upon restart.
+> Note: A Private Certificate Authority from ACM cannot have it's private key
+rotated and maintain the same ARN. As a result, restarting SPIRE server is
+currently required to change which CA from ACM is signing the intermediate CA
+for SPIRE. It's recommended to use a persisting key store for SPIRE so that
+existing intermediate signing certificates are maintained upon restart.
 
 Sample configuration:
 
@@ -37,7 +47,9 @@ UpstreamAuthority "aws_pca" {
 
 SPIRE server requires the following policy for the IAM identity used.
 
-> Note: The example provided allows access to all CAs and certificates. Resources should be specified down to limit authorized scope further. See [Configure Access to ACM Private CA](https://docs.aws.amazon.com/acm-pca/latest/userguide/PcaAuthAccess.html).
+> Note: The example provided allows access to all CAs and certificates.
+Resources should be specified down to limit authorized scope further. See
+[Configure Access to ACM Private CA](https://docs.aws.amazon.com/acm-pca/latest/userguide/PcaAuthAccess.html).
 
 ```json
 {

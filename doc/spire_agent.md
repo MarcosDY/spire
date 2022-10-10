@@ -1,6 +1,8 @@
 # SPIRE Agent Configuration Reference
 
-This document is a configuration reference for SPIRE Agent. It includes information about plugin types, built-in plugins, the agent configuration file, plugin configuration, and command line options for `spire-agent` commands.
+This document is a configuration reference for SPIRE Agent. It includes
+information about plugin types, built-in plugins, the agent configuration file,
+plugin configuration, and command line options for `spire-agent` commands.
 
 ## Plugin types
 
@@ -33,12 +35,19 @@ This document is a configuration reference for SPIRE Agent. It includes informat
 
 ## Agent configuration file
 
-The following table outlines the configuration options for SPIRE agent. These may be set in a top-level `agent { ... }` section of the configuration file. Most options have a corresponding CLI flag which, if set, takes precedence over values defined in the file.
+The following table outlines the configuration options for SPIRE agent. These
+may be set in a top-level `agent { ... }` section of the configuration file.
+Most options have a corresponding CLI flag which, if set, takes precedence over
+values defined in the file.
 
-SPIRE configuration files may be represented in either HCL or JSON. Please see the [sample configuration file](#sample-configuration-file) section for a complete example.
+SPIRE configuration files may be represented in either HCL or JSON. Please see
+the [sample configuration file](#sample-configuration-file) section for a
+complete example.
 
-If the -expandEnv flag is passed to SPIRE, `$VARIABLE` or `${VARIABLE}` style environment variables are expanded before parsing.
-This may be useful for templating configuration files, for example across different trust domains, or for inserting secrets like join tokens.
+If the -expandEnv flag is passed to SPIRE, `$VARIABLE` or `${VARIABLE}` style
+environment variables are expanded before parsing.
+This may be useful for templating configuration files, for example across
+different trust domains, or for inserting secrets like join tokens.
 
 | Configuration                     | Description                                                                                                                    | Default                          |
 |-----------------------------------|--------------------------------------------------------------------------------------------------------------------------------|----------------------------------|
@@ -72,11 +81,23 @@ This may be useful for templating configuration files, for example across differ
 
 ### Initial trust bundle configuration
 
-The agent needs an initial trust bundle in order to connect securely to the SPIRE server. There are three options:
+The agent needs an initial trust bundle in order to connect securely to the
+SPIRE server. There are three options:
 
-1. If the `trust_bundle_path` option is used, the agent will read the initial trust bundle from the file at that path. You need to copy or share the file before starting the SPIRE agent.
-2. If the `trust_bundle_url` option is used, the agent will read the initial trust bundle from the specified URL. **The URL must start with `https://` for security, and the server must have a valid certificate (verified with the system trust store).** This can be used to rapidly deploy SPIRE agents without having to manually share a file. Keep in mind the contents of the URL need to be kept up to date.
-3. If the `insecure_bootstrap` option is set to `true`, then the agent will not use an initial trust bundle. It will connect to the SPIRE server without authenticating it. This is not a secure configuration, because a man-in-the-middle attacker could control the SPIRE infrastructure. It is included because it is a useful option for testing and development.
+1. If the `trust_bundle_path` option is used, the agent will read the initial
+trust bundle from the file at that path. You need to copy or share the file
+before starting the SPIRE agent.
+2. If the `trust_bundle_url` option is used, the agent will read the initial
+trust bundle from the specified URL. **The URL must start with `https://` for
+security, and the server must have a valid certificate (verified with the system
+trust store).** This can be used to rapidly deploy SPIRE agents without having
+to manually share a file. Keep in mind the contents of the URL need to be kept
+up to date.
+3. If the `insecure_bootstrap` option is set to `true`, then the agent will not
+use an initial trust bundle. It will connect to the SPIRE server without
+authenticating it. This is not a secure configuration, because a
+man-in-the-middle attacker could control the SPIRE infrastructure. It is
+included because it is a useful option for testing and development.
 
 Only one of these three options may be set at a time.
 
@@ -91,7 +112,8 @@ Only one of these three options may be set at a time.
 
 ### Profiling Names
 
-These are the available profiles that can be set in the `profiling_freq` configuration value:
+These are the available profiles that can be set in the `profiling_freq`
+configuration value:
 
 - `goroutine`
 - `threadcreate`
@@ -103,8 +125,10 @@ These are the available profiles that can be set in the `profiling_freq` configu
 
 ## Plugin configuration
 
-The agent configuration file also contains the configuration for the agent plugins.
-Plugin configurations are under the `plugins { ... }` section, which has the following format:
+The agent configuration file also contains the configuration for the agent
+plugins.
+Plugin configurations are under the `plugins { ... }` section, which has the
+following format:
 
 ```hcl
 plugins {
@@ -125,15 +149,21 @@ The following configuration options are available to configure a plugin:
 | enabled         | Enable or disable the plugin (enabled by default)                             |
 | plugin_data     | Plugin-specific data                                                          |
 
-Please see the [built-in plugins](#built-in-plugins) section for information on plugins that are available out-of-the-box.
+Please see the [built-in plugins](#built-in-plugins) section for information on
+plugins that are available out-of-the-box.
 
 ## Telemetry configuration
 
-Please see the [Telemetry Configuration](./telemetry_config.md) guide for more information about configuring SPIRE Agent to emit telemetry.
+Please see the [Telemetry Configuration](./telemetry_config.md) guide for more
+information about configuring SPIRE Agent to emit telemetry.
 
 ## Health check configuration
 
-The agent can expose additional endpoint that can be used for health checking. It is enabled by setting `listener_enabled = true`. Currently it exposes 2 paths: one for liveness (is agent up) and one for readiness (is agent ready to serve requests). By default, health checking endpoint will listen on localhost:80, unless configured otherwise.
+The agent can expose additional endpoint that can be used for health checking.
+It is enabled by setting `listener_enabled = true`. Currently it exposes 2
+paths: one for liveness (is agent up) and one for readiness (is agent ready to
+serve requests). By default, health checking endpoint will listen on
+localhost:80, unless configured otherwise.
 
 ```hcl
 health_checks {
@@ -149,8 +179,8 @@ health_checks {
 
 ### `spire-agent run`
 
-All of the configuration file above options have identical command-line counterparts. In addition,
-the following flags are available:
+All of the configuration file above options have identical command-line
+counterparts. In addition, the following flags are available:
 
 | Command                          | Action                                                                              | Default               |
 |----------------------------------|-------------------------------------------------------------------------------------|-----------------------|
@@ -171,7 +201,8 @@ the following flags are available:
 
 ### `spire-agent api fetch`
 
-Calls the workload API to fetch an X509-SVID. This command is aliased to `spire-agent api fetch x509`.
+Calls the workload API to fetch an X509-SVID. This command is aliased to
+`spire-agent api fetch x509`.
 
 | Command       | Action                                | Default                          |
 |---------------|---------------------------------------|----------------------------------|
@@ -215,7 +246,8 @@ Calls the workload API to validate the supplied JWT-SVID.
 
 ### `spire-agent api watch`
 
-Attaches to the workload API and watches for X509-SVID updates, printing details when updates are received.
+Attaches to the workload API and watches for X509-SVID updates, printing details
+when updates are received.
 
 | Command       | Action                             | Default                          |
 |---------------|------------------------------------|----------------------------------|
@@ -242,7 +274,8 @@ Validates a SPIRE agent configuration file.
 
 ## Sample configuration file
 
-This section includes a sample configuration file for formatting and syntax reference
+This section includes a sample configuration file for formatting and syntax
+reference
 
 ```hcl
 agent {
@@ -286,9 +319,17 @@ plugins {
 
 ## Delegated Identity API
 
-SPIRE agent has support for Delegated Identity API. This API is intended for use cases where a (authorized) workload wants access to the X509-SVIDs and bundles on behalf of another workload. A list of authorized delegates SPIFFE IDs of workloads are defined for this purpose. The API is served over the same endpoint address as the admin API. Based on workload's selectors, a (authorized) workload could be subscribed to get X509-SVIDs and federated bundles from the registered entries that match the provided selectors.
+SPIRE agent has support for Delegated Identity API. This API is intended for
+use cases where a (authorized) workload wants access to the X509-SVIDs and
+bundles on behalf of another workload. A list of authorized delegates SPIFFE IDs
+of workloads are defined for this purpose. The API is served over the same
+endpoint address as the admin API. Based on workload's selectors, a (authorized)
+workload could be subscribed to get X509-SVIDs and federated bundles from the
+registered entries that match the provided selectors.
 
-In order to use this API, you shall configure the `admin_socket_path` and `authorized_delegates` (SPIFFE ID list of authorized delegates identities), as the following example:
+In order to use this API, you shall configure the `admin_socket_path` and
+`authorized_delegates` (SPIFFE ID list of authorized delegates identities), as
+the following example:
 
 Unix systems:
 
@@ -322,12 +363,16 @@ agent {
 
 ## Envoy SDS Support
 
-SPIRE agent has support for the [Envoy](https://envoyproxy.io) [Secret Discovery Service](https://www.envoyproxy.io/docs/envoy/latest/configuration/security/secret) (SDS).
-SDS is served over the same Unix domain socket as the Workload API. Envoy processes connecting to SDS are attested as workloads.
+SPIRE agent has support for the [Envoy](https://envoyproxy.io)
+[Secret Discovery Service](https://www.envoyproxy.io/docs/envoy/latest/configuration/security/secret)
+(SDS).
+SDS is served over the same Unix domain socket as the Workload API. Envoy
+processes connecting to SDS are attested as workloads.
 
 [`auth.TlsCertificate`](https://www.envoyproxy.io/docs/envoy/latest/api-v2/api/v2/auth/cert.proto#envoy-api-msg-auth-tlscertificate)
-resources containing X509-SVIDs can be fetched using the SPIFFE ID of the workload as the resource name
-(e.g. `spiffe://example.org/database`). Alternatively, if the default name "default" is used, the `auth.TlsCertificate`
+resources containing X509-SVIDs can be fetched using the SPIFFE ID of the
+workload as the resource name (e.g. `spiffe://example.org/database`).
+Alternatively, if the default name "default" is used, the `auth.TlsCertificate`
 containing the default X509-SVID for the workload (i.e. Envoy) is fetched.
 The default name is configurable (see `default_svid_name` under [SDS Configuration](#sds-configuration)).
 
@@ -345,17 +390,30 @@ support for the [SPIFFE Certificate Validator](https://www.envoyproxy.io/docs/en
 extension, which is only available starting with Envoy 1.18.
 The default name is configurable (see `default_all_bundles_name` under [SDS Configuration](#sds-configuration).
 
-The [SPIFFE Certificate Validator](https://www.envoyproxy.io/docs/envoy/latest/api-v3/extensions/transport_sockets/tls/v3/tls_spiffe_validator_config.proto) configures Envoy to perform SPIFFE authentication. The validation context returned by SPIRE Agent contains this extension by default. However, if standard X.509 chain validation is desired, SPIRE Agent can be configured to omit the extension. The default behavior can be changed by configuring `disable_spiffe_cert_validation` in [SDS Configuration](#sds-configuration). Individual Envoy instances can also override the default behavior by configuring setting a `disable_spiffe_cert_validation` key in the Envoy node metadata.
+The [SPIFFE Certificate Validator](https://www.envoyproxy.io/docs/envoy/latest/api-v3/extensions/transport_sockets/tls/v3/tls_spiffe_validator_config.proto)
+configures Envoy to perform SPIFFE authentication. The validation context
+returned by SPIRE Agent contains this extension by default. However, if standard
+X.509 chain validation is desired, SPIRE Agent can be configured to omit the
+extension. The default behavior can be changed by configuring
+`disable_spiffe_cert_validation` in [SDS Configuration](#sds-configuration).
+Individual Envoy instances can also override the default behavior by configuring
+setting a `disable_spiffe_cert_validation` key in the Envoy node metadata.
 
 ## OpenShift Support
 
-The default security profile of [OpenShift](https://www.openshift.com/products/container-platform) forbids access to host level resources. A custom set of policies can be applied to enable the level of access needed by Spire to operate within OpenShift.
+The default security profile of [OpenShift](https://www.openshift.com/products/container-platform)
+forbids access to host level resources. A custom set of policies can be applied
+to enable the level of access needed by Spire to operate within OpenShift.
 
-_Note: A user with `cluster-admin` privileges is required in order to apply these policies._
+_Note: A user with `cluster-admin` privileges is required in order to apply
+these policies._
 
 ### Security Context Constraints
 
-Actions performed by pods are controlled by Security Context Constraints (SCC's) and every pod that is admitted is assigned a particular SCC depending on range of conditions. The following custom SCC with the name `spire` can be used to enable the necessary host level access needed by the Spire Agent
+Actions performed by pods are controlled by Security Context Constraints (SCC's)
+and every pod that is admitted is assigned a particular SCC depending on range
+of conditions. The following custom SCC with the name `spire` can be used to
+enable the necessary host level access needed by the Spire Agent
 
 ```yaml
 allowHostDirVolumePlugin: true
@@ -404,9 +462,12 @@ volumes:
 
 ### Associating A Security Constraint With a Workload
 
-Workloads can be granted access to Security Context Constraints through Role Based Access Control Policies by associating the SCC with the Service Account referenced by the pod.
+Workloads can be granted access to Security Context Constraints through Role
+Based Access Control Policies by associating the SCC with the Service Account
+referenced by the pod.
 
-In order to leverage the `spire` SCC, a _ClusterRole_ leveraging `use` verb referencing the SCC must be created:
+In order to leverage the `spire` SCC, a _ClusterRole_ leveraging `use` verb
+referencing the SCC must be created:
 
 ```yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -427,9 +488,11 @@ rules:
   - use
 ```
 
-Finally, associate the `system:openshift:scc:spire` _ClusterRole_ to the `spire-agent` Service account by creating a _RoleBinding_ in the `spire` namespace
+Finally, associate the `system:openshift:scc:spire` _ClusterRole_ to the
+`spire-agent` Service account by creating a _RoleBinding_ in the `spire` namespace
 
-_Note:_ Create the `spire` namespace if it does exist prior to applying the following policy.
+_Note:_ Create the `spire` namespace if it does exist prior to applying the
+following policy.
 
 ```yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -447,7 +510,9 @@ subjects:
     namespace: spire
 ```
 
-As SCC's are applied at pod admission time, remove any existing Spire Agent pods. All newly admitted pods will make use of the `spire` SCC enabling their use within OpenShift.
+As SCC's are applied at pod admission time, remove any existing Spire Agent pods.
+All newly admitted pods will make use of the `spire` SCC enabling their use
+within OpenShift.
 
 ## Further reading
 

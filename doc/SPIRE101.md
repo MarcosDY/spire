@@ -2,7 +2,10 @@
 
 ## Overview
 
-This walkthrough will guide you through the steps needed to setup a running example of a SPIRE Server and SPIRE Agent. Interaction with the [Workload API](https://github.com/spiffe/go-spiffe/blob/main/v2/proto/spiffe/workload/workload.proto) will be simulated via a command line tool.
+This walkthrough will guide you through the steps needed to setup a running
+example of a SPIRE Server and SPIRE Agent. Interaction with the
+[Workload API](https://github.com/spiffe/go-spiffe/blob/main/v2/proto/spiffe/workload/workload.proto)
+will be simulated via a command line tool.
 
  ![SPIRE101](images/SPIRE101.png)
 
@@ -18,7 +21,8 @@ git clone https://github.com/spiffe/spire
 
 ### Docker Setup
 
-If you don't already have Docker installed, please follow these [installation instructions](https://docs.docker.com/engine/installation/).
+If you don't already have Docker installed, please follow these
+[installation instructions](https://docs.docker.com/engine/installation/).
 
 ## Terminology
 
@@ -44,19 +48,24 @@ If you don't already have Docker installed, please follow these [installation in
    make dev-shell
    ```
 
-3. Create a user with uid 1000. The uid will be registered as a selector of the workload's SPIFFE ID. During kernel based attestation the workload process will be interrogated for the registered uid.
+3. Create a user with uid 1000. The uid will be registered as a selector of the
+workload's SPIFFE ID. During kernel based attestation the workload process will
+be interrogated for the registered uid.
 
    ```shell
    useradd -u 1000 workload
    ```
 
-4. Build SPIRE by running the **build** target. The build target builds all the SPIRE binaries.
+4. Build SPIRE by running the **build** target. The build target builds all the
+SPIRE binaries.
 
    ```shell
    make build
    ```
 
-5. Try running `help` for `entry` sub command. The **spire-server** and **spire-agent** executables have `-—help`  option that give details of respective cli options.
+5. Try running `help` for `entry` sub command. The **spire-server** and
+**spire-agent** executables have `-—help`  option that give details of
+respective cli options.
 
    ```shell
    ./bin/spire-server entry --help
@@ -68,7 +77,9 @@ If you don't already have Docker installed, please follow these [installation in
    cat conf/server/server.conf
    ```
 
-   The default SPIRE Server configurations are shown below. A detailed description of each of the SPIRE Server configuration options is in [the Server documentation](/doc/spire_server.md).
+   The default SPIRE Server configurations are shown below. A detailed
+   description of each of the SPIRE Server configuration options is in
+   [the Server documentation](/doc/spire_server.md).
 
    ```hcl
    server {
@@ -111,21 +122,27 @@ If you don't already have Docker installed, please follow these [installation in
    }
    ```
 
-7. Start the SPIRE Server as a background process by running the following command.
+7. Start the SPIRE Server as a background process by running the following
+command.
 
    ```shell
    ./bin/spire-server run &
    ```
 
-8. Generate a one time Join Token via **spire-server token generate** sub command. Use the **-spiffeID** option to associate the Join Token with **spiffe://example.org/host** SPIFFE ID. Save the generated join token in your copy buffer.
+8. Generate a one time Join Token via **spire-server token generate** sub
+command. Use the **-spiffeID** option to associate the Join Token with
+**spiffe://example.org/host** SPIFFE ID. Save the generated join token in your
+copy buffer.
 
    ```shell
    ./bin/spire-server token generate -spiffeID spiffe://example.org/host
    ```
 
-   The Join Token will be used as a form of node attestation and the associated SPIFFE ID will be assigned to the node.
+   The Join Token will be used as a form of node attestation and the associated
+   SPIFFE ID will be assigned to the node.
 
-   The default ttl of the Join Token is 600 seconds. We can overwrite the default value through **-ttl** option.
+   The default ttl of the Join Token is 600 seconds. We can overwrite the
+   default value through **-ttl** option.
 
 9. View the configuration file of the SPIRE Agent
 
@@ -133,7 +150,9 @@ If you don't already have Docker installed, please follow these [installation in
    cat conf/agent/agent.conf
    ```
 
-   The default SPIRE Agent configurations are shown below. A detailed description of each of the SPIRE Agent configuration options is in [the Agent documentation](/doc/spire_agent.md).
+   The default SPIRE Agent configurations are shown below. A detailed
+   description of each of the SPIRE Agent configuration options is in
+   [the Agent documentation](/doc/spire_agent.md).
 
    ```hcl
    agent {
@@ -172,13 +191,17 @@ If you don't already have Docker installed, please follow these [installation in
    }
    ```
 
-10. Start the SPIRE Agent as a background process. Replace `<generated-join-token>` with the saved value from step #8 in the following command.
+10. Start the SPIRE Agent as a background process. Replace
+`<generated-join-token>` with the saved value from step #8 in the following
+command.
 
     ```shell
     ./bin/spire-agent run -joinToken <generated-join-token> &
     ```
 
-11. The next step is to register a SPIFFE ID with a set of selectors. For the example we will use unix kernel selectors that will be mapped to a target SPIFFE ID.
+11. The next step is to register a SPIFFE ID with a set of selectors. For the
+example we will use unix kernel selectors that will be mapped to a target
+SPIFFE ID.
 
     ```shell
     ./bin/spire-server entry create \
@@ -187,15 +210,20 @@ If you don't already have Docker installed, please follow these [installation in
         -selector unix:uid:1000
     ```
 
-    At this point, the target workload has been registered with the SPIRE Server. We can now call the Workload API using a command line program to request the workload SVID from the SPIRE Agent.
+    At this point, the target workload has been registered with the SPIRE Server.
+    We can now call the Workload API using a command line program to request
+    the workload SVID from the SPIRE Agent.
 
-12. Simulate the Workload API interaction and retrieve the workload SVID bundle by running the `api` subcommand in the agent. Run the command as user **_workload_** created in step #3 with uid 1000
+12. Simulate the Workload API interaction and retrieve the workload SVID bundle
+by running the `api` subcommand in the agent. Run the command as user
+**_workload_** created in step #3 with uid 1000
 
     ```shell
     su -c "./bin/spire-agent api fetch x509 " workload
     ```
 
-13. Examine the output. Optionally, you may write the SVID and key to disk with `-write` in order to examine them in detail.
+13. Examine the output. Optionally, you may write the SVID and key to disk with
+`-write` in order to examine them in detail.
 
     ```shell
     su -c "./bin/spire-agent api fetch x509 -write ./" workload

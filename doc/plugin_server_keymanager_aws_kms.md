@@ -1,6 +1,8 @@
 # Server plugin: KeyManager "aws_kms"
 
-The `aws_kms` key manager plugin leverages the AWS Key Management Service (KMS) to create, maintain and rotate key pairs (as [Customer Master Keys](https://docs.aws.amazon.com/kms/latest/developerguide/concepts.html#master_keys), or CMKs), and sign SVIDs as needed, with the private key never leaving KMS.
+The `aws_kms` key manager plugin leverages the AWS Key Management Service (KMS)
+to create, maintain and rotate key pairs (as [Customer Master Keys](https://docs.aws.amazon.com/kms/latest/developerguide/concepts.html#master_keys),
+or CMKs), and sign SVIDs as needed, with the private key never leaving KMS.
 
 ## Configuration
 
@@ -16,19 +18,38 @@ The plugin accepts the following configuration options:
 
 ### Alias and Key Management
 
-The plugin assigns [aliases](https://docs.aws.amazon.com/kms/latest/developerguide/kms-alias.html) to the Customer Master Keys that manages. The aliases are used to identify and name keys that are managed by the plugin.
+The plugin assigns [aliases](https://docs.aws.amazon.com/kms/latest/developerguide/kms-alias.html)
+to the Customer Master Keys that manages. The aliases are used to identify and
+name keys that are managed by the plugin.
 
-Aliases managed by the plugin have the following form: `alias/SPIRE_SERVER/{TRUST_DOMAIN}/{SERVER_ID}/{KEY_ID}`. The `{SERVER_ID}` is an auto-generated ID unique to the server and is persisted in the _Key Metadata File_ (see the `key_metadata_file` configurable). This ID allows multiple servers in the same trust domain (e.g. servers in HA deployments) to manage keys with identical `{KEY_ID}`'s without collision. The `{KEY_ID}` in the alias name is encoded to use a [character set accepted by KMS](https://docs.aws.amazon.com/kms/latest/APIReference/API_CreateAlias.html#API_CreateAlias_RequestSyntax).
+Aliases managed by the plugin have the following form: `alias/SPIRE_SERVER/{TRUST_DOMAIN}/{SERVER_ID}/{KEY_ID}`.
+The `{SERVER_ID}` is an auto-generated ID unique to the server and is persisted
+in the _Key Metadata File_ (see the `key_metadata_file` configurable). This ID
+allows multiple servers in the same trust domain (e.g. servers in HA deployments)
+to manage keys with identical `{KEY_ID}`'s without collision. The `{KEY_ID}` in
+the alias name is encoded to use a [character set accepted by KMS](https://docs.aws.amazon.com/kms/latest/APIReference/API_CreateAlias.html#API_CreateAlias_RequestSyntax).
 
-If the _Key Metadata File_ is not found on server startup, the file is recreated, with a new auto-generated server ID. Consequently, if the file is lost, the plugin will not be able to identify keys that it has previously managed and will recreate new keys on demand.
+If the _Key Metadata File_ is not found on server startup, the file is recreated,
+with a new auto-generated server ID. Consequently, if the file is lost, the plugin
+will not be able to identify keys that it has previously managed and will
+recreate new keys on demand.
 
-The plugin attempts to detect and prune stale aliases. To facilitate stale alias detection, the plugin actively updates the `LastUpdatedDate` field on all aliases every 6 hours. The plugin periodically scans aliases. Any alias encountered with a `LastUpdatedDate` older than two weeks is removed, along with its associated key.
+The plugin attempts to detect and prune stale aliases. To facilitate stale alias
+detection, the plugin actively updates the `LastUpdatedDate` field on all aliases
+every 6 hours. The plugin periodically scans aliases. Any alias encountered with
+a `LastUpdatedDate` older than two weeks is removed, along with its associated key.
 
-The plugin also attempts to detect and prune stale keys. All keys managed by the plugin are assigned a `Description` of the form `SPIRE_SERVER/{TRUST_DOMAIN}`. The plugin periodically scans the keys. Any key with a `Description` matching the proper form, that is both unassociated with any alias and has a `CreationDate` older than 48 hours, is removed.
+The plugin also attempts to detect and prune stale keys. All keys managed by the
+plugin are assigned a `Description` of the form `SPIRE_SERVER/{TRUST_DOMAIN}`.
+The plugin periodically scans the keys. Any key with a `Description` matching
+the proper form, that is both unassociated with any alias and has a `CreationDate`
+older than 48 hours, is removed.
 
 ### AWS KMS Access
 
-Access to AWS KMS can be given by either setting the `access_key_id` and `secret_access_key`, or by ensuring that the plugin runs on an EC2 instance with a given IAM role that has a specific set of permissions.
+Access to AWS KMS can be given by either setting the `access_key_id` and
+`secret_access_key`, or by ensuring that the plugin runs on an EC2 instance with
+a given IAM role that has a specific set of permissions.
 
 The IAM role must have an attached policy with the following permissions:
 
@@ -45,12 +66,13 @@ The IAM role must have an attached policy with the following permissions:
 
 ### Key policy
 
-The plugin can generate keys using a default key policy or it can load and use a user defined policy.
+The plugin can generate keys using a default key policy or it can load and use
+a user defined policy.
 
 #### Default key policy
 
-The default key policy relies on the SPIRE Server's assumed role. Therefore, it is mandatory
-for SPIRE server to assume a role in order to use the default policy.
+The default key policy relies on the SPIRE Server's assumed role. Therefore, it
+is mandatory for SPIRE server to assume a role in order to use the default policy.
 
 ```json
 {
@@ -82,13 +104,15 @@ for SPIRE server to assume a role in order to use the default policy.
 }
 ```
 
-- The first statement of the policy gives the current SPIRE server assumed role full access to the CMK.
+- The first statement of the policy gives the current SPIRE server assumed role
+full access to the CMK.
 - The second statement allows the keys and policy to be displayed in the KMS console.
 
 #### Custom key policy
 
-It is also possible for the user to define a custom key policy. If the configurable `key_policy_file`
-is set, the plugin uses the policy defined in the file instead of the default policy.
+It is also possible for the user to define a custom key policy. If the
+configurable `key_policy_file` is set, the plugin uses the policy defined in the
+file instead of the default policy.
 
 ## Sample Plugin Configuration
 
@@ -103,4 +127,5 @@ KeyManager "aws_kms" {
 
 ## Supported Key Types and TTL
 
-The plugin supports all the key types supported by SPIRE: `rsa-2048`, `rsa-4096`, `ec-p256`, and `ec-p384`.
+The plugin supports all the key types supported by SPIRE: `rsa-2048`, `rsa-4096`,
+`ec-p256`, and `ec-p384`.

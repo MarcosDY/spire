@@ -1,6 +1,7 @@
 # Agent plugin: SVIDStore "aws_secretsmanager"
 
-The `aws_secretsmanager` plugin stores in [AWS Secrets Manager](https://aws.amazon.com/es/secrets-manager/) the resulting X509-SVIDs of the entries that the agent is entitled to.
+The `aws_secretsmanager` plugin stores in [AWS Secrets Manager](https://aws.amazon.com/es/secrets-manager/)
+the resulting X509-SVIDs of the entries that the agent is entitled to.
 
 ## Secret format
 
@@ -32,11 +33,13 @@ secretsmanager:DeleteSecret
 kms:Encrypt
 ```
 
-Please note that this plugin does not read secrets it has stored and therefore does not require read permissions.
+Please note that this plugin does not read secrets it has stored and therefore
+does not require read permissions.
 
 ## Configuration
 
-When the SVIDs are updated, the plugin takes care of updating them in AWS Secrets Manager.
+When the SVIDs are updated, the plugin takes care of updating them in AWS Secrets
+Manager.
 
 | Configuration     | Description                                                                         |
 |-------------------|-------------------------------------------------------------------------------------|
@@ -58,7 +61,8 @@ A sample configuration:
 
 ## Selectors
 
-The selectors of the type `aws_secretsmanager` are used to describe metadata that is needed by the plugin in order to store secret values in AWS Secrets Manager.
+The selectors of the type `aws_secretsmanager` are used to describe metadata
+that is needed by the plugin in order to store secret values in AWS Secrets Manager.
 
 | Selector                        | Example                                   | Description                                                                                                                                                                                                                                                                                                                                        |
 |---------------------------------|-------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|

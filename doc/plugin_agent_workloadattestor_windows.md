@@ -1,7 +1,10 @@
 # Agent plugin: WorkloadAttestor "windows"
 
-The `windows` plugin generates Windows-based selectors for workloads calling the agent.
-It does so by opening an access token associated with the workload process. The system is then interrogated to retrieve user and group account information from that access token.
+The `windows` plugin generates Windows-based selectors for workloads calling the
+agent.
+It does so by opening an access token associated with the workload process. The
+system is then interrogated to retrieve user and group account information from
+that access token.
 
 | Configuration            | Description                                                                                                                                                | Default |
 |--------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------|---------|
@@ -19,7 +22,8 @@ It does so by opening an access token associated with the workload process. The 
 | `windows:group_name:se_group_enabled:true`  | The group name of an enabled group associated with the access token from the workload process (e.g. `windows:group_name:se_group_enabled:true:computer-or-domain\mygroup`)                                              |
 | `windows:group_name:se_group_enabled:false` | The group name of a not enabled group associated with the access token from the workload process (e.g. `windows:group_name:se_group_enabled:false:computer-or-domain\mygroup`)                                          |
 
-Workload path enabled selectors (available when configured with `discover_workload_path = true`):
+Workload path enabled selectors (available when configured with
+`discover_workload_path = true`):
 
 | Selector         | Value                                                                                                                             |
 |------------------|-----------------------------------------------------------------------------------------------------------------------------------|
@@ -32,22 +36,26 @@ Malicious workloads could cause the SPIRE agent to do expensive work
 calculating a sha256 for large workload binaries, causing a denial-of-service.
 Defenses against this are:
 
-- disabling calculation entirely by setting `workload_size_limit` to a negative value
+- disabling calculation entirely by setting `workload_size_limit` to a negative
+value
 - use `workload_size_limit` to enforce a limit on the binary size the
-  plugin is willing to hash. However, the same attack could be performed by spawning a
-  bunch of processes under the limit.
-  The workload API does not yet support rate limiting, but when it does, this attack can
-  be mitigated by using rate limiting in conjunction with non-negative `workload_size_limit`.
+  plugin is willing to hash. However, the same attack could be performed by
+  spawning a bunch of processes under the limit.
+  The workload API does not yet support rate limiting, but when it does, this
+  attack can be mitigated by using rate limiting in conjunction with
+  non-negative `workload_size_limit`.
 
 ### Notes
 
-- An enabled group in a token is a group that has the [SE_GROUP_ENABLED](https://docs.microsoft.com/en-us/windows/win32/secauthz/sid-attributes-in-an-access-token) attribute.
+- An enabled group in a token is a group that has the [SE_GROUP_ENABLED](https://docs.microsoft.com/en-us/windows/win32/secauthz/sid-attributes-in-an-access-token)
+attribute.
 
 - User and group account names are expressed using the [down-level logon name format](https://docs.microsoft.com/en-us/windows/win32/secauthn/user-name-formats#down-level-logon-name).
 
 ## Configuration
 
-This plugin does not require any configuration setting. It can be added in the following way in the agent configuration file:
+This plugin does not require any configuration setting. It can be added in the
+following way in the agent configuration file:
 
 ```hcl
  WorkloadAttestor "windows" {

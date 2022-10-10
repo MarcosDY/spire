@@ -44,8 +44,10 @@ A sample configuration:
 
 ## Agent Path Template
 
-The agent path template is a way of customizing the format of generated SPIFFE IDs for agents.
-The template formatter is using Golang text/template conventions, it can reference values provided by the plugin or in a [golang x509.Certificate](https://pkg.go.dev/crypto/x509#Certificate)
+The agent path template is a way of customizing the format of generated
+SPIFFE IDs for agents.
+The template formatter is using Golang text/template conventions, it can
+reference values provided by the plugin or in a [golang x509.Certificate](https://pkg.go.dev/crypto/x509#Certificate)
 
 Some useful values are:
 

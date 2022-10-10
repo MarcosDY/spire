@@ -20,7 +20,8 @@ For development that requires changes to the gRPC interfaces you will need:
 
 ## Building
 
-Since go modules are used, this repository can live in any folder on your local disk (it is not required to be in GOPATH).
+Since go modules are used, this repository can live in any folder on your local
+disk (it is not required to be in GOPATH).
 
 A Makefile is provided for common actions.
 
@@ -61,12 +62,13 @@ run the container.
 ## Conventions
 
 In addition to the conventions covered in the SPIFFE project's
-[CONTRIBUTING](https://github.com/spiffe/spiffe/blob/main/CONTRIBUTING.md), the following
-conventions apply to the SPIRE repository:
+[CONTRIBUTING](https://github.com/spiffe/spiffe/blob/main/CONTRIBUTING.md), the
+following conventions apply to the SPIRE repository:
 
 ### SQL Plugin Changes
 
-Datastore changes must be present in at least one full minor release cycle prior to introducing code changes that depend on them.
+Datastore changes must be present in at least one full minor release cycle prior
+to introducing code changes that depend on them.
 
 ### Directory layout
 
@@ -90,30 +92,32 @@ The implementation of each plugin and their support packages
 
 gRPC .proto files, their generated .pb.go, and README_pb.md.
 
-The protobuf package names should be `spire.{server,agent,api,common}.<name>` and the go package name
-should be specified with `option go_package = "<name>";`
+The protobuf package names should be `spire.{server,agent,api,common}.<name>`
+and the go package name should be specified with `option go_package = "<name>";`
 
 ### Interfaces
 
-Packages should be exported through interfaces. Interaction with packages must be done through these
-interfaces
+Packages should be exported through interfaces. Interaction with packages must
+be done through these interfaces
 
-Interfaces should be defined in their own file, named (in lowercase) after the name of the
-interface. eg. `foodata.go` implements `type FooData interface{}`
+Interfaces should be defined in their own file, named (in lowercase) after the
+name of the interface. eg. `foodata.go` implements `type FooData interface{}`
 
 ### Metrics
 
-As much as possible, label names should be constants defined in the `telemetry` package. Additionally,
-specific metrics should be centrally defined in the `telemetry` package or its subpackages. Functions
-desiring metrics should delegate counter, gauge, timer, etc. creation to such packages.
-The metrics emitted by SPIRE are listed in the [telemetry document](doc/telemetry.md) and should be kept up to date.
+As much as possible, label names should be constants defined in the `telemetry`
+package. Additionally, specific metrics should be centrally defined in the
+`telemetry` package or its subpackages. Functions desiring metrics should
+delegate counter, gauge, timer, etc. creation to such packages.
+The metrics emitted by SPIRE are listed in the [telemetry document](doc/telemetry.md)
+and should be kept up to date.
 
 In addition, metrics should be unit-tested where reasonable.
 
 #### Count in Aggregate
 
-Event count metrics should aggregate where possible to reduce burden on metric sinks, infrastructure,
-and consumers.
+Event count metrics should aggregate where possible to reduce burden on metric
+sinks, infrastructure, and consumers.
 That is, instead of:
 
 ```go
@@ -148,8 +152,9 @@ telemetry.FooNotUpdatedCount(notUpdatedCount)
 
 Labels added to metrics must be singular only; that is:
 
-* the value of a metrics label must not be an array or slice, and a label of some name must only be added
-once. Failure to follow this will make metrics less usable for non-tagging metrics libraries such as `statsd`.
+* the value of a metrics label must not be an array or slice, and a label of
+some name must only be added once. Failure to follow this will make metrics less
+usable for non-tagging metrics libraries such as `statsd`.
 As counter examples, DO NOT do the following:
 
 ```go
@@ -167,10 +172,11 @@ callCounter.AddLabel("someName", "val1")
 callCounter.AddLabel("someName", "val2")
 ```
 
-* the existence of a metrics label is constant for all instances of a given metric. For some given metric A with
-label X, label X must appear in every instance of metric A rather than conditionally. Failure to follow this will
-make metrics less usable for non-tagging metrics libraries such as `statsd`, and potentially break aggregation for
-tagging metrics libraries.
+* the existence of a metrics label is constant for all instances of a given
+metric. For some given metric A with label X, label X must appear in every
+instance of metric A rather than conditionally. Failure to follow this will
+make metrics less usable for non-tagging metrics libraries such as `statsd`,
+and potentially break aggregation for tagging metrics libraries.
 As a counter example, DO NOT do the following:
 
 ```go
@@ -205,11 +211,12 @@ if x > 5000 {
 
 ### Logs and Errors
 
-Errors should start with lower case, and logged messages should follow standard casing.
+Errors should start with lower case, and logged messages should follow standard
+casing.
 
-Log messages should make use of logging fields to convey additional information, rather than
-using string formatting which increases the cardinality of messages for log watchers to
-look for and hinders aggregation.
+Log messages should make use of logging fields to convey additional information,
+rather than using string formatting which increases the cardinality of messages
+for log watchers to look for and hinders aggregation.
 
 Log messages and error messages should not end with periods.
 
@@ -229,8 +236,8 @@ are also less inclined to be impacted by changes to usage patterns.
 
 ## Git hooks
 
-We have checked in a pre-commit hook which enforces `go fmt` styling. Please install it
-before sending a pull request. From the project root:
+We have checked in a pre-commit hook which enforces `go fmt` styling. Please
+install it before sending a pull request. From the project root:
 
 ```shell
 ln -s .githooks/pre-commit .git/hooks/pre-commit
@@ -238,4 +245,7 @@ ln -s .githooks/pre-commit .git/hooks/pre-commit
 
 ## Reporting security vulnerabilities
 
-If you've found a vulnerability or a potential vulnerability in SPIRE please let us know at security@spiffe.io. We'll send a confirmation email to acknowledge your report, and we'll send an additional email when we've identified the issue positively or negatively.
+If you've found a vulnerability or a potential vulnerability in SPIRE please let
+us know at security@spiffe.io. We'll send a confirmation email to acknowledge
+your report, and we'll send an additional email when we've identified the issue
+positively or negatively.

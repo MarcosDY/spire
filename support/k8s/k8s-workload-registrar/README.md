@@ -57,26 +57,32 @@ cluster = "production"
 
 ## Workload Registration
 
-When running in reconcile or crd mode with `pod_controller=true` entries will be automatically created for
-Pods. The available workload registration modes are:
+When running in reconcile or crd mode with `pod_controller=true` entries will
+be automatically created for Pods. The available workload registration modes
+are:
 
 | Registration Mode | pod_label                 | pod_annotation                 | identity_template                 | Service Account Based |
 |-------------------|---------------------------|--------------------------------|-----------------------------------|-----------------------|
 | `reconcile`       | as specified by pod_label | as specified by pod_annotation | _unavailable_                     | service account       |
 | `crd`             | as specified by pod_label | as specified by pod_annotation | as specified by identity_template | _unavailable_         |
 
-If using the `reconcile` mode with [Service Account Based SPIFFE IDs](#service-account-based-workload-registration), don't specify either `pod_label` or `pod_annotation`. If you use Label Based SPIFFE IDs, specify only `pod_label`. If you use Annotation Based SPIFFE IDs, specify only `pod_annotation`.
+If using the `reconcile` mode with [Service Account Based SPIFFE IDs](#service-account-based-workload-registration),
+don't specify either `pod_label` or `pod_annotation`. If you use Label Based
+SPIFFE IDs, specify only `pod_label`. If you use Annotation Based SPIFFE IDs,
+specify only `pod_annotation`.
 
 For `crd` mode, if neither `pod_label` nor `pod_annotation`
 workload registration mode is selected,
 `identity_template` is used with a default configuration:
 `ns/{{.Pod.Namespace}}/sa/{{.Pod.ServiceAccount}}`
 
-It may take several seconds for newly created SVIDs to become available to workloads.
+It may take several seconds for newly created SVIDs to become available to
+workloads.
 
 ### Federated Entry Registration
 
-The pod annotatation `spiffe.io/federatesWith` can be used to create SPIFFE ID's that federate with other trust domains.
+The pod annotatation `spiffe.io/federatesWith` can be used to create SPIFFE ID's
+that federate with other trust domains.
 
 To specify multiple trust domains, separate them with commas.
 
@@ -135,12 +141,12 @@ Pods that don't contain the pod label are ignored.
 
 ### Annotation Based Workload Registration
 
-Annotation based workload registration maps a pod annotation value into a SPIFFE ID of
-the form `spiffe://<TRUSTDOMAIN>/<ANNOTATIONVALUE>`. By using this mode,
-it is possible to freely set the SPIFFE ID path. For example if the registrar
-was configured with the `spiffe.io/spiffe-id` annotation and a pod came in with
-`spiffe.io/spiffe-id: production/example-workload`, the following registration entry would be
-created:
+Annotation based workload registration maps a pod annotation value into a
+SPIFFE ID of the form `spiffe://<TRUSTDOMAIN>/<ANNOTATIONVALUE>`. By using this
+mode, it is possible to freely set the SPIFFE ID path. For example if the
+registrar was configured with the `spiffe.io/spiffe-id` annotation and a pod
+came in with `spiffe.io/spiffe-id: production/example-workload`, the following
+registration entry would be created:
 
 ```shell
 Entry ID      : 200d8b19-8334-443d-9494-f65d0ad64eb5
@@ -155,21 +161,26 @@ Pods that don't contain the pod annotation are ignored.
 
 ### Identity Template Based Workload Registration
 
-This is specific to the `crd` mode. See [Identity Template Based Workload Registration](mode-crd/README.md#identity-template-based-workload-registration) in the `crd` mode documentation.
+This is specific to the `crd` mode. See [Identity Template Based Workload Registration](mode-crd/README.md#identity-template-based-workload-registration)
+in the `crd` mode documentation.
 
 ## Deployment
 
-The registrar can either be deployed as standalone deployment, or as a container in the SPIRE server pod.
-If it is deployed standalone then it will require manual creation of an admin registration entry which will match
-the registrar deployment.
+The registrar can either be deployed as standalone deployment, or as a container
+in the SPIRE server pod.
+If it is deployed standalone then it will require manual creation of an admin
+registration entry which will match the registrar deployment.
 
-If it is deployed as a container within the SPIRE server pod then it talks to SPIRE server via a Unix domain socket. It will need access to a
-shared volume containing the socket file.
+If it is deployed as a container within the SPIRE server pod then it talks to
+SPIRE server via a Unix domain socket. It will need access to a shared volume
+containing the socket file.
 
 ### Reconcile Mode Configuration
 
-To use reconcile mode you need to create appropriate roles and bind them to the ServiceAccount you intend to run the controller as.
-An example can be found in `mode-reconcile/config/role.yaml`, which you would apply with `kubectl apply -f mode-reconcile/config/role.yaml`
+To use reconcile mode you need to create appropriate roles and bind them to the
+ServiceAccount you intend to run the controller as.
+An example can be found in `mode-reconcile/config/role.yaml`, which you would
+apply with `kubectl apply -f mode-reconcile/config/role.yaml`
 
 ### CRD Mode Configuration
 
@@ -177,31 +188,38 @@ See [Quick Start for CRD Kubernetes Workload Registrar](mode-crd/README.md#quick
 
 ## DNS names
 
-Both `"reconcile"` and `"crd"` mode provide the ability to add DNS names to registration entries for pods. They
-currently have different ideas about what names should be added, with `"reconcile"` adding every possible name that can
-be used to access a pod (via a service or directly), and `"crd"` mode limiting itself to `<service>.<namespace>.svc`.
+Both `"reconcile"` and `"crd"` mode provide the ability to add DNS names to
+registration entries for pods. They currently have different ideas about what
+names should be added, with `"reconcile"` adding every possible name that can
+be used to access a pod (via a service or directly), and `"crd"` mode limiting
+itself to `<service>.<namespace>.svc`.
 This functionality defaults off for `"reconcile"` mode and on for `"crd"` mode.
 
-Warning: Some software is known to "validate" DNS and IP SANs provided in client certificates by using reverse DNS.
-There is no guarantee that a client in Kubernetes will be seen to connect from an IP address with valid reverse DNS
-matching one of the names generated by either of these DNS name implementation, in which case such validation will fail.
-If you are intending to use X509-SVIDs to authenticate clients to such services you will need to disable adding dns names
-to entries. This is known to affect etcd.
+Warning: Some software is known to "validate" DNS and IP SANs provided in client
+certificates by using reverse DNS.
+There is no guarantee that a client in Kubernetes will be seen to connect from
+an IP address with valid reverse DNS matching one of the names generated by
+either of these DNS name implementation, in which case such validation will
+fail.
+If you are intending to use X509-SVIDs to authenticate clients to such services
+you will need to disable adding dns names to entries. This is known to affect
+etcd.
 
 ## Differences between modes
 
-The `"reconcile"` and `"crd"` modes both make use of reconciling controllers. Both modes,
-with the pod_controller enabled, have similar automated workload creation
-functionality and are capable of recovering from (and cleaning up after)
-failure of the registrar. Each also ensure that automatically created
+The `"reconcile"` and `"crd"` modes both make use of reconciling controllers.
+Both modes, with the pod_controller enabled, have similar automated workload
+creation functionality and are capable of recovering from (and cleaning up
+after) failure of the registrar. Each also ensure that automatically created
 entries for Pods are limited to the appropriate Nodes to prevent SVID
-flooding. When used in this way, `"reconcile"` may be slightly faster to create new entries than `"crd"` mode, and requires
-less configuration.
+flooding. When used in this way, `"reconcile"` may be slightly faster to create
+new entries than `"crd"` mode, and requires less configuration.
 
-`"crd"` mode additionally provides a namespaced SpiffeID custom resource. These are used internally by the
-registrar, but may also be manually created to allow creation of arbitrary Spire Entries. If you intend to manage
-SpiffeID custom resources directly then it is strongly encouraged to run the controller with the `"crd"` mode's webhook
-enabled.
+`"crd"` mode additionally provides a namespaced SpiffeID custom resource. These
+are used internally by the registrar, but may also be manually created to allow
+creation of arbitrary Spire Entries. If you intend to manage SpiffeID custom
+resources directly then it is strongly encouraged to run the controller with
+the `"crd"` mode's webhook enabled.
 
 ### Platform support
 

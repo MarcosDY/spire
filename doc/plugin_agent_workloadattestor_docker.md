@@ -1,8 +1,10 @@
 # Agent plugin: WorkloadAttestor "docker"
 
-The `docker` plugin generates selectors based on docker labels for workloads calling the agent.
-It does so by retrieving the workload's container ID from its cgroup membership on Unix systems or Job Object names on Windows,
-then querying the docker daemon for the container's labels.
+The `docker` plugin generates selectors based on docker labels for workloads
+calling the agent.
+It does so by retrieving the workload's container ID from its cgroup membership
+on Unix systems or Job Object names on Windows, then querying the docker daemon
+for the container's labels.
 
 | Configuration                | Description                                                                  | Default                          |
 |------------------------------|------------------------------------------------------------------------------|----------------------------------|
@@ -22,7 +24,8 @@ A sample configuration:
 
 ## Workload Selectors
 
-Since selectors are created dynamically based on the container's docker labels, there isn't a list of known selectors.
+Since selectors are created dynamically based on the container's docker labels,
+there isn't a list of known selectors.
 Instead, each of the container's labels are used in creating the list of selectors.
 
 | Selector          | Example                             | Description                                                            |
@@ -33,10 +36,10 @@ Instead, each of the container's labels are used in creating the list of selecto
 
 ## Container ID CGroup Matchers
 
-The patterns provided should use the wildcard `*` matching token and `<id>` capture token
-to describe how a container id should be extracted from a cgroup entry. The
-given patterns MUST NOT be ambiguous and an error will be returned if multiple
-patterns can match the same input.
+The patterns provided should use the wildcard `*` matching token and `<id>`
+capture token to describe how a container id should be extracted from a cgroup
+entry. The given patterns MUST NOT be ambiguous and an error will be returned if
+multiple patterns can match the same input.
 
 Valid Example:
 
@@ -56,14 +59,16 @@ Invalid Example:
     ]
 ```
 
-Note: The pattern provided is *not* a regular expression. It is a simplified matching
-language that enforces a forward slash-delimited schema.
+Note: The pattern provided is *not* a regular expression. It is a simplified
+matching language that enforces a forward slash-delimited schema.
 
 ## Example
 
 ### Labels
 
-If a workload container is started with `docker run --label com.example.name=foo [...]`, then workload registration would occur as:
+If a workload container is started with
+`docker run --label com.example.name=foo [...]`, then workload registration
+would occur as:
 
 ```shell
 spire-server entry create \

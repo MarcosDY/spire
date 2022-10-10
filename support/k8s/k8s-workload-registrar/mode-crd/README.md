@@ -1,15 +1,24 @@
 # SPIRE Kubernetes Workload Registrar (CRD Mode)
 
-The CRD mode of the SPIRE Kubernetes Workload Registrar uses a Kubernetes Custom Resource Definition (CRD) to integrate SPIRE and Kubernetes.
-This enables auto and manual generation of SPIFFE IDs from with Kubernetes and the `kubectl` CLI.
+The CRD mode of the SPIRE Kubernetes Workload Registrar uses a Kubernetes Custom
+Resource Definition (CRD) to integrate SPIRE and Kubernetes.
+This enables auto and manual generation of SPIFFE IDs from with Kubernetes and
+the `kubectl` CLI.
 
 ## Benefits of CRD Kubernetes Workload Registrar
 
-There are mutiple modes of the Kubernetes Workload Registrar. The benefits of the CRD mode when compared to other modes are:
+There are mutiple modes of the Kubernetes Workload Registrar. The benefits of
+the CRD mode when compared to other modes are:
 
-* **`kubectl` integration**: Using a CRD, SPIRE is fully intergrated with Kubernetes. You can view and create SPIFFE IDs directly using `kubectl`, without having to shell into the SPIRE server.
-* **Fully event-driven design**: Using the Kubernetes CRD system, the CRD mode Kubernetes Workload Registrar is fully event-driven to minimze resource usage.
-* **Standards-based solution**: CRDs are the standard way to extend Kubernetes, with many resources online, such as [kubebuilder](https://book.kubebuilder.io/), discussing the approach. The CRD Kubernetes Worklaod Registrar follows all standards and best practices to ensure it is maintainable.
+* **`kubectl` integration**: Using a CRD, SPIRE is fully intergrated with
+Kubernetes. You can view and create SPIFFE IDs directly using `kubectl`, without
+having to shell into the SPIRE server.
+* **Fully event-driven design**: Using the Kubernetes CRD system, the CRD mode
+Kubernetes Workload Registrar is fully event-driven to minimze resource usage.
+* **Standards-based solution**: CRDs are the standard way to extend Kubernetes,
+with many resources online, such as [kubebuilder](https://book.kubebuilder.io/),
+discussing the approach. The CRD Kubernetes Worklaod Registrar follows all
+standards and best practices to ensure it is maintainable.
 
 ## Configuration
 
@@ -54,9 +63,11 @@ The configuration file is a **required** by the registrar. It contains
 
 ## Quick Start
 
-This quick start sets up the SPIRE Server, SPIRE Agent, and CRD Kubernetes Workload Registrar.
+This quick start sets up the SPIRE Server, SPIRE Agent, and CRD Kubernetes
+Workload Registrar.
 
-1. Deploy SPIRE Server, Kubernetes Workload Registrar, SPIRE Agent, and CRD. SPIRE Server and Kubernetes Workload Registrar will be deployed in the same Pod.
+1. Deploy SPIRE Server, Kubernetes Workload Registrar, SPIRE Agent, and CRD.
+SPIRE Server and Kubernetes Workload Registrar will be deployed in the same Pod.
 
    ```shell
    kubectl apply -f https://raw.githubusercontent.com/spiffe/spire/main/support/k8s/k8s-workload-registrar/mode-crd/config/spiffeid.spiffe.io_spiffeids.yaml \
@@ -79,7 +90,8 @@ This quick start sets up the SPIRE Server, SPIRE Agent, and CRD Kubernetes Workl
 
 ## Examples
 
-Here are some examples of things you can do once the CRD Kubernetes Workload Registrar is deployed.
+Here are some examples of things you can do once the CRD Kubernetes Workload
+Registrar is deployed.
 
 ### Create a SpiffeID Resource using kubectl
 
@@ -135,7 +147,8 @@ Here are some examples of things you can do once the CRD Kubernetes Workload Reg
    Selector      : k8s:pod-name:my-test-pod
    ```
 
-1. Delete the SpiffeID resource, the corresponding entry on the SPIRE Server will be removed.
+1. Delete the SpiffeID resource, the corresponding entry on the SPIRE Server
+will be removed.
 
    ```shell
    kubectl delete -f https://raw.githubusercontent.com/spiffe/spire/main/support/k8s/k8s-workload-registrar/mode-crd/samples/test_spiffeid.yaml
@@ -154,7 +167,9 @@ Here are some examples of things you can do once the CRD Kubernetes Workload Reg
 
 ### Auto-generate SPIFFE IDs
 
-To test auto-generation of SPIFFE IDs add the following label to a Pod Spec and then apply it. The format for the auto-generated SPIFFE ID in this example is `ns/<namespace>/pod/<pod-name>`.
+To test auto-generation of SPIFFE IDs add the following label to a Pod Spec and
+then apply it. The format for the auto-generated SPIFFE ID in this example
+is `ns/<namespace>/pod/<pod-name>`.
 
    ```yaml
    spiffe.io/spiffe-id: true
@@ -174,7 +189,8 @@ We can test this using the NGINX example deployment:
    kubectl patch deployment nginx-deployment -p '{"spec":{"template":{"metadata":{"labels":{"spiffe.io/spiffe-id": "true"}}}}}'
    ```
 
-1. Verify the SpiffeID resource was created. The name of the SpiffeID resource will be the same as the name of the Pod.
+1. Verify the SpiffeID resource was created. The name of the SpiffeID resource
+will be the same as the name of the Pod.
 
    ```shell
    $ kubectl get spiffeids
@@ -252,7 +268,8 @@ We can test this using the NGINX example deployment:
      entryId: 617077a0-4c39-491a-8649-6b2f296a60f7
    ```
 
-1. Delete the NGINX deployment, this will automatically delete the SpiffeID resource
+1. Delete the NGINX deployment, this will automatically delete the SpiffeID
+resource
 
    ```shell
    kubectl delete -f https://raw.githubusercontent.com/kubernetes/website/master/content/en/examples/application/simple_deployment.yaml
@@ -260,7 +277,8 @@ We can test this using the NGINX example deployment:
 
 ## Deleting the Quick Start
 
-1. Delete the CRD. This needs to be done before remove the Kubernetes Workload Registrar to give the finalizers a chance to complete.
+1. Delete the CRD. This needs to be done before remove the Kubernetes Workload
+Registrar to give the finalizers a chance to complete.
 
    ```shell
    kubectl delete -f https://raw.githubusercontent.com/spiffe/spire/main/support/k8s/k8s-workload-registrar/mode-crd/config/spiffeid.spiffe.io_spiffeids.yaml
@@ -275,17 +293,21 @@ We can test this using the NGINX example deployment:
 
 ## Workload Registration
 
-When running with `pod_controller=true` entries will be automatically created for
-Pods. There are three workload registration modes. The default is Identity Template Based. If you want Label Based, specify only `pod_label`. If you want Annotation Based,
-specify only `pod_annotation`. Only one mode can be used.
+When running with `pod_controller=true` entries will be automatically created
+for Pods. There are three workload registration modes. The default is Identity
+Template Based. If you want Label Based, specify only `pod_label`. If you want
+Annotation Based, specify only `pod_annotation`. Only one mode can be used.
 
-The SPIFFE ID granted to the workload is derived from the 1) identity template or 2) a configurable pod label or 3) a configurable pod annotation.
+The SPIFFE ID granted to the workload is derived from the 1) identity template
+or 2) a configurable pod label or 3) a configurable pod annotation.
 
-It may take several seconds for newly created SVIDs to become available to workloads.
+It may take several seconds for newly created SVIDs to become available to
+workloads.
 
 ### Identity Template Based Workload Registration
 
-Identity template based workload registration provides a way to customize the format of SPIFFE IDs. The identity format is scoped to a cluster.
+Identity template based workload registration provides a way to customize the
+format of SPIFFE IDs. The identity format is scoped to a cluster.
 The template formatter is using Golang
 [text/template](https://pkg.go.dev/text/template) conventions,
 and it can reference arbitrary values provided in the `context` map of strings
@@ -308,7 +330,9 @@ context {
 }
 ```
 
-and the _example-workload_ pod was deployed in _production_ namespace and _myserviceacct_ service account, the following registration entry would be created:
+and the _example-workload_ pod was deployed in _production_ namespace and
+_myserviceacct_ service account, the following registration entry would be
+created:
 
 ```shell
 Entry ID      : 200d8b19-8334-443d-9494-f65d0ad64eb5
@@ -340,7 +364,8 @@ spec:
 
 Pods that don't contain the pod label are ignored.
 
-If `identity_template_label` is empty or omitted, all the pods will receive the identity.
+If `identity_template_label` is empty or omitted, all the pods will receive the
+identity.
 
 ### Label Based Workload Registration
 
@@ -363,12 +388,12 @@ Pods that don't contain the pod label are ignored.
 
 ### Annotation Based Workload Registration
 
-Annotation based workload registration maps a pod annotation value into a SPIFFE ID of
-the form `spiffe://<TRUSTDOMAIN>/<ANNOTATIONVALUE>`. By using this mode,
-it is possible to freely set the SPIFFE ID path. For example if the registrar
-was configured with the `spiffe.io/spiffe-id` annotation and a pod came in with
-`spiffe.io/spiffe-id: production/example-workload`, the following registration entry would be
-created:
+Annotation based workload registration maps a pod annotation value into a
+SPIFFE ID of the form `spiffe://<TRUSTDOMAIN>/<ANNOTATIONVALUE>`. By using this
+mode, it is possible to freely set the SPIFFE ID path. For example if the
+registrar was configured with the `spiffe.io/spiffe-id` annotation and a pod
+came in with `spiffe.io/spiffe-id: production/example-workload`, the following
+registration entry would be created:
 
 ```shell
 Entry ID      : 200d8b19-8334-443d-9494-f65d0ad64eb5
@@ -383,12 +408,14 @@ Pods that don't contain the pod annotation are ignored.
 
 ### Service Account Based Workload Registration (deprecated)
 
-The default SPIFFE ID created with [Identity Template Based Workload Registration](#identity-template-based-workload-registration) is of the form
-`spiffe://<TRUSTDOMAIN>/ns/<NAMESPACE>/sa/<SERVICEACCOUNT>`, so this method is no longer needed.
+The default SPIFFE ID created with [Identity Template Based Workload Registration](#identity-template-based-workload-registration)
+is of the form `spiffe://<TRUSTDOMAIN>/ns/<NAMESPACE>/sa/<SERVICEACCOUNT>`, so
+this method is no longer needed.
 
 ### Federated Entry Registration
 
-The pod annotatation `spiffe.io/federatesWith` can be used to create SPIFFE ID's that federate with other trust domains.
+The pod annotatation `spiffe.io/federatesWith` can be used to create SPIFFE ID's
+that federate with other trust domains.
 
 To specify multiple trust domains, separate them with commas.
 
@@ -408,8 +435,11 @@ spec:
 
 ### DNS Names
 
-If DNS names are desired for your workload, they can be specified using the `dns_name_templates` configuration option. Similar to the `identity_template` field, `dns_name_templates` uses Golang
-[text/template](https://pkg.go.dev/text/template) conventions. It can reference arbitrary values provided in the `context` map of strings, in addition to the following Pod-specific arguments:
+If DNS names are desired for your workload, they can be specified using the
+`dns_name_templates` configuration option. Similar to the `identity_template`
+field, `dns_name_templates` uses Golang [text/template](https://pkg.go.dev/text/template)
+conventions. It can reference arbitrary values provided in the `context` map of
+strings, in addition to the following Pod-specific arguments:
 
 * Pod.Name
 * Pod.UID
@@ -418,7 +448,8 @@ If DNS names are desired for your workload, they can be specified using the `dns
 * Pod.Hostname
 * Pod.NodeName
 
-`dns_name_templates` is a list of strings, and gets added to the `dnsNames` list in the SpiffeID CRD.
+`dns_name_templates` is a list of strings, and gets added to the `dnsNames` list
+in the SpiffeID CRD.
 
 For example if the registrar was configured with the following:
 
@@ -429,35 +460,57 @@ context {
 }
 ```
 
-and the _example-workload_ pod was deployed in _production_ namespace and _myserviceacct_ service account, the following DNS names will be added to the SpiffeID CRD:
+and the _example-workload_ pod was deployed in _production_ namespace and
+_myserviceacct_ service account, the following DNS names will be added to the
+SpiffeID CRD:
 
 * myserviceacct.production.svc
 * my-domain.example-workload.svc
 
-_Note: The first template in the list will also populate the Common Name (CN) field of the SVID._
+_Note: The first template in the list will also populate the Common Name (CN)
+field of the SVID._
 
 ## How it Works
 
-Everything starts with the SpiffeID CRD ([yaml](config/spiffeid.spiffe.io_spiffeids.yaml), [golang](api/spiffeid/v1beta1/spiffeid_types.go)). The CRD is a namespace scoped resource. The CRD mirrors an entry on the SPIRE server, so when a custom resource is created a corresponding entry is created on the SPIRE server and the EntryID is saved in the SpiffeID custom resource. When the custom resource is deleted the corresponding entry on the SPIRE server is deleted.
+Everything starts with the SpiffeID CRD ([yaml](config/spiffeid.spiffe.io_spiffeids.yaml),
+[golang](api/spiffeid/v1beta1/spiffeid_types.go)). The CRD is a namespace scoped
+resource. The CRD mirrors an entry on the SPIRE server, so when a custom
+resource is created a corresponding entry is created on the SPIRE server and the
+EntryID is saved in the SpiffeID custom resource. When the custom resource is
+deleted the corresponding entry on the SPIRE server is deleted.
 
-Entries can be created manually and automatically. For automatic generation, entries are created and deleted in response to pods being created and deleted. See [Workload Registration](../README.md#workload-registration) for more information on automatic generation of entries.
+Entries can be created manually and automatically. For automatic generation,
+entries are created and deleted in response to pods being created and deleted.
+See [Workload Registration](../README.md#workload-registration) for more
+information on automatic generation of entries.
 
 ### Finalizers
 
-[Finalizers](https://book.kubebuilder.io/reference/using-finalizers.html) are added to all SpiffeID resources, manual or automatically created. This ensures that entries on the SPIRE Server are properly cleaned up when a SpiffeID resource is deleted by blocking deletion of the resource until the SPIRE Server entry is first deleted. This important for the scenario where the Kubernetes Workload Registrar is down when a SpiffeID resource is deleted.
+[Finalizers](https://book.kubebuilder.io/reference/using-finalizers.html) are
+added to all SpiffeID resources, manual or automatically created. This ensures
+that entries on the SPIRE Server are properly cleaned up when a SpiffeID
+resource is deleted by blocking deletion of the resource until the SPIRE Server
+entry is first deleted. This important for the scenario where the Kubernetes
+Workload Registrar is down when a SpiffeID resource is deleted.
 
-This has the potential side effect of blocking deletion of a namespace until all the SpiffeID resources in that namespace are first deleted.
+This has the potential side effect of blocking deletion of a namespace until all
+the SpiffeID resources in that namespace are first deleted.
 
 ### Validating Webhook
 
-A Validating Webhook is used to ensure SpiffeID resources are properly formatted and performs the following checks:
+A Validating Webhook is used to ensure SpiffeID resources are properly formatted
+and performs the following checks:
 
-* If DNS names are present they are properly formatted and don't contain disallowed characters such as a '/'.
+* If DNS names are present they are properly formatted and don't contain
+disallowed characters such as a '/'.
 * That the SPIFFE and Parent Ids both begin with `spiffe://`.
-* The namespace selector is populated and matches the metadata.namespace of the custom resource.
-* There are no duplicates, SpiffeID resources with different metadata.name's but identical Selector+SpiffeID+ParentID set.
+* The namespace selector is populated and matches the metadata.namespace of the
+custom resource.
+* There are no duplicates, SpiffeID resources with different metadata.name's but
+identical Selector+SpiffeID+ParentID set.
 
-The certificates for the webhook are generated by the SPIRE Server and managed by the Kubernetes Workload Registrar.
+The certificates for the webhook are generated by the SPIRE Server and managed
+by the Kubernetes Workload Registrar.
 
 ## SPIFFE ID Custom Resource Example
 
@@ -502,20 +555,23 @@ Notes:
 
 ## CRD Security Considerations
 
-It is imperative to only grant trusted users access to manually create SpiffeID custom resources. Users with access have the ability to issue any SpiffeID
-to any pod in the namespace.
+It is imperative to only grant trusted users access to manually create SpiffeID
+custom resources. Users with access have the ability to issue any SpiffeID to
+any pod in the namespace.
 
-If allowing users to manually create SpiffeID custom resources it is important to use the Validating Webhook.  The Validating Webhook ensures that
-registration entries created have a namespace selector that matches the namespace the resource was created in.  This ensures that the manually created
-entries can only be consumed by workloads within that namespace.
+If allowing users to manually create SpiffeID custom resources it is important
+to use the Validating Webhook.  The Validating Webhook ensures that registration
+entries created have a namespace selector that matches the namespace the
+resource was created in.  This ensures that the manually created entries can
+only be consumed by workloads within that namespace.
 
 ## Troubleshooting
 
 ### Migrating to the CRD mode from the deprecated webhook mode
 
-The k8s ValidatingWebhookConfiguration will need to be removed or pods may fail admission. If you used the default
-configuration this can be done with:
+The k8s ValidatingWebhookConfiguration will need to be removed or pods may fail
+admission. If you used the default configuration this can be done with:
 
 ```shell
 kubectl validatingwebhookconfiguration delete k8s-workload-registrar-webhook
-```
+``

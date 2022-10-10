@@ -2,8 +2,10 @@
 
 ## Description
 
-Test that SPIRE Server is able to run a query in a readonly database that is replicated from a primary server, keeping it updated.
-The suite runs the following PostgreSQL versions against the SQL datastore unit tests:
+Test that SPIRE Server is able to run a query in a readonly database that is
+replicated from a primary server, keeping it updated.
+The suite runs the following PostgreSQL versions against the SQL datastore unit
+tests:
 
 - 9.x (latest)
 - 10.x (latest)

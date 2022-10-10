@@ -1,6 +1,8 @@
 # Telemetry
 
-The SPIRE Server and Agent can be configured to emit metrics that can be sent to the supported metrics collectors. For instructions on how to configure them properly, please refer to the [Telemetry Configuration](telemetry_config.md) guide.
+The SPIRE Server and Agent can be configured to emit metrics that can be sent to
+the supported metrics collectors. For instructions on how to configure them
+properly, please refer to the [Telemetry Configuration](telemetry_config.md) guide.
 
 The following metrics are emitted:
 
@@ -79,4 +81,8 @@ The following metrics are emitted:
 | Gauge        | `started`                                  | `version`  | The version of the Agent.                                                 |
 | Gauge        | `uptime_in_ms`                             |            | The uptime of the Agent in milliseconds.                                  |
 
-Note: These are the keys and labels that SPIRE emits, but the format of the metric once ingested could vary depending on the metric collector. E.g. once in StatsD, the metric emitted when rotating an Agent SVID (`agent_svid`, `rotate`) can be found as `spire_agent_agent_svid_rotate_internal_host-agent-0`, where `host-agent-0` is the hostname and `spire-agent` is the service name.
+Note: These are the keys and labels that SPIRE emits, but the format of the
+metric once ingested could vary depending on the metric collector. E.g. once in
+StatsD, the metric emitted when rotating an Agent SVID (`agent_svid`, `rotate`)
+can be found as `spire_agent_agent_svid_rotate_internal_host-agent-0`, where
+`host-agent-0` is the hostname and `spire-agent` is the service name.

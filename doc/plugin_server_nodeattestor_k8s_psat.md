@@ -4,8 +4,11 @@
 
 The `k8s_psat` plugin attests nodes running inside of Kubernetes. The server
 validates the signed projected service account token provided by the agent.
-This validation is performed using Kubernetes [Token Review API](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.19/#tokenreview-v1-authentication-k8s-io). In addition to validation, this API provides other useful information (namespace, service account name and pod name) that SPIRE server uses to build selectors.
-Kubernetes API server is also queried to get extra data like node UID, which is used to generate a SPIFFE ID with the form:
+This validation is performed using Kubernetes [Token Review API](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.19/#tokenreview-v1-authentication-k8s-io).
+In addition to validation, this API provides other useful information (namespace,
+service account name and pod name) that SPIRE server uses to build selectors.
+Kubernetes API server is also queried to get extra data like node UID, which is
+used to generate a SPIFFE ID with the form:
 
 ```xml
 spiffe://<trust_domain>/spire/agent/k8s_psat/<cluster>/<node UID>
@@ -73,6 +76,7 @@ This plugin generates the following selectors:
 | `k8s_psat:agent_node_uid`   | `k8s_psat:agent_node_uid:5dbb7b21-65fe-11e9-b1b0-0800277ac80f` | UID of the node in which the agent is running                                   |
 | `k8s_psat:agent_node_label` | `k8s_psat:agent_node_label:key:value`                          | Node Label                                                                      |
 
-The node and pod selectors are only provided for label keys in the `allowed_node_label_keys` and `allowed_pod_label_keys` configurables.
+The node and pod selectors are only provided for label keys in the
+`allowed_node_label_keys` and `allowed_pod_label_keys` configurables.
 
 A full example of this attestor is provided in [the SPIRE examples repository](https://github.com/spiffe/spire-examples/tree/main/examples/k8s/simple_psat)

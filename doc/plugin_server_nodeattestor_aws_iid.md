@@ -6,8 +6,9 @@ The `aws_iid` plugin automatically attests instances using the AWS Instance
 Metadata API and the AWS Instance Identity document. It also allows an operator
 to use AWS Instance IDs when defining SPIFFE ID attestation policies. Agents
 attested by the aws_iid attestor will be issued a SPIFFE ID like
-`spiffe://example.org/spire/agent/aws_iid/ACCOUNT_ID/REGION/INSTANCE_ID`. Additionally,
-this plugin resolves the agent's AWS IID-based SPIFFE ID into a set of selectors.
+`spiffe://example.org/spire/agent/aws_iid/ACCOUNT_ID/REGION/INSTANCE_ID`.
+Additionally, this plugin resolves the agent's AWS IID-based SPIFFE ID into a
+set of selectors.
 
 ## Configuration
 
@@ -30,7 +31,10 @@ A sample configuration:
     }
 ```
 
-If `assume_role` is set, the spire server will assume the role as specified by the template `arn:aws:iam::{{AccountID}}:role/{{AssumeRole}}` where `AccountID` is taken from the AWS IID document sent by the spire agent to the spire server and `AssumeRole` comes from the AWS NodeAttestor plugin configuration.
+If `assume_role` is set, the spire server will assume the role as specified by
+the template `arn:aws:iam::{{AccountID}}:role/{{AssumeRole}}` where `AccountID`
+is taken from the AWS IID document sent by the spire agent to the spire server
+and `AssumeRole` comes from the AWS NodeAttestor plugin configuration.
 
 In the following configuration,
 
@@ -42,19 +46,30 @@ In the following configuration,
     }
 ```
 
-assuming AWS IID document sent from the spire agent contains `accountId : 12345678`, the spire server will assume "arn:aws:iam::12345678:role/spire-server-delegate" role before making any AWS call for the node attestation. If `assume_role` is configured, the spire server will always assume the role even if the both the spire-server and the spire agent is deployed in the same account.
+assuming AWS IID document sent from the spire agent contains `accountId : 12345678`,
+the spire server will assume "arn:aws:iam::12345678:role/spire-server-delegate"
+role before making any AWS call for the node attestation. If `assume_role` is
+configured, the spire server will always assume the role even if the both the
+spire-server and the spire agent is deployed in the same account.
 
 ## Disabling Instance Profile Selectors
 
-In cases where spire-server is running in a location with no public internet access available, setting `disable_instance_profile_selectors = true` will prevent the server from making requests to `iam.amazonaws.com`. This is needed as spire-server will fail to attest nodes as it cannot retrieve the metadata information.
+In cases where spire-server is running in a location with no public internet
+access available, setting `disable_instance_profile_selectors = true` will
+prevent the server from making requests to `iam.amazonaws.com`. This is needed
+as spire-server will fail to attest nodes as it cannot retrieve the metadata
+information.
 
-When this is enabled, `IAM Role` selector information will no longer be available for use.
+When this is enabled, `IAM Role` selector information will no longer be available
+for use.
 
 ## AWS IAM Permissions
 
-The user or role identified by the configured credentials must have permissions for `ec2:DescribeInstances`.
+The user or role identified by the configured credentials must have permissions
+for `ec2:DescribeInstances`.
 
-The following is an example for a IAM policy needed to get instance's info from AWS.
+The following is an example for a IAM policy needed to get instance's info from
+AWS.
 
 ```json
 {
@@ -77,7 +92,8 @@ For more information on security credentials, see <https://docs.aws.amazon.com/g
 
 ## Supported Selectors
 
-This plugin generates the following selectors related to the instance where the agent is running:
+This plugin generates the following selectors related to the instance where the
+agent is running:
 
 | Selector            | Example                                               | Description                                                      |
 |---------------------|-------------------------------------------------------|------------------------------------------------------------------|
@@ -88,12 +104,24 @@ This plugin generates the following selectors related to the instance where the 
 
 All of the selectors have the type `aws_iid`.
 
-The `IAM role` selector is included in the generated set of selectors only if the instance has an IAM Instance Profile associated and `disable_instance_profile_selectors = false`
+The `IAM role` selector is included in the generated set of selectors only if
+the instance has an IAM Instance Profile associated and
+`disable_instance_profile_selectors = false`
 
 ## Security Considerations
 
-The AWS Instance Identity Document, which this attestor leverages to prove node identity, is available to any process running on the node by default. As a result, it is possible for non-agent code running on a node to attest to the SPIRE Server, allowing it to obtain any workload identity that the node is authorized to run.
+The AWS Instance Identity Document, which this attestor leverages to prove node
+identity, is available to any process running on the node by default. As a result,
+it is possible for non-agent code running on a node to attest to the SPIRE Server,
+allowing it to obtain any workload identity that the node is authorized to run.
 
-While many operators choose to configure their systems to block access to the Instance Identity Document, the SPIRE project cannot guarantee this posture. To mitigate the associated risk, the `aws_iid` node attestor implements Trust On First Use (or TOFU) semantics. For any given node, attestation may occur only once. Subsequent attestation attempts will be rejected.
+While many operators choose to configure their systems to block access to the
+Instance Identity Document, the SPIRE project cannot guarantee this posture. To
+mitigate the associated risk, the `aws_iid` node attestor implements Trust On
+First Use (or TOFU) semantics. For any given node, attestation may occur only
+once. Subsequent attestation attempts will be rejected.
 
-It is still possible for non-agent code to complete node attestation before SPIRE Agent can, however this condition is easily and quickly detectable as SPIRE Agent will fail to start, and both SPIRE Agent and SPIRE Server will log the occurrence. Such cases should be investigated as possible security incidents.
+It is still possible for non-agent code to complete node attestation before
+SPIRE Agent can, however this condition is easily and quickly detectable as
+SPIRE Agent will fail to start, and both SPIRE Agent and SPIRE Server will log
+the occurrence. Such cases should be investigated as possible security incidents.

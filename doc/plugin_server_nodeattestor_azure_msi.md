@@ -17,19 +17,19 @@ attestation or to resolve selectors.
 
 ## Configuration
 
-| Configuration   | Required    | Description | Default                 |
-| --------------- | ----------- | ----------------------- |
-| `tenants`       | Required    | A map of tenants, keyed by tenant ID, that are authorized for attestation. Tokens for unspecified tenants are rejected. | |
+| Configuration   | Required    | Description                                                                                                             | Default |
+| --------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------- | ------- |
+| `tenants`       | Required    | A map of tenants, keyed by tenant ID, that are authorized for attestation. Tokens for unspecified tenants are rejected. |         |
 
 Each tenant in the main configuration supports the following
 
-| Configuration     | Required    | Description | Default                 |
-| ----------------- | ----------- | ----------------------- |
+| Configuration     | Required                             | Description                                                                                               | Default                         |
+| ----------------- | ------------------------------------ | --------------------------------------------------------------------------------------------------------- | ------------------------------- |
 | `resource_id`     | Optional                             | The resource ID (or audience) for the tenant's MSI token. Tokens for a different resource ID are rejected | <https://management.azure.com/> |
-| `use_msi`         | [Optional](#authenticating-to-azure) | Whether or not to use MSI to authenticate to Azure services for selector resolution. | false |
-| `subscription_id` | [Optional](#authenticating-to-azure) | The subscription the tenant resides in | |
-| `app_id`          | [Optional](#authenticating-to-azure) | The application id | |
-| `app_secret`      | [Optional](#authenticating-to-azure) | The application secret | |
+| `use_msi`         | [Optional](#authenticating-to-azure) | Whether or not to use MSI to authenticate to Azure services for selector resolution.                      | false                           |
+| `subscription_id` | [Optional](#authenticating-to-azure) | The subscription the tenant resides in                                                                    |                                 |
+| `app_id`          | [Optional](#authenticating-to-azure) | The application id                                                                                        |                                 |
+| `app_secret`      | [Optional](#authenticating-to-azure) | The application secret                                                                                    |                                 |
 
 It is important to note that the resource ID MUST be for a well known Azure
 service, or an app ID for a registered app in Azure AD. Azure will not issue an
@@ -98,8 +98,19 @@ All of the selectors have the type `azure_msi`.
 
 ## Security Considerations
 
-The Azure Managed Service Identity token, which this attestor leverages to prove node identity, is available to any process running on the node by default. As a result, it is possible for non-agent code running on a node to attest to the SPIRE Server, allowing it to obtain any workload identity that the node is authorized to run.
+The Azure Managed Service Identity token, which this attestor leverages to prove
+node identity, is available to any process running on the node by default. As a
+result, it is possible for non-agent code running on a node to attest to the
+SPIRE Server, allowing it to obtain any workload identity that the node is
+authorized to run.
 
-While many operators choose to configure their systems to block access to the Managed Service Identity token, the SPIRE project cannot guarantee this posture. To mitigate the associated risk, the `azure_msi` node attestor implements Trust On First Use (or TOFU) semantics. For any given node, attestation may occur only once. Subsequent attestation attempts will be rejected.
+While many operators choose to configure their systems to block access to the
+Managed Service Identity token, the SPIRE project cannot guarantee this posture.
+To mitigate the associated risk, the `azure_msi` node attestor implements Trust
+On First Use (or TOFU) semantics. For any given node, attestation may occur only
+once. Subsequent attestation attempts will be rejected.
 
-It is still possible for non-agent code to complete node attestation before SPIRE Agent can, however this condition is easily and quickly detectable as SPIRE Agent will fail to start, and both SPIRE Agent and SPIRE Server will log the occurrence. Such cases should be investigated as possible security incidents.
+It is still possible for non-agent code to complete node attestation before
+SPIRE Agent can, however this condition is easily and quickly detectable as
+SPIRE Agent will fail to start, and both SPIRE Agent and SPIRE Server will log
+the occurrence. Such cases should be investigated as possible security incidents.

@@ -1,6 +1,8 @@
 # SPIRE Server Configuration Reference
 
-This document is a configuration reference for SPIRE Server. It includes information about plugin types, built-in plugins, the server configuration file, plugin configuration, and command line options for `spire-server` commands.
+This document is a configuration reference for SPIRE Server. It includes
+information about plugin types, built-in plugins, the server configuration file,
+plugin configuration, and command line options for `spire-server` commands.
 
 ## Plugin types
 
@@ -41,12 +43,19 @@ This document is a configuration reference for SPIRE Server. It includes informa
 
 ## Server configuration file
 
-The following table outlines the configuration options for SPIRE server. These may be set in a top-level `server { ... }` section of the configuration file. Most options have a corresponding CLI flag which, if set, takes precedence over values defined in the file.
+The following table outlines the configuration options for SPIRE server. These
+may be set in a top-level `server { ... }` section of the configuration file.
+Most options have a corresponding CLI flag which, if set, takes precedence over
+values defined in the file.
 
-SPIRE configuration files may be represented in either HCL or JSON. Please see the [sample configuration file](#sample-configuration-file) section for a complete example.
+SPIRE configuration files may be represented in either HCL or JSON. Please see
+the [sample configuration file](#sample-configuration-file) section for a
+complete example.
 
-If the -expandEnv flag is passed to SPIRE, `$VARIABLE` or `${VARIABLE}` style environment variables are expanded before parsing.
-This may be useful for templating configuration files, for example across different trust domains, or for inserting secrets like database connection passwords.
+If the -expandEnv flag is passed to SPIRE, `$VARIABLE` or `${VARIABLE}` style
+environment variables are expanded before parsing.
+This may be useful for templating configuration files, for example across
+different trust domains, or for inserting secrets like database connection passwords.
 
 | Configuration       | Description                                                                                                                                                                                                                             | Default                                                        |
 |:--------------------|:----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|:---------------------------------------------------------------|
@@ -104,7 +113,8 @@ This may be useful for templating configuration files, for example across differ
 
 ### Profiling Names
 
-These are the available profiles that can be set in the `profiling_freq` configuration value:
+These are the available profiles that can be set in the `profiling_freq`
+configuration value:
 
 - `goroutine`
 - `threadcreate`
@@ -116,7 +126,9 @@ These are the available profiles that can be set in the `profiling_freq` configu
 
 ## Plugin configuration
 
-The server configuration file also contains a configuration section for the various SPIRE server plugins. Plugin configurations live inside the top-level `plugins { ... }` section, which has the following format:
+The server configuration file also contains a configuration section for the
+various SPIRE server plugins. Plugin configurations live inside the top-level
+`plugins { ... }` section, which has the following format:
 
 ```hcl
 plugins {
@@ -137,17 +149,31 @@ The following configuration options are available to configure a plugin:
 | enabled         | Enable or disable the plugin (enabled by default)                             |
 | plugin_data     | Plugin-specific data                                                          |
 
-Please see the [built-in plugins](#built-in-plugins) section below for information on plugins that are available out-of-the-box.
+Please see the [built-in plugins](#built-in-plugins) section below for
+information on plugins that are available out-of-the-box.
 
 ## Federation configuration
 
-SPIRE Server can be configured to federate with others SPIRE Servers living in different trust domains. SPIRE supports configuring federation relationships in the SPIRE Server configuration file (static relationships) and through the [Trust Domain API](https://github.com/spiffe/spire-api-sdk/blob/main/proto/spire/api/server/trustdomain/v1/trustdomain.proto) (dynamic relationships). This section describes how to configure statically defined relationships in the configuration file.
+SPIRE Server can be configured to federate with others SPIRE Servers living in
+different trust domains. SPIRE supports configuring federation relationships in
+the SPIRE Server configuration file (static relationships) and through the
+[Trust Domain API](https://github.com/spiffe/spire-api-sdk/blob/main/proto/spire/api/server/trustdomain/v1/trustdomain.proto)
+(dynamic relationships). This section describes how to configure statically
+defined relationships in the configuration file.
 
-_Note: static relationships override dynamic relationships. If you need to configure dynamic relationships, see the [`federation`](#spire-server-federation-create) command. Static relationships are not reflected in the `federation` command._
+_Note: static relationships override dynamic relationships. If you need to
+configure dynamic relationships, see the [`federation`](#spire-server-federation-create)
+command. Static relationships are not reflected in the `federation` command._
 
-Configuring a federated trust domain allows a trust domain to authenticate identities issued by other SPIFFE authorities, allowing workloads in one trust domain to securely autenticate workloads in a foreign trust domain.
-A key element to achieve federation is the use of SPIFFE bundle endpoints, these are resources (represented by URLs) that serve a copy of a trust bundle for a trust domain.
-Using the `federation` section you will be able to set up SPIRE as a SPIFFE bundle endpoint server and also configure the federated trust domains that this SPIRE Server will fetch bundles from.
+Configuring a federated trust domain allows a trust domain to authenticate
+identities issued by other SPIFFE authorities, allowing workloads in one trust
+domain to securely autenticate workloads in a foreign trust domain.
+A key element to achieve federation is the use of SPIFFE bundle endpoints,
+these are resources (represented by URLs) that serve a copy of a trust bundle
+for a trust domain.
+Using the `federation` section you will be able to set up SPIRE as a SPIFFE
+bundle endpoint server and also configure the federated trust domains that this
+SPIRE Server will fetch bundles from.
 
 ```hcl
 server {
@@ -177,12 +203,17 @@ server {
 }
 ```
 
-The `federation.bundle_endpoint` section is optional and is used to set up a SPIFFE bundle endpoint server in SPIRE Server.
-The `federation.federates_with` section is also optional and is used to configure the federation relationships with foreign trust domains. This section is used for each federated trust domain that SPIRE Server will periodically fetch the bundle.
+The `federation.bundle_endpoint` section is optional and is used to set up a
+SPIFFE bundle endpoint server in SPIRE Server.
+The `federation.federates_with` section is also optional and is used to
+configure the federation relationships with foreign trust domains. This section
+is used for each federated trust domain that SPIRE Server will periodically
+fetch the bundle.
 
 ### Configuration options for `federation.bundle_endpoint`
 
-This optional section contains the configurables used by SPIRE Server to expose a bundle endpoint.
+This optional section contains the configurables used by SPIRE Server to expose
+a bundle endpoint.
 
 | Configuration | Description                                                                    |
 |---------------|--------------------------------------------------------------------------------|
@@ -201,7 +232,9 @@ This optional section contains the configurables used by SPIRE Server to expose 
 
 ### Configuration options for `federation.federates_with["<trust domain>"].bundle_endpoint`
 
-The optional `federates_with` section is a map of bundle endpoint profile configurations keyed by the name of the `"<trust domain>"` this server wants to federate with. This section has the following configurables:
+The optional `federates_with` section is a map of bundle endpoint profile
+configurations keyed by the name of the `"<trust domain>"` this server wants to
+federate with. This section has the following configurables:
 
 | Configuration                                                 | Description                                                                                                     | Default |
 |---------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------|---------|
@@ -212,17 +245,26 @@ SPIRE supports the `https_web` and `https_spiffe` bundle endpoint profiles.
 
 The `https_web` profile does not require additional settings.
 
-Trust domains configured with the `https_spiffe` bundle endpoint profile must specify the expected SPIFFE ID of the remote SPIFFE bundle endpoint server using the `endpoint_spiffe_id` setting as part of the configuration.
+Trust domains configured with the `https_spiffe` bundle endpoint profile must
+specify the expected SPIFFE ID of the remote SPIFFE bundle endpoint server
+using the `endpoint_spiffe_id` setting as part of the configuration.
 
-For more information about the different profiles defined in SPIFFE, along with the security considerations for setting up SPIFFE Federation, please refer to the [SPIFFE Federation standard](https://github.com/spiffe/spiffe/blob/main/standards/SPIFFE_Federation.md).
+For more information about the different profiles defined in SPIFFE, along with
+the security considerations for setting up SPIFFE Federation, please refer to
+the [SPIFFE Federation standard](https://github.com/spiffe/spiffe/blob/main/standards/SPIFFE_Federation.md).
 
 ## Telemetry configuration
 
-Please see the [Telemetry Configuration](./telemetry_config.md) guide for more information about configuring SPIRE Server to emit telemetry.
+Please see the [Telemetry Configuration](./telemetry_config.md) guide for more
+information about configuring SPIRE Server to emit telemetry.
 
 ## Health check configuration
 
-The server can expose an additional endpoint that can be used for health checking. It is enabled by setting `listener_enabled = true`. Currently it exposes 2 paths: one for liveness (is server up?) and one for readiness (is server ready to serve requests?). By default, health checking endpoint will listen on localhost:80, unless configured otherwise.
+The server can expose an additional endpoint that can be used for health
+checking. It is enabled by setting `listener_enabled = true`. Currently it
+exposes 2 paths: one for liveness (is server up?) and one for readiness (is
+server ready to serve requests?). By default, health checking endpoint will
+listen on localhost:80, unless configured otherwise.
 
 ```hcl
 health_checks {
@@ -238,7 +280,8 @@ health_checks {
 
 ### `spire-server run`
 
-Most of the configuration file above options have identical command-line counterparts. In addition, the following flags are available.
+Most of the configuration file above options have identical command-line
+counterparts. In addition, the following flags are available.
 
 | Command        | Action                                                                               | Default                 |
 |:---------------|:-------------------------------------------------------------------------------------|:------------------------|
@@ -255,9 +298,10 @@ Most of the configuration file above options have identical command-line counter
 
 ### `spire-server token generate`
 
-Generates one node join token and creates a registration entry for it. This token can be used to
-bootstrap one spire-agent installation. The optional `-spiffeID` can be used to give the token a
-human-readable registration entry name in addition to the token-based ID.
+Generates one node join token and creates a registration entry for it. This
+token can be used to bootstrap one spire-agent installation. The optional
+`-spiffeID` can be used to give the token a human-readable registration entry
+name in addition to the token-based ID.
 
 | Command       | Action                                                    | Default                            |
 |:--------------|:----------------------------------------------------------|:-----------------------------------|
@@ -365,7 +409,8 @@ Displays federated bundles.
 
 ### `spire-server bundle set`
 
-Creates or updates bundle data for a trust domain. This command cannot be used to alter the server trust domain bundle, only bundles for other trust domains.
+Creates or updates bundle data for a trust domain. This command cannot be used
+to alter the server trust domain bundle, only bundles for other trust domains.
 
 | Command       | Action                                                                                  | Default                            |
 |:--------------|:----------------------------------------------------------------------------------------|:-----------------------------------|
@@ -376,7 +421,8 @@ Creates or updates bundle data for a trust domain. This command cannot be used t
 
 ### `spire-server bundle delete`
 
-Deletes bundle data for a trust domain. This command cannot be used to delete the server trust domain bundle, only bundles for other trust domains.
+Deletes bundle data for a trust domain. This command cannot be used to delete
+the server trust domain bundle, only bundles for other trust domains.
 
 | Command       | Action                                                                                                                                                                                                                                                                                                                                       | Default                            |
 |:--------------|:---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|:-----------------------------------|
@@ -452,7 +498,8 @@ Updates a dynamic federation relationship with a foreign trust domain.
 
 ### `spire-server agent ban`
 
-Ban attested node given its spiffeID. A banned attested node is not able to re-attest.
+Ban attested node given its spiffeID. A banned attested node is not able to
+re-attest.
 
 | Command       | Action                                             | Default                            |
 |:--------------|:---------------------------------------------------|:-----------------------------------|
@@ -486,7 +533,8 @@ Displays attested nodes.
 
 ### `spire-server agent show`
 
-Displays the details (including node selectors) of an attested node given its spiffeID.
+Displays the details (including node selectors) of an attested node given its
+spiffeID.
 
 | Command       | Action                                              | Default                            |
 |:--------------|:----------------------------------------------------|:-----------------------------------|
@@ -505,7 +553,8 @@ Checks SPIRE server's health.
 
 ### `spire-server validate`
 
-Validates a SPIRE server configuration file.  Arguments are the same as `spire-server run`.
+Validates a SPIRE server configuration file.  Arguments are the same as
+`spire-server run`.
 Typically, you may want at least:
 
 | Command       | Action                                                             | Default        |
@@ -539,7 +588,8 @@ Mints a JWT-SVID.
 
 ## JSON object for `-data`
 
-A JSON object passed to `-data` for `entry create/update` expects the following form:
+A JSON object passed to `-data` for `entry create/update` expects the following
+form:
 
 ```json
 {
@@ -547,14 +597,17 @@ A JSON object passed to `-data` for `entry create/update` expects the following 
 }
 ```
 
-The entry object is described by `RegistrationEntry` in the [common protobuf file](https://github.com/spiffe/spire/blob/main/proto/spire/common/common.proto).
+The entry object is described by `RegistrationEntry` in the
+[common protobuf file](https://github.com/spiffe/spire/blob/main/proto/spire/common/common.proto).
 
-_Note: to create node entries, set `parent_id` to the special value `spiffe://<your-trust-domain>/spire/server`.
+_Note: to create node entries, set `parent_id` to the special value
+`spiffe://<your-trust-domain>/spire/server`.
 That's what the code does when the `-node` flag is passed on the cli._
 
 ## Sample configuration file
 
-This section includes a sample configuration file for formatting and syntax reference
+This section includes a sample configuration file for formatting and syntax
+reference
 
 ```hcl
 server {
