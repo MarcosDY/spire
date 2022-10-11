@@ -12,9 +12,9 @@ attestation will need to be re-performed.
 A sample configuration:
 
 ```hcl
- KeyManager "disk" {
-  plugin_data {
-   directory = "/opt/spire/data/agent"
-  }
- }
+    KeyManager "disk" {
+        plugin_data = {
+            keys_path = "/opt/spire/data/server/keys.json"
+        }
+    }
 ```

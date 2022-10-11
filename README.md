@@ -112,3 +112,5 @@ If you've found a vulnerability or a potential vulnerability in SPIRE please let
 us know at security@spiffe.io. We'll send a confirmation email to acknowledge
 your report, and we'll send an additional email when we've identified the issue
 positively or negatively.
+
+:<!-- markdownlint-configure-file { "MD041": false } -->

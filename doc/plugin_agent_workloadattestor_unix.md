@@ -54,10 +54,8 @@ value
 A sample configuration:
 
 ```hcl
- WorkloadAttestor "unix" {
-  plugin_data {
-  }
- }
+    WorkloadAttestor "unix" {
+    }
 ```
 
 ## Platform support

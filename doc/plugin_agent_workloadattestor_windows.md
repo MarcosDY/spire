@@ -58,8 +58,8 @@ This plugin does not require any configuration setting. It can be added in the
 following way in the agent configuration file:
 
 ```hcl
- WorkloadAttestor "windows" {
- }
+    WorkloadAttestor "windows" {
+    }
 ```
 
 ## Platform support

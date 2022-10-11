@@ -36,12 +36,12 @@ spiffe://<trust_domain>/spire/agent/tpm_devid/<fingerprint>
 A sample configuration:
 
 ```hcl
- NodeAttestor "tpm_devid" {
-  plugin_data {
-   devid_ca_path = "/opt/spire/conf/server/devid-cacert.pem"
-   endorsement_ca_path = "/opt/spire/conf/server/endorsement-cacert.pem"
-  }
- }
+    NodeAttestor "tpm_devid" {
+        plugin_data {
+            devid_ca_path = "/opt/spire/conf/server/devid-cacert.pem"
+            endorsement_ca_path = "/opt/spire/conf/server/endorsement-cacert.pem"
+        }
+    }
 ```
 
 ## Selectors

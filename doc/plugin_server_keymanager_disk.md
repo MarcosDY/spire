@@ -12,9 +12,9 @@ The plugin accepts the following configuration options:
 A sample configuration:
 
 ```hcl
- KeyManager "disk" {
-  plugin_data = {
-   keys_path = "/opt/spire/data/server/keys.json"
-  }
- }
+    KeyManager "disk" {
+        plugin_data = {
+            keys_path = "/opt/spire/data/server/keys.json"
+        }
+    }
 ```

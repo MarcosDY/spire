@@ -25,8 +25,8 @@ A sample configuration:
 ```hcl
     NodeAttestor "aws_iid" {
         plugin_data {
-   access_key_id = "ACCESS_KEY_ID"
-   secret_access_key = "SECRET_ACCESS_KEY"
+            access_key_id = "ACCESS_KEY_ID"
+            secret_access_key = "SECRET_ACCESS_KEY"
         }
     }
 ```

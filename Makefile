@@ -429,7 +429,7 @@ lint-code: $(golangci_lint_bin)
 	$(E)PATH="$(go_bin_dir):$(PATH)" GOLANGCI_LINT_CACHE="$(golangci_lint_cache)" $(golangci_lint_bin) run ./...
 
 lint-md:
-	$(E)docker run -v "$(DIR):/workdir" $(markdown_lint_image) "**/*.md" --fix
+	$(E)docker run -v "$(DIR):/workdir" $(markdown_lint_image) "**/*.md"
 
 #############################################################################
 # Code Generation

@@ -43,13 +43,13 @@ spiffe://<trust_domain>/spire/agent/tpm_devid/<fingerprint>
 A sample configuration:
 
 ```hcl
- NodeAttestor "tpm_devid" {
-  plugin_data {
-   devid_cert_path = "/opt/spire/conf/agent/devid.crt.pem"
-   devid_priv_path = "/opt/spire/conf/agent/devid.priv.blob"
-   devid_pub_path = "/opt/spire/conf/agent/devid.pub.blob"
-  }
- }
+    NodeAttestor "tpm_devid" {
+        plugin_data {
+            devid_cert_path = "/opt/spire/conf/agent/devid.crt.pem"
+            devid_priv_path = "/opt/spire/conf/agent/devid.priv.blob"
+            devid_pub_path = "/opt/spire/conf/agent/devid.pub.blob"
+        }
+    }
 ```
 
 ## Compatibility considerations

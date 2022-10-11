@@ -76,31 +76,31 @@ is mandatory for SPIRE server to assume a role in order to use the default polic
 
 ```json
 {
- "Version": "2012-10-17",
- "Statement": [
-  {
-   "Sid": "Allow full access to the SPIRE Server role",
-   "Effect": "Allow",
-   "Principal": {
-    "AWS": "arn:aws:iam::111122223333:role/example-assumed-role-name"
-   },
-   "Action": "kms:*",
-   "Resource": "*"
-  },
+    "Version": "2012-10-17",
+    "Statement": [
         {
-            "Sid": "Allow KMS console to display the key and policy",
+            "Sid": "Allow full access to the SPIRE Server role",
             "Effect": "Allow",
             "Principal": {
-                "AWS": "arn:aws:iam::111122223333:root"
+                "AWS": "arn:aws:iam::111122223333:role/example-assumed-role-name"
             },
-            "Action": [
-                            "kms:Describe*",
-                            "kms:List*",
-                            "kms:Get*"
-            ],
+            "Action": "kms:*",
             "Resource": "*"
-       }
- ]
+        },
+        {
+             "Sid": "Allow KMS console to display the key and policy",
+             "Effect": "Allow",
+             "Principal": {
+                 "AWS": "arn:aws:iam::111122223333:root"
+             },
+             "Action": [
+                 "kms:Describe*",
+                 "kms:List*",
+                 "kms:Get*"
+             ],
+             "Resource": "*"
+        }
+    ]
 }
 ```
 
