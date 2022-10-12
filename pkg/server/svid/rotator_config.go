@@ -9,6 +9,7 @@ import (
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/spiffe/spire/pkg/common/telemetry"
 	"github.com/spiffe/spire/pkg/server/ca"
+	"github.com/spiffe/spire/pkg/server/datastore"
 	"github.com/spiffe/spire/pkg/server/plugin/keymanager"
 )
 
@@ -23,7 +24,7 @@ type RotatorConfig struct {
 	ServerCA    ca.ServerCA
 	Clock       clock.Clock
 	KeyType     keymanager.KeyType
-
+	DataStore   datastore.DataStore
 	// How long to wait between expiry checks
 	Interval time.Duration
 }

@@ -44,6 +44,10 @@ func (r *Rotator) Interval() time.Duration {
 	return r.c.Interval
 }
 
+func (r *Rotator) ForceRotation(ctx context.Context) error {
+	return r.rotateSVID(ctx)
+}
+
 // Run starts a ticker which monitors the server SVID
 // for expiration and rotates the SVID as necessary.
 func (r *Rotator) Run(ctx context.Context) error {
@@ -56,7 +60,7 @@ func (r *Rotator) Run(ctx context.Context) error {
 			r.c.Log.Debug("Stopping SVID rotator")
 			return nil
 		case <-t.C:
-			if r.shouldRotate() {
+			if r.shouldRotate(ctx) {
 				if err := r.rotateSVID(ctx); err != nil {
 					r.c.Log.WithError(err).Error("Could not rotate server SVID")
 				}
@@ -67,7 +71,7 @@ func (r *Rotator) Run(ctx context.Context) error {
 
 // shouldRotate returns a boolean informing the caller of whether or not the
 // SVID should be rotated.
-func (r *Rotator) shouldRotate() bool {
+func (r *Rotator) shouldRotate(ctx context.Context) bool {
 	s := r.state.Value().(State)
 
 	if len(s.SVID) == 0 {

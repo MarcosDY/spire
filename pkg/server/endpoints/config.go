@@ -42,6 +42,8 @@ type Config struct {
 	// The svid rotator used to obtain the latest server credentials
 	SVIDObserver svid.Observer
 
+	SVIDRotator *svid.Rotator
+
 	// The server's configured trust domain. Used for validation, server SVID, etc.
 	TrustDomain spiffeid.TrustDomain
 
@@ -168,6 +170,7 @@ func (c *Config) makeAPIServers(entryFetcher api.AuthorizedEntryFetcher) APIServ
 			TrustDomain: c.TrustDomain,
 			DataStore:   ds,
 			Manager:     c.Manager,
+			SVIDRotator: c.SVIDRotator,
 		}),
 	}
 }

@@ -164,12 +164,14 @@ func (r *rotator) rotateSVIDIfNeeded(ctx context.Context) (err error) {
 	}
 
 	if rotationutil.ShouldRotateX509(r.clk.Now(), state.SVID[0]) || r.isTainted(b) {
+		r.c.Log.Debug("*************** SHOULD ROTATe: - tainted = %v\n", r.isTainted(b))
 		if state.Reattestable && fflag.IsSet(fflag.FlagReattestToRenew) {
 			err = r.reattest(ctx)
 		} else {
 			err = r.rotateSVID(ctx)
 		}
 
+		r.c.Log.Debug("*************** rotate error = %v\n", err)
 		if err == nil && r.rotationFinishedHook != nil {
 			r.rotationFinishedHook()
 		}

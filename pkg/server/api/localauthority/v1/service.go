@@ -6,9 +6,11 @@ import (
 
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	localauthorityv1 "github.com/spiffe/spire-api-sdk/proto/spire/api/server/localauthority/v1"
+	"github.com/spiffe/spire/pkg/common/cryptoutil"
 	"github.com/spiffe/spire/pkg/server/api/rpccontext"
 	"github.com/spiffe/spire/pkg/server/ca"
 	"github.com/spiffe/spire/pkg/server/datastore"
+	"github.com/spiffe/spire/pkg/server/svid"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -17,6 +19,7 @@ type Config struct {
 	TrustDomain spiffeid.TrustDomain
 	DataStore   datastore.DataStore
 	Manager     ca.AutorityUpdater
+	SVIDRotator *svid.Rotator
 }
 
 type Service struct {
@@ -25,6 +28,7 @@ type Service struct {
 	td spiffeid.TrustDomain
 	ds datastore.DataStore
 	m  ca.AutorityUpdater
+	o  *svid.Rotator
 }
 
 func New(config Config) *Service {
@@ -32,6 +36,7 @@ func New(config Config) *Service {
 		ds: config.DataStore,
 		td: config.TrustDomain,
 		m:  config.Manager,
+		o:  config.SVIDRotator,
 	}
 }
 
@@ -180,6 +185,34 @@ func (s *Service) TaintX509Authority(ctx context.Context, _ *localauthorityv1.Ta
 		return nil, status.Errorf(codes.Internal, "failed to taint authority: %v", err)
 	}
 
+	bundle, err := s.ds.FetchBundle(ctx, s.td.IDString())
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to fetch bundle: %v", err)
+	}
+
+	var rootCAs []*x509.Certificate
+	for _, ca := range bundle.RootCas {
+		cert, err := x509.ParseCertificate(ca.DerBytes)
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "failed to parse bundle: %v", err)
+		}
+		rootCAs = append(rootCAs, cert)
+	}
+
+	serverSVID := s.o.State().SVID
+
+	ca, err := getSVIDBundle(serverSVID, rootCAs)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to get SVID bundle: %v", err)
+	}
+
+	if ok, _ := cryptoutil.PublicKeyEqual(ca.PublicKey, authority.PublicKey); ok {
+		// Server is tainted... force rotation
+		if err := s.o.ForceRotation(ctx); err != nil {
+			return nil, status.Errorf(codes.Internal, "failed to force rotation: %v", err)
+		}
+	}
+
 	taintedAuthority, err := protoFromKeyState(authority)
 	if err != nil {
 		log.WithError(err).Error("Failed to parse authoriry")
@@ -231,4 +264,23 @@ func protoFromKeyState(state *ca.KeyState) (*localauthorityv1.AuthorityState, er
 		PublicKey: pKey,
 		Status:    status,
 	}, nil
+}
+
+func getSVIDBundle(svid []*x509.Certificate, cas []*x509.Certificate) (*x509.Certificate, error) {
+	rootCAs := x509.NewCertPool()
+	for _, eachCA := range cas {
+		rootCAs.AddCert(eachCA)
+	}
+
+	intermediates := x509.NewCertPool()
+	for _, eachIntermediate := range svid[1:] {
+		intermediates.AddCert(eachIntermediate)
+	}
+
+	chain, err := svid[0].Verify(x509.VerifyOptions{Roots: rootCAs, Intermediates: intermediates})
+	if err != nil {
+		return nil, err
+	}
+
+	return chain[0][1], nil
 }
