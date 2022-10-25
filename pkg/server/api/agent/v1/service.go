@@ -505,8 +505,30 @@ func (s *Service) PushStatus(ctx context.Context, req *agentv1.PushStatusRequest
 	}
 
 	var taintedKeys [][]byte
-	for _, taintedKey := range tdBundle.TaintedKeys {
-		taintedKeys = append(taintedKeys, taintedKey.PkixBytes)
+
+	// TODO: we may be able to improve this, just keeping a cache and
+	// update it when required.
+	// TODO: we may replace this to provide an ID to identify affected keys
+	// and not the public key
+	for _, x509CA := range tdBundle.RootCas {
+		if x509CA.TaintedKey {
+			ca, err := x509.ParseCertificate(x509CA.DerBytes)
+			if err != nil {
+				return nil, api.MakeErr(log, codes.Internal, "failed to parse X509 authority", err)
+			}
+			bKey, err := x509.MarshalPKIXPublicKey(ca.PublicKey)
+			if err != nil {
+				return nil, api.MakeErr(log, codes.Internal, "failed to marshal publick key", err)
+			}
+
+			taintedKeys = append(taintedKeys, bKey)
+		}
+	}
+
+	for _, jwtKey := range tdBundle.JwtSigningKeys {
+		if jwtKey.TaintedKey {
+			taintedKeys = append(taintedKeys, jwtKey.PkixBytes)
+		}
 	}
 
 	return &agentv1.PushStatusResponse{

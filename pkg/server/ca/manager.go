@@ -247,7 +247,7 @@ func (m *Manager) TaintJWTAuthority(ctx context.Context) (*KeyState, error) {
 	}
 
 	ds := m.c.Catalog.GetDataStore()
-	if err := ds.TaintKey(ctx, m.c.TrustDomain.IDString(), nextJWTKey.publicKey, nextJWTKey.notAfter); err != nil {
+	if err := ds.TaintJWTKey(ctx, m.c.TrustDomain.IDString(), nextJWTKey.publicKey); err != nil {
 		return nil, fmt.Errorf("failed to persist tainted key: %w", err)
 	}
 
@@ -331,7 +331,7 @@ func (m *Manager) TaintX509Authority(ctx context.Context) (*KeyState, error) {
 	}
 
 	ds := m.c.Catalog.GetDataStore()
-	if err := ds.TaintKey(ctx, m.c.TrustDomain.IDString(), nextX509CA.publicKey, nextX509CA.notAfter); err != nil {
+	if err := ds.TaintX509CAByKey(ctx, m.c.TrustDomain.IDString(), nextX509CA.publicKey); err != nil {
 		return nil, fmt.Errorf("failed to persist tainted key: %w", err)
 	}
 	m.c.Log.Debug("Key tainted successfully")

@@ -104,8 +104,15 @@ func (ds *DatastoreCache) SetBundle(ctx context.Context, b *common.Bundle) (bund
 	return
 }
 
-func (ds *DatastoreCache) TaintKey(ctx context.Context, trustDomainID string, publicKey crypto.PublicKey, notAfter time.Time) error {
-	if err := ds.DataStore.TaintKey(ctx, trustDomainID, publicKey, notAfter); err == nil {
+func (ds *DatastoreCache) TaintX509CAByKey(ctx context.Context, trustDomainID string, publicKey crypto.PublicKey) error {
+	if err := ds.DataStore.TaintX509CAByKey(ctx, trustDomainID, publicKey); err == nil {
+		ds.invalidateBundleEntry(trustDomainID)
+	}
+	return nil
+}
+
+func (ds *DatastoreCache) TaintJWTKey(ctx context.Context, trustDomainID string, publicKey crypto.PublicKey) error {
+	if err := ds.DataStore.TaintJWTKey(ctx, trustDomainID, publicKey); err == nil {
 		ds.invalidateBundleEntry(trustDomainID)
 	}
 	return nil

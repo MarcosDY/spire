@@ -62,9 +62,15 @@ func StartUpdateBundleCall(m telemetry.Metrics) *telemetry.CallCounter {
 }
 
 // StartTaintKeyCall return metric
-// for server's datastore, on tainting a bundle key.
-func StartTaintKeyCall(m telemetry.Metrics) *telemetry.CallCounter {
-	return telemetry.StartCall(m, telemetry.Datastore, telemetry.Bundle, telemetry.Taint)
+// for server's datastore, on tainting a X509 CA by key.
+func StartTaintX509CAByKeyCall(m telemetry.Metrics) *telemetry.CallCounter {
+	return telemetry.StartCall(m, telemetry.Datastore, telemetry.Bundle, telemetry.X509, telemetry.Taint)
+}
+
+// StartTaintJWTKeyCall return metric
+// for server's datastore, on tainting a JWT public key.
+func StartTaintJWTKeyCall(m telemetry.Metrics) *telemetry.CallCounter {
+	return telemetry.StartCall(m, telemetry.Datastore, telemetry.Bundle, telemetry.JWT, telemetry.Taint)
 }
 
 // StartRevokeX509CACall return metric

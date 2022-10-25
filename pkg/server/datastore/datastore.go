@@ -25,9 +25,10 @@ type DataStore interface {
 	UpdateBundle(context.Context, *common.Bundle, *common.BundleMask) (*common.Bundle, error)
 
 	// Keys
-	TaintKey(ctx context.Context, trustDomainID string, publicKey crypto.PublicKey, notAfter time.Time) error
-	RevokeJWTKey(ctx context.Context, trustDoaminID string, publicKey crypto.PublicKey) error
-	RevokeX509CA(ctx context.Context, trustDoaminID string, publicKey crypto.PublicKey) error
+	TaintX509CAByKey(ctx context.Context, trustDomainID string, publicKey crypto.PublicKey) error
+	TaintJWTKey(ctx context.Context, trustDomainID string, publicKey crypto.PublicKey) error
+	RevokeJWTKey(ctx context.Context, trustDomainID string, publicKey crypto.PublicKey) error
+	RevokeX509CA(ctx context.Context, trustDomainID string, publicKey crypto.PublicKey) error
 
 	// Entries
 	CountRegistrationEntries(context.Context) (int32, error)

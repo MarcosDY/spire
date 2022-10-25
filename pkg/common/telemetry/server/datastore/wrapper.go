@@ -204,10 +204,16 @@ func (w metricsWrapper) SetBundle(ctx context.Context, bundle *common.Bundle) (_
 	return w.ds.SetBundle(ctx, bundle)
 }
 
-func (w metricsWrapper) TaintKey(ctx context.Context, trustDomainID string, publicKey crypto.PublicKey, notAfter time.Time) (err error) {
-	callCounter := StartTaintKeyCall(w.m)
+func (w metricsWrapper) TaintX509CAByKey(ctx context.Context, trustDomainID string, publicKey crypto.PublicKey) (err error) {
+	callCounter := StartTaintX509CAByKeyCall(w.m)
 	defer callCounter.Done(&err)
-	return w.ds.TaintKey(ctx, trustDomainID, publicKey, notAfter)
+	return w.ds.TaintX509CAByKey(ctx, trustDomainID, publicKey)
+}
+
+func (w metricsWrapper) TaintJWTKey(ctx context.Context, trustDomainID string, publicKey crypto.PublicKey) (err error) {
+	callCounter := StartTaintJWTKeyCall(w.m)
+	defer callCounter.Done(&err)
+	return w.ds.TaintJWTKey(ctx, trustDomainID, publicKey)
 }
 
 func (w metricsWrapper) RevokeX509CA(ctx context.Context, trustDomainID string, publicKey crypto.PublicKey) (err error) {
