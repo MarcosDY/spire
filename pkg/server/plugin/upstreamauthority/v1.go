@@ -106,11 +106,22 @@ func (v1 *V1) parseMintX509CAFirstResponse(resp *upstreamauthorityv1.MintX509CAR
 	return x509CA, x509Authorities, nil
 }
 
-func (v1 *V1) parseMintX509CABundleUpdate(resp *upstreamauthorityv1.MintX509CAResponse) ([]*x509.Certificate, error) {
+func (v1 *V1) parseMintX509CABundleUpdate(resp *upstreamauthorityv1.MintX509CAResponse) ([]*x509certificate.CertificateWithMetadata, error) {
 	if len(resp.X509CaChain) > 0 {
 		return nil, v1.Error(codes.Internal, "plugin response has an X.509 CA chain after the first response")
 	}
-	return v1.parseX509Authorities(resp.UpstreamX509Roots)
+	return v1.parseX509AuthoritiesWithMetadata(resp.UpstreamX509Roots)
+}
+
+func (v1 *V1) parseX509AuthoritiesWithMetadata(rawX509Authorities []*types.X509Certificate) ([]*x509certificate.CertificateWithMetadata, error) {
+	x509Authorities, err := x509certificate.FromPluginProtosWithMetadata(rawX509Authorities)
+	if err != nil {
+		return nil, v1.Errorf(codes.Internal, "plugin response has malformed upstream X.509 roots: %v", err)
+	}
+	if len(x509Authorities) == 0 {
+		return nil, v1.Error(codes.Internal, "plugin response missing upstream X.509 roots")
+	}
+	return x509Authorities, nil
 }
 
 func (v1 *V1) parseX509Authorities(rawX509Authorities []*types.X509Certificate) ([]*x509.Certificate, error) {
@@ -145,7 +156,7 @@ type v1UpstreamX509AuthorityStream struct {
 	cancel context.CancelFunc
 }
 
-func (s *v1UpstreamX509AuthorityStream) RecvUpstreamX509Authorities() ([]*x509.Certificate, error) {
+func (s *v1UpstreamX509AuthorityStream) RecvUpstreamX509Authorities() ([]*x509certificate.CertificateWithMetadata, error) {
 	for {
 		resp, err := s.stream.Recv()
 		switch {

@@ -139,6 +139,8 @@ func (p *Plugin) MintX509CAAndSubscribe(request *upstreamauthorityv1.MintX509CAR
 	}
 	defer p.unsubscribeToPolling()
 
+	// It is safe to say that actual authority is not tainted, since it is active
+	// only unactive authorities can be tainted.
 	certChain, roots, err := p.serverClient.newDownstreamX509CA(stream.Context(), request.Csr)
 	if err != nil {
 		return status.Errorf(codes.Internal, "unable to request a new Downstream X509CA: %v", err)
@@ -170,9 +172,6 @@ func (p *Plugin) MintX509CAAndSubscribe(request *upstreamauthorityv1.MintX509CAR
 		newRootCAs := p.getBundle().X509Authorities
 		// Send response with new X509 authorities
 		if !areRootsEqual(rootCAs, newRootCAs) {
-			// TODO: here is a good place to validate that the rotation
-			// was done because of a tainted scenary
-
 			rootCAs = newRootCAs
 			err := stream.Send(&upstreamauthorityv1.MintX509CAResponse{
 				X509CaChain:       x509CAChain,

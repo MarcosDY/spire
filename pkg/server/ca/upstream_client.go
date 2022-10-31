@@ -17,6 +17,7 @@ import (
 // BundleUpdater is the interface used by the UpstreamClient to append bundle
 // updates.
 type BundleUpdater interface {
+	AppendX509CommonRoots(ctx context.Context, roots []*common.Certificate) error
 	AppendX509Roots(ctx context.Context, roots []*x509.Certificate) error
 	AppendJWTKeys(ctx context.Context, keys []*common.PublicKey) ([]*common.PublicKey, error)
 	LogError(err error, msg string)
@@ -171,7 +172,15 @@ func (u *UpstreamClient) runMintX509CAStream(ctx context.Context, csr []byte, tt
 			return
 		}
 
-		if err := u.c.BundleUpdater.AppendX509Roots(ctx, x509Roots); err != nil {
+		var commonRoots []*common.Certificate
+		for _, root := range x509Roots {
+			commonRoots = append(commonRoots, &common.Certificate{
+				DerBytes:   root.Certificate.Raw,
+				TaintedKey: root.Tainted,
+			})
+		}
+
+		if err := u.c.BundleUpdater.AppendX509CommonRoots(ctx, commonRoots); err != nil {
 			u.c.BundleUpdater.LogError(err, "Failed to store X.509 roots received by the upstream authority plugin.")
 			continue
 		}

@@ -8,8 +8,34 @@ import (
 	"github.com/spiffe/spire/proto/spire/common"
 )
 
+type CertificateWithMetadata struct {
+	Certificate *x509.Certificate
+	Tainted     bool
+}
+
 func FromPluginProto(pb *plugintypes.X509Certificate) (*x509.Certificate, error) {
 	return fromProtoFields(pb.Asn1)
+}
+
+func FromPluginProtosWithMetadata(pbs []*plugintypes.X509Certificate) ([]*CertificateWithMetadata, error) {
+	if pbs == nil {
+		return nil, nil
+	}
+
+	certsWithMetadata := make([]*CertificateWithMetadata, 0, len(pbs))
+	for _, pb := range pbs {
+		x509Certificate, err := fromProtoFields(pb.Asn1)
+		if err != nil {
+			return nil, err
+		}
+
+		certsWithMetadata = append(certsWithMetadata, &CertificateWithMetadata{
+			Certificate: x509Certificate,
+			Tainted:     pb.Tainted,
+		})
+	}
+
+	return certsWithMetadata, nil
 }
 
 func FromPluginProtos(pbs []*plugintypes.X509Certificate) ([]*x509.Certificate, error) {
@@ -114,7 +140,8 @@ func ToPluginFromAPIProto(pb *apitypes.X509Certificate) (*plugintypes.X509Certif
 		return nil, err
 	}
 	return &plugintypes.X509Certificate{
-		Asn1: asn1,
+		Asn1:    asn1,
+		Tainted: pb.Tainted,
 	}, nil
 }
 

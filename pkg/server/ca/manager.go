@@ -393,6 +393,43 @@ func (m *Manager) rotate(ctx context.Context) error {
 	return errs.Combine(x509CAErr, jwtKeyErr)
 }
 
+// / TODO: this implementation is not good enough..., I'm searching tainted
+//
+//	by ds and parsing on each call... we must keep it on some kind of cache
+func (m *Manager) isTainted(ctx context.Context, slot *x509CASlot) (bool, error) {
+	ds := m.c.Catalog.GetDataStore()
+
+	b, err := ds.FetchBundle(ctx, m.c.TrustDomain.IDString())
+	if err != nil {
+		return false, err
+	}
+
+	slotCert := slot.x509CA.Certificate
+	for i, root := range b.RootCas {
+		if root.TaintedKey {
+			// TODO: replace it with some kind of cache to avoid parsing
+			cert, err := x509.ParseCertificate(root.DerBytes)
+			if err != nil {
+				return false, err
+			}
+
+			certPool := x509.NewCertPool()
+			certPool.AddCert(cert)
+
+			_, err = slotCert.Verify(x509.VerifyOptions{
+				Roots: certPool,
+			})
+
+			// No error so it was signed by this
+			if err == nil {
+				return true, nil
+			}
+		}
+	}
+
+	return false, nil
+}
+
 func (m *Manager) rotateX509CA(ctx context.Context) error {
 	now := m.c.Clock.Now()
 
@@ -402,6 +439,31 @@ func (m *Manager) rotateX509CA(ctx context.Context) error {
 			return err
 		}
 		m.activateX509CA()
+	}
+
+	// Current X509 CA is tainted, we must rotate and mark actual as tainted too
+	isTainted, err := m.isTainted(ctx, m.currentX509CA)
+	if err != nil {
+		return fmt.Errorf("failed to valida if certificate is tainted: %w", err)
+	}
+	if isTainted {
+		if m.nextX509CA.IsEmpty() {
+			if err := m.prepareX509CA(ctx, m.nextX509CA); err != nil {
+				return err
+			}
+		}
+
+		// Activate next
+		if _, err := m.ActivateX509Authority(); err != nil {
+			return err
+		}
+
+		// Taint old since it depends of a taited upstream
+		if _, err := m.TaintX509Authority(ctx); err != nil {
+			return err
+		}
+
+		return nil
 	}
 
 	// if there is no next keypair set and the current is within the
@@ -1091,6 +1153,29 @@ type bundleUpdater struct {
 	trustDomainID string
 	ds            datastore.DataStore
 	updated       func()
+}
+
+func (u *bundleUpdater) AppendX509CommonRoots(ctx context.Context, roots []*common.Certificate) error {
+	bundle := &common.Bundle{
+		TrustDomainId: u.trustDomainID,
+		RootCas:       make([]*common.Certificate, 0, len(roots)),
+	}
+
+	for _, root := range roots {
+		if len(root.DerBytes) == 0 {
+			return errors.New("no certificate provided")
+		}
+		u.log.Debug("---------- Cert provided: %v\n", root.TaintedKey)
+
+		bundle.RootCas = append(bundle.RootCas, &common.Certificate{
+			DerBytes:   root.DerBytes,
+			TaintedKey: root.TaintedKey,
+		})
+	}
+	if _, err := u.appendBundle(ctx, bundle); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (u *bundleUpdater) AppendX509Roots(ctx context.Context, roots []*x509.Certificate) error {
