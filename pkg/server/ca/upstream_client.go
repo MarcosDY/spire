@@ -4,10 +4,12 @@ import (
 	"context"
 	"crypto/x509"
 	"errors"
+	"fmt"
 	"io"
 	"sync"
 	"time"
 
+	"github.com/spiffe/spire/pkg/common/pemutil"
 	"github.com/spiffe/spire/pkg/server/plugin/upstreamauthority"
 	"github.com/spiffe/spire/proto/spire/common"
 	"google.golang.org/grpc/codes"
@@ -149,6 +151,7 @@ func (u *UpstreamClient) runMintX509CAStream(ctx context.Context, csr []byte, tt
 		return
 	}
 
+	fmt.Println("*********** before append x509 roots")
 	if err := u.c.BundleUpdater.AppendX509Roots(ctx, x509Roots); err != nil {
 		firstResultCh <- mintX509CAResult{err: err}
 		return
@@ -173,11 +176,12 @@ func (u *UpstreamClient) runMintX509CAStream(ctx context.Context, csr []byte, tt
 		}
 
 		var commonRoots []*common.Certificate
-		for _, root := range x509Roots {
+		for i, root := range x509Roots {
 			commonRoots = append(commonRoots, &common.Certificate{
 				DerBytes:   root.Certificate.Raw,
 				TaintedKey: root.Tainted,
 			})
+			fmt.Printf("************** GOT %v: %v", i, string(pemutil.EncodeCertificate(root.Certificate)))
 		}
 
 		if err := u.c.BundleUpdater.AppendX509CommonRoots(ctx, commonRoots); err != nil {

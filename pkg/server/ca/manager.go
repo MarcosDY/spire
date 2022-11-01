@@ -20,6 +20,7 @@ import (
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/spiffe/spire/pkg/common/cryptoutil"
 	"github.com/spiffe/spire/pkg/common/health"
+	"github.com/spiffe/spire/pkg/common/pemutil"
 	"github.com/spiffe/spire/pkg/common/telemetry"
 	telemetry_server "github.com/spiffe/spire/pkg/common/telemetry/server"
 	"github.com/spiffe/spire/pkg/common/util"
@@ -404,9 +405,13 @@ func (m *Manager) isTainted(ctx context.Context, slot *x509CASlot) (bool, error)
 		return false, err
 	}
 
+	m.c.Log.Debugf("--------------Upstream: %v \n", string(pemutil.EncodeCertificates(slot.x509CA.UpstreamChain)))
 	slotCert := slot.x509CA.Certificate
 	for i, root := range b.RootCas {
+		cert, _ := x509.ParseCertificate(root.DerBytes)
+		m.c.Log.Debugf("--------------ROOTS %v: %v \n", i, string(pemutil.EncodeCertificate(cert)))
 		if root.TaintedKey {
+			m.c.Log.Debugf("----------------------- inside is tainted %v\n", i)
 			// TODO: replace it with some kind of cache to avoid parsing
 			cert, err := x509.ParseCertificate(root.DerBytes)
 			if err != nil {
@@ -1161,17 +1166,38 @@ func (u *bundleUpdater) AppendX509CommonRoots(ctx context.Context, roots []*comm
 		RootCas:       make([]*common.Certificate, 0, len(roots)),
 	}
 
-	for _, root := range roots {
+	for i, root := range roots {
 		if len(root.DerBytes) == 0 {
 			return errors.New("no certificate provided")
 		}
-		u.log.Debug("---------- Cert provided: %v\n", root.TaintedKey)
+		cc, _ := x509.ParseCertificate(root.DerBytes)
+		u.log.Debugf("!!!!!! CERT %v: %v\n", i, string(pemutil.EncodeCertificate(cc)))
+
+		// It is tainted, and must not add, but update
+		if root.TaintedKey {
+			u.log.Debugf("!!!!!!!!!!! inside is tainted: %v!!!!!!!!\n", i)
+			cert, err := x509.ParseCertificate(root.DerBytes)
+			if err != nil {
+				return err
+			}
+			u.ds.TaintX509CAByKey(ctx, u.trustDomainID, cert.PublicKey)
+			continue
+		}
+
+		u.log.Debugf("!!!!!!!!!!! not tainted: %v!!!!!!!!\n", i)
 
 		bundle.RootCas = append(bundle.RootCas, &common.Certificate{
 			DerBytes:   root.DerBytes,
 			TaintedKey: root.TaintedKey,
 		})
 	}
+
+	u.log.Debugf("!!!!!!!!!!! Budles to APPEnD %v\n", len(bundle.RootCas))
+	for i, ii := range bundle.RootCas {
+		cert, _ := x509.ParseCertificate(ii.DerBytes)
+		u.log.Debugf("!!!!!! Bundle %v: %v\n", i, string(pemutil.EncodeCertificate(cert)))
+	}
+
 	if _, err := u.appendBundle(ctx, bundle); err != nil {
 		return err
 	}
@@ -1184,10 +1210,15 @@ func (u *bundleUpdater) AppendX509Roots(ctx context.Context, roots []*x509.Certi
 		RootCas:       make([]*common.Certificate, 0, len(roots)),
 	}
 
-	for _, root := range roots {
+	// TODO: I found that AppendX509Roots is adding duplicate bundes... adding
+	// some logic to avoid that
+
+	for i, root := range roots {
 		bundle.RootCas = append(bundle.RootCas, &common.Certificate{
 			DerBytes: root.Raw,
+			// TaintedKey: root.,
 		})
+		u.log.Debugf(">>>>>>>>>>>>>>>> bRoot %v: %v\n", i, string(pemutil.EncodeCertificate(root)))
 	}
 	if _, err := u.appendBundle(ctx, bundle); err != nil {
 		return err

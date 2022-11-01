@@ -228,8 +228,10 @@ func MergeBundles(a, b *common.Bundle) (*common.Bundle, bool) {
 	c := cloneBundle(a)
 
 	rootCAs := make(map[string]bool)
+	// TODO: there is an issue here where append will fail because tainted is not set
+	// for now only compares deer, but we must refactor to always get tainted bool
 	for _, rootCA := range a.RootCas {
-		rootCAs[rootCA.String()] = true
+		rootCAs[string(rootCA.DerBytes)] = true
 	}
 	jwtSigningKeys := make(map[string]bool)
 	for _, jwtSigningKey := range a.JwtSigningKeys {
@@ -238,7 +240,7 @@ func MergeBundles(a, b *common.Bundle) (*common.Bundle, bool) {
 
 	var changed bool
 	for _, rootCA := range b.RootCas {
-		if !rootCAs[rootCA.String()] {
+		if !rootCAs[string(rootCA.DerBytes)] {
 			c.RootCas = append(c.RootCas, rootCA)
 			changed = true
 		}
