@@ -141,17 +141,18 @@ func (p *Plugin) MintX509CAAndSubscribe(request *upstreamauthorityv1.MintX509CAR
 
 	// It is safe to say that actual authority is not tainted, since it is active
 	// only unactive authorities can be tainted.
-	certChain, roots, err := p.serverClient.newDownstreamX509CA(stream.Context(), request.Csr)
+	certChain, x509AuthorityWithMetadata, err := p.serverClient.newDownstreamX509CA(stream.Context(), request.Csr)
 	if err != nil {
 		return status.Errorf(codes.Internal, "unable to request a new Downstream X509CA: %v", err)
 	}
 
 	var bundles []*plugintypes.X509Certificate
-	for _, cert := range roots {
-		pluginCert, err := x509certificate.ToPluginProto(cert)
+	for _, authority := range x509AuthorityWithMetadata {
+		pluginCert, err := x509certificate.ToPluginProto(authority.cert)
 		if err != nil {
 			return status.Errorf(codes.Internal, "failed to parse X.509 authorities: %v", err)
 		}
+		pluginCert.Tainted = authority.taintedKey
 
 		bundles = append(bundles, pluginCert)
 	}

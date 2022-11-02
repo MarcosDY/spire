@@ -99,7 +99,7 @@ func (c *serverClient) release() {
 }
 
 // newDownstreamX509CA requests new downstream CAs to server
-func (c *serverClient) newDownstreamX509CA(ctx context.Context, csr []byte) ([]*x509.Certificate, []*x509.Certificate, error) {
+func (c *serverClient) newDownstreamX509CA(ctx context.Context, csr []byte) ([]*x509.Certificate, []*x509AuthorityWithMetadata, error) {
 	c.mtx.RLock()
 	defer c.mtx.RUnlock()
 
@@ -110,19 +110,26 @@ func (c *serverClient) newDownstreamX509CA(ctx context.Context, csr []byte) ([]*
 		return nil, nil, err
 	}
 
-	// parse authorities to verify that are valid X509 certificates
-	bundles, err := x509util.RawCertsToCertificates(resp.X509Authorities)
-	if err != nil {
-		return nil, nil, status.Errorf(codes.Internal, "unable to parse X509 authorities: %v", err)
-	}
-
 	// parse cert chains to verify that are valid X509 certificates
 	certs, err := x509util.RawCertsToCertificates(resp.CaCertChain)
 	if err != nil {
 		return nil, nil, status.Errorf(codes.Internal, "unable to parse CA cert chain: %v", err)
 	}
 
-	return certs, bundles, nil
+	authoritiesWithMetadata := make([]*x509AuthorityWithMetadata, 0, len(resp.X509AuthoritiesWithMetadata))
+	for _, authority := range resp.X509AuthoritiesWithMetadata {
+		cert, err := x509.ParseCertificate(authority.Asn1)
+		if err != nil {
+			return nil, nil, status.Errorf(codes.Internal, "unable to parse x509 authority: %v", err)
+		}
+
+		authoritiesWithMetadata = append(authoritiesWithMetadata, &x509AuthorityWithMetadata{
+			cert:       cert,
+			taintedKey: authority.Tainted,
+		})
+	}
+
+	return certs, authoritiesWithMetadata, nil
 }
 
 // newDownstreamX509CA publishes a JWT key to the server
@@ -151,6 +158,11 @@ func (c *serverClient) getBundle(ctx context.Context) (*types.Bundle, error) {
 	}
 
 	return bundle, nil
+}
+
+type x509AuthorityWithMetadata struct {
+	cert       *x509.Certificate
+	taintedKey bool
 }
 
 type logAdapter struct {

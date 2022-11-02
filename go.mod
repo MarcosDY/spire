@@ -2,7 +2,7 @@ module github.com/spiffe/spire
 
 go 1.19
 
-replace github.com/spiffe/spire-api-sdk => github.com/MarcosDY/spire-api-sdk v1.0.0-pre.0.20221025130224-d625c86b2788
+replace github.com/spiffe/spire-api-sdk => github.com/MarcosDY/spire-api-sdk v1.0.0-pre.0.20221102172352-0e67bc4d7800
 
 replace github.com/spiffe/spire-plugin-sdk => github.com/MarcosDY/spire-plugin-sdk v0.0.0-20221025175451-dcf57a457d68
 

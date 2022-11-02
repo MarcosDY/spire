@@ -398,16 +398,22 @@ func (s *Service) NewDownstreamX509CA(ctx context.Context, req *svidv1.NewDownst
 	}
 
 	rawRootCerts := make([][]byte, 0, len(bundle.RootCas))
+	x509Authorities := make([]*types.X509Certificate, 0, len(bundle.RootCas))
 	for _, cert := range bundle.RootCas {
 		rawRootCerts = append(rawRootCerts, cert.DerBytes)
+		x509Authorities = append(x509Authorities, &types.X509Certificate{
+			Asn1:    cert.DerBytes,
+			Tainted: cert.TaintedKey,
+		})
 	}
 	rpccontext.AuditRPCWithFields(ctx, logrus.Fields{
 		telemetry.ExpiresAt: x509CASvid[0].NotAfter.Unix(),
 	})
 
 	return &svidv1.NewDownstreamX509CAResponse{
-		CaCertChain:     x509util.RawCertsFromCertificates(x509CASvid),
-		X509Authorities: rawRootCerts,
+		CaCertChain:                 x509util.RawCertsFromCertificates(x509CASvid),
+		X509Authorities:             rawRootCerts,
+		X509AuthoritiesWithMetadata: x509Authorities,
 	}, nil
 }
 
