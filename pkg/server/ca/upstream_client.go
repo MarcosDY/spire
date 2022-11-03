@@ -20,7 +20,7 @@ import (
 // updates.
 type BundleUpdater interface {
 	// AppendX509CommonRoots(ctx context.Context, roots []*common.Certificate) error
-	AppendX509Roots(ctx context.Context, roots []*x509certificate.CertificateWithMetadata, shouldUpdate bool) error
+	AppendX509Roots(ctx context.Context, roots []*x509certificate.CertificateWithMetadata) error
 	AppendJWTKeys(ctx context.Context, keys []*common.PublicKey) ([]*common.PublicKey, error)
 	LogError(err error, msg string)
 }
@@ -157,7 +157,7 @@ func (u *UpstreamClient) runMintX509CAStream(ctx context.Context, csr []byte, tt
 	}
 
 	fmt.Println("*********** before append x509 roots")
-	if err := u.c.BundleUpdater.AppendX509Roots(ctx, x509Roots, false); err != nil {
+	if err := u.c.BundleUpdater.AppendX509Roots(ctx, x509Roots); err != nil {
 		firstResultCh <- mintX509CAResult{err: err}
 		return
 	}
@@ -180,7 +180,7 @@ func (u *UpstreamClient) runMintX509CAStream(ctx context.Context, csr []byte, tt
 			return
 		}
 
-		if err := u.c.BundleUpdater.AppendX509Roots(ctx, x509Roots, true); err != nil {
+		if err := u.c.BundleUpdater.AppendX509Roots(ctx, x509Roots); err != nil {
 			u.c.BundleUpdater.LogError(err, "Failed to store X.509 roots received by the upstream authority plugin.")
 			continue
 		}

@@ -1210,7 +1210,7 @@ func (u *bundleUpdater) AppendX509CommonRoots(ctx context.Context, roots []*comm
 	return nil
 }
 
-func (u *bundleUpdater) AppendX509Roots(ctx context.Context, roots []*x509certificate.CertificateWithMetadata, shouldUpdate bool) error {
+func (u *bundleUpdater) AppendX509Roots(ctx context.Context, roots []*x509certificate.CertificateWithMetadata) error {
 	bundle := &common.Bundle{
 		TrustDomainId: u.trustDomainID,
 		RootCas:       make([]*common.Certificate, 0, len(roots)),
@@ -1250,32 +1250,30 @@ func (u *bundleUpdater) AppendX509Roots(ctx context.Context, roots []*x509certif
 	u.log.Debugf(">>>>>>>>>>>>>>>> newAuthorities: %v  \n", len(newAuthorities))
 	u.log.Debugf(">>>>>>>>>>>>>>>> lastX509Upstream: %v  \n", len(u.lastX509Upstream))
 
-	if shouldUpdate {
-		u.log.Debugf(">>>>>>>>>>>>>>>> should update\n")
+	u.log.Debugf(">>>>>>>>>>>>>>>> should update\n")
 
-		for key, authority := range u.lastX509Upstream {
+	for key, authority := range u.lastX509Upstream {
 
-			cc, _ := x509.ParseCertificate(authority.Certificate.Raw)
-			u.log.Debugf("!!!!!!  for upstream: %v \n %v\n", authority.Tainted, string(pemutil.EncodeCertificate(cc)))
+		cc, _ := x509.ParseCertificate(authority.Certificate.Raw)
+		u.log.Debugf("!!!!!!  for upstream: %v \n %v\n", authority.Tainted, string(pemutil.EncodeCertificate(cc)))
 
-			// We are worry only on tainted bundles,
-			// regular bundles will be cleaned when expiring
-			if authority.Tainted {
-				u.log.Debugln(">>>>>>>>>> Tainted authority")
-				_, found := newAuthorities[key]
-				if !found {
-					u.log.Debugln(">>>>>>>>> deleting")
-					// Authority not found and it was tainted, so remove it
-					if err := u.ds.RevokeX509CA(ctx, u.trustDomainID, authority.Certificate.PublicKey); err != nil {
-						return fmt.Errorf("failed to revoke tainted key: %w", err)
-					}
+		// We are worry only on tainted bundles,
+		// regular bundles will be cleaned when expiring
+		if authority.Tainted {
+			u.log.Debugln(">>>>>>>>>> Tainted authority")
+			_, found := newAuthorities[key]
+			if !found {
+				u.log.Debugln(">>>>>>>>> deleting")
+				// Authority not found and it was tainted, so remove it
+				if err := u.ds.RevokeX509CA(ctx, u.trustDomainID, authority.Certificate.PublicKey); err != nil {
+					return fmt.Errorf("failed to revoke tainted key: %w", err)
 				}
 			}
 		}
-
-		// Keep always the latest
-		u.lastX509Upstream = newAuthorities
 	}
+
+	// Keep always the latest
+	u.lastX509Upstream = newAuthorities
 
 	if _, err := u.appendBundle(ctx, bundle); err != nil {
 		return err
