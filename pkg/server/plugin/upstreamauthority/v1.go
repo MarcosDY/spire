@@ -23,7 +23,7 @@ type V1 struct {
 
 // MintX509CA provides the V1 implementation of the UpstreamAuthority
 // interface method of the same name.
-func (v1 *V1) MintX509CA(ctx context.Context, csr []byte, preferredTTL time.Duration) (_, _ []*x509.Certificate, _ UpstreamX509AuthorityStream, err error) {
+func (v1 *V1) MintX509CA(ctx context.Context, csr []byte, preferredTTL time.Duration) (_ []*x509.Certificate, _ []*x509certificate.CertificateWithMetadata, _ UpstreamX509AuthorityStream, err error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer func() {
 		// Only cancel the context if the function fails. Otherwise the
@@ -91,7 +91,7 @@ func (v1 *V1) PublishJWTKey(ctx context.Context, jwtKey *common.PublicKey) (_ []
 	return jwtKeys, &v1UpstreamJWTAuthorityStream{v1: v1, stream: stream, cancel: cancel}, nil
 }
 
-func (v1 *V1) parseMintX509CAFirstResponse(resp *upstreamauthorityv1.MintX509CAResponse) ([]*x509.Certificate, []*x509.Certificate, error) {
+func (v1 *V1) parseMintX509CAFirstResponse(resp *upstreamauthorityv1.MintX509CAResponse) ([]*x509.Certificate, []*x509certificate.CertificateWithMetadata, error) {
 	x509CA, err := x509certificate.FromPluginProtos(resp.X509CaChain)
 	if err != nil {
 		return nil, nil, v1.Errorf(codes.Internal, "plugin response has malformed X.509 CA chain: %v", err)
@@ -99,7 +99,7 @@ func (v1 *V1) parseMintX509CAFirstResponse(resp *upstreamauthorityv1.MintX509CAR
 	if len(x509CA) == 0 {
 		return nil, nil, v1.Error(codes.Internal, "plugin response missing X.509 CA chain")
 	}
-	x509Authorities, err := v1.parseX509Authorities(resp.UpstreamX509Roots)
+	x509Authorities, err := v1.parseX509AuthoritiesWithMetadata(resp.UpstreamX509Roots)
 	if err != nil {
 		return nil, nil, err
 	}

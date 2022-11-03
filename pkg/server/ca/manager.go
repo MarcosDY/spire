@@ -18,6 +18,7 @@ import (
 	"github.com/andres-erbsen/clock"
 	"github.com/sirupsen/logrus"
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
+	"github.com/spiffe/spire/pkg/common/coretypes/x509certificate"
 	"github.com/spiffe/spire/pkg/common/cryptoutil"
 	"github.com/spiffe/spire/pkg/common/health"
 	"github.com/spiffe/spire/pkg/common/pemutil"
@@ -394,9 +395,8 @@ func (m *Manager) rotate(ctx context.Context) error {
 	return errs.Combine(x509CAErr, jwtKeyErr)
 }
 
-// / TODO: this implementation is not good enough..., I'm searching tainted
-//
-//	by ds and parsing on each call... we must keep it on some kind of cache
+// TODO: this implementation is not good enough..., I'm searching tainted
+// by ds and parsing on each call... we must keep it on some kind of cache
 func (m *Manager) isTainted(ctx context.Context, slot *x509CASlot) (bool, error) {
 	ds := m.c.Catalog.GetDataStore()
 
@@ -408,7 +408,10 @@ func (m *Manager) isTainted(ctx context.Context, slot *x509CASlot) (bool, error)
 	m.c.Log.Debugf("--------------Upstream: %v \n", string(pemutil.EncodeCertificates(slot.x509CA.UpstreamChain)))
 	slotCert := slot.x509CA.Certificate
 	for i, root := range b.RootCas {
-		cert, _ := x509.ParseCertificate(root.DerBytes)
+		cert, err := x509.ParseCertificate(root.DerBytes)
+		if err != nil {
+			return false, fmt.Errorf("failed to parse der bytes: %w", err)
+		}
 		m.c.Log.Debugf("--------------ROOTS %v: %v \n", i, string(pemutil.EncodeCertificate(cert)))
 		if root.TaintedKey {
 			m.c.Log.Debugf("----------------------- inside is tainted %v\n", i)
@@ -449,7 +452,7 @@ func (m *Manager) rotateX509CA(ctx context.Context) error {
 	// Current X509 CA is tainted, we must rotate and mark actual as tainted too
 	isTainted, err := m.isTainted(ctx, m.currentX509CA)
 	if err != nil {
-		return fmt.Errorf("failed to valida if certificate is tainted: %w", err)
+		return fmt.Errorf("failed to validate if certificate is tainted: %w", err)
 	}
 	if isTainted {
 		if m.nextX509CA.IsEmpty() {
@@ -1158,8 +1161,11 @@ type bundleUpdater struct {
 	trustDomainID string
 	ds            datastore.DataStore
 	updated       func()
+
+	lastX509Upstream map[string]*x509certificate.CertificateWithMetadata
 }
 
+// TODO: move it logic to AppendX509Root
 func (u *bundleUpdater) AppendX509CommonRoots(ctx context.Context, roots []*common.Certificate) error {
 	bundle := &common.Bundle{
 		TrustDomainId: u.trustDomainID,
@@ -1204,25 +1210,77 @@ func (u *bundleUpdater) AppendX509CommonRoots(ctx context.Context, roots []*comm
 	return nil
 }
 
-func (u *bundleUpdater) AppendX509Roots(ctx context.Context, roots []*x509.Certificate) error {
+func (u *bundleUpdater) AppendX509Roots(ctx context.Context, roots []*x509certificate.CertificateWithMetadata, shouldUpdate bool) error {
 	bundle := &common.Bundle{
 		TrustDomainId: u.trustDomainID,
 		RootCas:       make([]*common.Certificate, 0, len(roots)),
 	}
 
+	newAuthorities := make(map[string]*x509certificate.CertificateWithMetadata, len(roots))
+
 	// TODO: I found that AppendX509Roots is adding duplicate bundes... adding
 	// some logic to avoid that
-
 	for i, root := range roots {
+		if root.Certificate == nil {
+			return errors.New("no certificate provided")
+		}
+		cc, _ := x509.ParseCertificate(root.Certificate.Raw)
+		u.log.Debugf("!!!!!! CERT %v: %v\n", i, string(pemutil.EncodeCertificate(cc)))
+
+		// Creating a new map to compares
+		newAuthorities[string(root.Certificate.Raw)] = root
+
+		// It is tainted, and must not add, but update
+		if root.Tainted {
+			u.log.Debugf("!!!!!!!!!!! inside is tainted: %v!!!!!!!!\n", i)
+			u.ds.TaintX509CAByKey(ctx, u.trustDomainID, root.Certificate.PublicKey)
+
+			continue
+		}
+
+		u.log.Debugf("!!!!!!!!!!! not tainted: %v!!!!!!!!\n", i)
+
 		bundle.RootCas = append(bundle.RootCas, &common.Certificate{
-			DerBytes: root.Raw,
-			// TaintedKey: root.,
+			DerBytes:   root.Certificate.Raw,
+			TaintedKey: root.Tainted,
 		})
-		u.log.Debugf(">>>>>>>>>>>>>>>> bRoot %v: %v\n", i, string(pemutil.EncodeCertificate(root)))
+		// u.log.Debugf(">>>>>>>>>>>>>>>> bRoot %v :  tainted: %v \n %v\n", i, root.Tainted, string(pemutil.EncodeCertificate(root.Certificate)))
 	}
+
+	u.log.Debugf(">>>>>>>>>>>>>>>> newAuthorities: %v  \n", len(newAuthorities))
+	u.log.Debugf(">>>>>>>>>>>>>>>> lastX509Upstream: %v  \n", len(u.lastX509Upstream))
+
+	if shouldUpdate {
+		u.log.Debugf(">>>>>>>>>>>>>>>> should update\n")
+
+		for key, authority := range u.lastX509Upstream {
+
+			cc, _ := x509.ParseCertificate(authority.Certificate.Raw)
+			u.log.Debugf("!!!!!!  for upstream: %v \n %v\n", authority.Tainted, string(pemutil.EncodeCertificate(cc)))
+
+			// We are worry only on tainted bundles,
+			// regular bundles will be cleaned when expiring
+			if authority.Tainted {
+				u.log.Debugln(">>>>>>>>>> Tainted authority")
+				_, found := newAuthorities[key]
+				if !found {
+					u.log.Debugln(">>>>>>>>> deleting")
+					// Authority not found and it was tainted, so remove it
+					if err := u.ds.RevokeX509CA(ctx, u.trustDomainID, authority.Certificate.PublicKey); err != nil {
+						return fmt.Errorf("failed to revoke tainted key: %w", err)
+					}
+				}
+			}
+		}
+
+		// Keep always the latest
+		u.lastX509Upstream = newAuthorities
+	}
+
 	if _, err := u.appendBundle(ctx, bundle); err != nil {
 		return err
 	}
+
 	return nil
 }
 

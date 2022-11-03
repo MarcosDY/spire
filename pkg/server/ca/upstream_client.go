@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/spiffe/spire/pkg/common/pemutil"
+	"github.com/spiffe/spire/pkg/common/coretypes/x509certificate"
 	"github.com/spiffe/spire/pkg/server/plugin/upstreamauthority"
 	"github.com/spiffe/spire/proto/spire/common"
 	"google.golang.org/grpc/codes"
@@ -19,8 +19,8 @@ import (
 // BundleUpdater is the interface used by the UpstreamClient to append bundle
 // updates.
 type BundleUpdater interface {
-	AppendX509CommonRoots(ctx context.Context, roots []*common.Certificate) error
-	AppendX509Roots(ctx context.Context, roots []*x509.Certificate) error
+	// AppendX509CommonRoots(ctx context.Context, roots []*common.Certificate) error
+	AppendX509Roots(ctx context.Context, roots []*x509certificate.CertificateWithMetadata, shouldUpdate bool) error
 	AppendJWTKeys(ctx context.Context, keys []*common.PublicKey) ([]*common.PublicKey, error)
 	LogError(err error, msg string)
 }
@@ -142,17 +142,22 @@ func (u *UpstreamClient) runMintX509CAStream(ctx context.Context, csr []byte, tt
 	}
 	defer x509RootsStream.Close()
 
+	var x509Authoritites []*x509.Certificate
+	for _, authority := range x509Roots {
+		x509Authoritites = append(x509Authoritites, authority.Certificate)
+	}
+
 	// Before we append the roots and return the response, we must first
 	// validate that the minted intermediate can sign a valid, conformant
 	// X509-SVID chain of trust using the provided callback.
-	if err := validateX509CA(x509CA, x509Roots); err != nil {
+	if err := validateX509CA(x509CA, x509Authoritites); err != nil {
 		err = status.Errorf(codes.InvalidArgument, "X509 CA minted by upstream authority is invalid: %v", err)
 		firstResultCh <- mintX509CAResult{err: err}
 		return
 	}
 
 	fmt.Println("*********** before append x509 roots")
-	if err := u.c.BundleUpdater.AppendX509Roots(ctx, x509Roots); err != nil {
+	if err := u.c.BundleUpdater.AppendX509Roots(ctx, x509Roots, false); err != nil {
 		firstResultCh <- mintX509CAResult{err: err}
 		return
 	}
@@ -175,16 +180,7 @@ func (u *UpstreamClient) runMintX509CAStream(ctx context.Context, csr []byte, tt
 			return
 		}
 
-		var commonRoots []*common.Certificate
-		for i, root := range x509Roots {
-			commonRoots = append(commonRoots, &common.Certificate{
-				DerBytes:   root.Certificate.Raw,
-				TaintedKey: root.Tainted,
-			})
-			fmt.Printf("************** GOT %v: %v", i, string(pemutil.EncodeCertificate(root.Certificate)))
-		}
-
-		if err := u.c.BundleUpdater.AppendX509CommonRoots(ctx, commonRoots); err != nil {
+		if err := u.c.BundleUpdater.AppendX509Roots(ctx, x509Roots, true); err != nil {
 			u.c.BundleUpdater.LogError(err, "Failed to store X.509 roots received by the upstream authority plugin.")
 			continue
 		}

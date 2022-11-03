@@ -21,7 +21,7 @@ type UpstreamAuthority interface {
 	// closed when the caller is no longer interested in updates. If the
 	// upstream authority does not support streaming updates, the stream will
 	// return io.EOF when called.
-	MintX509CA(ctx context.Context, csr []byte, preferredTTL time.Duration) (x509CA, upstreamX509Authorities []*x509.Certificate, stream UpstreamX509AuthorityStream, err error)
+	MintX509CA(ctx context.Context, csr []byte, preferredTTL time.Duration) (x509CA []*x509.Certificate, upstreamX509Authorities []*x509certificate.CertificateWithMetadata, stream UpstreamX509AuthorityStream, err error)
 
 	// PublishJWTKey publishes the given JWT key with the upstream authority.
 	// Support for this method is optional. Implementations that do not support
