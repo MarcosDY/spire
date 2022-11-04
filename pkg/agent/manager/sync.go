@@ -125,7 +125,7 @@ func (m *manager) isX509SVIDTainted(svid []*x509.Certificate) bool {
 		return false
 	}
 
-	rootCA, err := m.getSVIDBundle(svid)
+	rootCAs, err := m.getSVIDBundle(svid)
 	if err != nil {
 		m.c.Log.WithError(err).Debug("Failed to get SVID bundle")
 		// TODO: bundle is lost
@@ -133,10 +133,12 @@ func (m *manager) isX509SVIDTainted(svid []*x509.Certificate) bool {
 	}
 
 	for _, taintedKey := range taintedKeys {
-		if ok, err := cryptoutil.PublicKeyEqual(rootCA.PublicKey, taintedKey); ok {
-			return true
-		} else if err != nil {
-			m.c.Log.WithError(err).Error("Failed to validate equal")
+		for _, rootCA := range rootCAs {
+			if ok, err := cryptoutil.PublicKeyEqual(rootCA.PublicKey, taintedKey); ok {
+				return true
+			} else if err != nil {
+				m.c.Log.WithError(err).Error("Failed to validate equal")
+			}
 		}
 	}
 
@@ -151,7 +153,7 @@ func getPublicKeyBlock(k []byte) string {
 	return string(pem.EncodeToMemory(block))
 }
 
-func (m *manager) getSVIDBundle(svid []*x509.Certificate) (*x509.Certificate, error) {
+func (m *manager) getSVIDBundle(svid []*x509.Certificate) ([]*x509.Certificate, error) {
 	rootCAs := x509.NewCertPool()
 	for _, eachCA := range m.cache.Bundle().RootCAs() {
 		rootCAs.AddCert(eachCA)
@@ -167,25 +169,7 @@ func (m *manager) getSVIDBundle(svid []*x509.Certificate) (*x509.Certificate, er
 		return nil, err
 	}
 
-	// // SVID has intermediate
-	// if len(svid) > 1 {
-	// m.c.Log.Debug("from SVID")
-	// return svid[1], nil
-	// }
-
-	// leaf := svid[0]
-	// for i, rootCA := range m.cache.Bundle().RootCAs() {
-	// certPool := x509.NewCertPool()
-	// certPool.AddCert(rootCA)
-
-	// _, err := leaf.Verify(x509.VerifyOptions{Roots: certPool})
-	// if err == nil {
-	// m.c.Log.WithField("position", i).Debug("from bundles")
-	// return rootCA, nil
-	// }
-	// }
-
-	return chain[0][1], nil
+	return chain[0][1:], nil
 }
 
 func (m *manager) updateSVIDs(ctx context.Context, log logrus.FieldLogger, c SVIDCache) error {

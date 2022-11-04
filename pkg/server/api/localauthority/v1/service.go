@@ -6,7 +6,6 @@ import (
 
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	localauthorityv1 "github.com/spiffe/spire-api-sdk/proto/spire/api/server/localauthority/v1"
-	"github.com/spiffe/spire/pkg/common/cryptoutil"
 	"github.com/spiffe/spire/pkg/server/api/rpccontext"
 	"github.com/spiffe/spire/pkg/server/ca"
 	"github.com/spiffe/spire/pkg/server/datastore"
@@ -199,19 +198,25 @@ func (s *Service) TaintX509Authority(ctx context.Context, _ *localauthorityv1.Ta
 		rootCAs = append(rootCAs, cert)
 	}
 
+	// FROM HERE ROTATE SERVER SVID
+	/**
 	serverSVID := s.o.State().SVID
 
-	ca, err := getSVIDBundle(serverSVID, rootCAs)
+	serverBundles, err := getSVIDBundle(serverSVID, rootCAs)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to get SVID bundle: %v", err)
 	}
 
-	if ok, _ := cryptoutil.PublicKeyEqual(ca.PublicKey, authority.PublicKey); ok {
-		// Server is tainted... force rotation
-		if err := s.o.ForceRotation(ctx); err != nil {
-			return nil, status.Errorf(codes.Internal, "failed to force rotation: %v", err)
+	for _, rootCA := range serverBundles {
+		if ok, _ := cryptoutil.PublicKeyEqual(rootCA.PublicKey, authority.PublicKey); ok {
+			// Server is tainted... force rotation
+			if err := s.o.ForceRotation(ctx); err != nil {
+				return nil, status.Errorf(codes.Internal, "failed to force rotation: %v", err)
+			}
 		}
+
 	}
+	*/
 
 	taintedAuthority, err := protoFromKeyState(authority)
 	if err != nil {
@@ -266,7 +271,7 @@ func protoFromKeyState(state *ca.KeyState) (*localauthorityv1.AuthorityState, er
 	}, nil
 }
 
-func getSVIDBundle(svid []*x509.Certificate, cas []*x509.Certificate) (*x509.Certificate, error) {
+func getSVIDBundle(svid []*x509.Certificate, cas []*x509.Certificate) ([]*x509.Certificate, error) {
 	rootCAs := x509.NewCertPool()
 	for _, eachCA := range cas {
 		rootCAs.AddCert(eachCA)
@@ -282,5 +287,5 @@ func getSVIDBundle(svid []*x509.Certificate, cas []*x509.Certificate) (*x509.Cer
 		return nil, err
 	}
 
-	return chain[0][1], nil
+	return chain[0][1:], nil
 }

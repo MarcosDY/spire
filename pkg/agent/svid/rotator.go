@@ -19,6 +19,7 @@ import (
 	"github.com/spiffe/spire/pkg/common/cryptoutil"
 	"github.com/spiffe/spire/pkg/common/fflag"
 	"github.com/spiffe/spire/pkg/common/nodeutil"
+	"github.com/spiffe/spire/pkg/common/pemutil"
 	"github.com/spiffe/spire/pkg/common/rotationutil"
 	"github.com/spiffe/spire/pkg/common/telemetry"
 	telemetry_agent "github.com/spiffe/spire/pkg/common/telemetry/agent"
@@ -156,15 +157,14 @@ func (r *rotator) rotateSVIDIfNeeded(ctx context.Context) (err error) {
 
 	// TODO: we must add a way to make SVID rotate in case a key associated with actual intermediate
 	// is tainted
-
-	// isTainted := r.isTainted(state.SVID[1]
-	b, err := r.getSVIDBundle(state.SVID)
+	isTainted, err := r.isTainted(state.SVID)
 	if err != nil {
-		return fmt.Errorf("failed to get bundle: %w", err)
+		return fmt.Errorf("failed to verify if key is tainted: %w", err)
 	}
 
-	if rotationutil.ShouldRotateX509(r.clk.Now(), state.SVID[0]) || r.isTainted(b) {
-		r.c.Log.Debug("*************** SHOULD ROTATe: - tainted = %v\n", r.isTainted(b))
+	r.c.Log.Debug("*************** SHOULD ROTATe: - tainted = %v\n", isTainted)
+
+	if rotationutil.ShouldRotateX509(r.clk.Now(), state.SVID[0]) || isTainted {
 		if state.Reattestable && fflag.IsSet(fflag.FlagReattestToRenew) {
 			err = r.reattest(ctx)
 		} else {
@@ -180,10 +180,10 @@ func (r *rotator) rotateSVIDIfNeeded(ctx context.Context) (err error) {
 	return err
 }
 
-func (r *rotator) getSVIDBundle(svid []*x509.Certificate) (*x509.Certificate, error) {
+func (r *rotator) getSVIDBundle(svid []*x509.Certificate) ([]*x509.Certificate, error) {
 	// SVID has intermediate
 	if len(svid) > 1 {
-		return svid[1], nil
+		return svid[1:], nil
 	}
 	bundle, err := r.getBundle()
 	if err != nil {
@@ -196,24 +196,38 @@ func (r *rotator) getSVIDBundle(svid []*x509.Certificate) (*x509.Certificate, er
 		certPool := x509.NewCertPool()
 		certPool.AddCert(rootCA)
 
-		_, err := leaf.Verify(x509.VerifyOptions{Roots: certPool})
+		chain, err := leaf.Verify(x509.VerifyOptions{Roots: certPool})
 		if err == nil {
-			return rootCA, nil
+			return chain[0][1:], nil
 		}
 	}
-	// bundle.
 
 	return nil, errors.New("no bundle found")
 }
 
-func (r *rotator) isTainted(cert *x509.Certificate) bool {
+func (r *rotator) isTainted(svid []*x509.Certificate) (bool, error) {
+	r.c.Log.Debug("*************** tainted keys: %v\n", len(r.taintedKeys))
+	if len(r.taintedKeys) == 0 {
+		return false, nil
+	}
+
+	certs, err := r.getSVIDBundle(svid)
+	if err != nil {
+		return false, fmt.Errorf("failed to get bundle: %w", err)
+	}
+
+	bb := pemutil.EncodeCertificates(certs)
+	r.c.Log.Debug("*************** ANGET SVID BUNDLE: %v\n", string(bb))
+
 	for _, taintedKey := range r.taintedKeys {
-		if ok, _ := cryptoutil.PublicKeyEqual(cert.PublicKey, taintedKey); ok {
-			return true
+		for _, cert := range certs {
+			if ok, _ := cryptoutil.PublicKeyEqual(cert.PublicKey, taintedKey); ok {
+				return true, nil
+			}
 		}
 	}
 
-	return false
+	return false, nil
 }
 
 // reattest goes through the full attestation process with the server and gets a new SVID.

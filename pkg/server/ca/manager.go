@@ -1252,6 +1252,7 @@ func (u *bundleUpdater) AppendX509Roots(ctx context.Context, roots []*x509certif
 
 	u.log.Debugf(">>>>>>>>>>>>>>>> should update\n")
 
+	// TODO: this approach is flacky since, if we prepare a new bundle we lost the oportunity to revoke
 	for key, authority := range u.lastX509Upstream {
 
 		cc, _ := x509.ParseCertificate(authority.Certificate.Raw)

@@ -9,6 +9,7 @@ import (
 
 	"github.com/imkira/go-observer"
 	"github.com/sirupsen/logrus"
+	"github.com/spiffe/spire/pkg/common/cryptoutil"
 	"github.com/spiffe/spire/pkg/common/idutil"
 	"github.com/spiffe/spire/pkg/common/telemetry"
 	telemetry_server "github.com/spiffe/spire/pkg/common/telemetry/server"
@@ -45,6 +46,7 @@ func (r *Rotator) Interval() time.Duration {
 }
 
 func (r *Rotator) ForceRotation(ctx context.Context) error {
+	r.c.Log.Debug("******************************* FORCE SERVER ROTATION")
 	return r.rotateSVID(ctx)
 }
 
@@ -78,7 +80,28 @@ func (r *Rotator) shouldRotate(ctx context.Context) bool {
 		return true
 	}
 
-	return r.c.Clock.Now().After(certHalfLife(s.SVID[0]))
+	return r.c.Clock.Now().After(certHalfLife(s.SVID[0])) || r.isTainted(ctx, s.SVID)
+}
+
+func (r *Rotator) isTainted(ctx context.Context, svid []*x509.Certificate) bool {
+	r.c.Log.Debug(">>>>>>>>>>>> %v\n", r.c.DataStore != nil)
+	r.c.Log.Debug(">>>>>>>>>>>> %v\n", r.c.TrustDomain)
+
+	cBundle, _ := r.c.DataStore.FetchBundle(ctx, r.c.TrustDomain.IDString())
+
+	for _, ca := range cBundle.RootCas {
+		if ca.TaintedKey {
+			cert, _ := x509.ParseCertificate(ca.DerBytes)
+
+			for _, eachCert := range svid {
+				if ok, _ := cryptoutil.PublicKeyEqual(cert.PublicKey, eachCert.PublicKey); ok {
+					return true
+				}
+			}
+		}
+	}
+
+	return false
 }
 
 // rotateSVID cuts a new server SVID from the CA plugin and installs

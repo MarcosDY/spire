@@ -125,7 +125,7 @@ func (s *Server) run(ctx context.Context) (err error) {
 		return err
 	}
 
-	svidRotator, err := s.newSVIDRotator(ctx, serverCA, metrics)
+	svidRotator, err := s.newSVIDRotator(ctx, serverCA, metrics, cat.GetDataStore())
 	if err != nil {
 		return err
 	}
@@ -304,13 +304,14 @@ func (s *Server) newRegistrationManager(cat catalog.Catalog, metrics telemetry.M
 	return registrationManager
 }
 
-func (s *Server) newSVIDRotator(ctx context.Context, serverCA ca.ServerCA, metrics telemetry.Metrics) (*svid.Rotator, error) {
+func (s *Server) newSVIDRotator(ctx context.Context, serverCA ca.ServerCA, metrics telemetry.Metrics, ds datastore.DataStore) (*svid.Rotator, error) {
 	svidRotator := svid.NewRotator(&svid.RotatorConfig{
 		ServerCA:    serverCA,
 		Log:         s.config.Log.WithField(telemetry.SubsystemName, telemetry.SVIDRotator),
 		Metrics:     metrics,
 		TrustDomain: s.config.TrustDomain,
 		KeyType:     s.config.CAKeyType,
+		DataStore:   ds,
 	})
 	if err := svidRotator.Initialize(ctx); err != nil {
 		return nil, err
@@ -323,7 +324,7 @@ func (s *Server) newEndpointsServer(ctx context.Context, catalog catalog.Catalog
 		TCPAddr:             s.config.BindAddress,
 		LocalAddr:           s.config.BindLocalAddress,
 		SVIDObserver:        svidObserver,
-		SVIDRotator: svidObserver,
+		SVIDRotator:         svidObserver,
 		TrustDomain:         s.config.TrustDomain,
 		Catalog:             catalog,
 		ServerCA:            serverCA,
