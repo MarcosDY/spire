@@ -92,7 +92,6 @@ func (m *manager) updateCache(ctx context.Context, update *cache.UpdateEntries, 
 			// Registration entry has been updated
 			outdated++
 		case m.isX509SVIDTainted(svid.Chain):
-			log.WithField("SPIFFEID", svid.Chain[0].URIs[0].String()).Debug("======== TAINTED!!!!")
 			tainted++
 		default:
 			// SVID is good

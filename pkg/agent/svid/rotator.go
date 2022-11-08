@@ -19,7 +19,6 @@ import (
 	"github.com/spiffe/spire/pkg/common/cryptoutil"
 	"github.com/spiffe/spire/pkg/common/fflag"
 	"github.com/spiffe/spire/pkg/common/nodeutil"
-	"github.com/spiffe/spire/pkg/common/pemutil"
 	"github.com/spiffe/spire/pkg/common/rotationutil"
 	"github.com/spiffe/spire/pkg/common/telemetry"
 	telemetry_agent "github.com/spiffe/spire/pkg/common/telemetry/agent"
@@ -162,8 +161,6 @@ func (r *rotator) rotateSVIDIfNeeded(ctx context.Context) (err error) {
 		return fmt.Errorf("failed to verify if key is tainted: %w", err)
 	}
 
-	r.c.Log.Debug("*************** SHOULD ROTATe: - tainted = %v\n", isTainted)
-
 	if rotationutil.ShouldRotateX509(r.clk.Now(), state.SVID[0]) || isTainted {
 		if state.Reattestable && fflag.IsSet(fflag.FlagReattestToRenew) {
 			err = r.reattest(ctx)
@@ -171,7 +168,6 @@ func (r *rotator) rotateSVIDIfNeeded(ctx context.Context) (err error) {
 			err = r.rotateSVID(ctx)
 		}
 
-		r.c.Log.Debug("*************** rotate error = %v\n", err)
 		if err == nil && r.rotationFinishedHook != nil {
 			r.rotationFinishedHook()
 		}
@@ -206,7 +202,6 @@ func (r *rotator) getSVIDBundle(svid []*x509.Certificate) ([]*x509.Certificate, 
 }
 
 func (r *rotator) isTainted(svid []*x509.Certificate) (bool, error) {
-	r.c.Log.Debug("*************** tainted keys: %v\n", len(r.taintedKeys))
 	if len(r.taintedKeys) == 0 {
 		return false, nil
 	}
@@ -216,12 +211,10 @@ func (r *rotator) isTainted(svid []*x509.Certificate) (bool, error) {
 		return false, fmt.Errorf("failed to get bundle: %w", err)
 	}
 
-	bb := pemutil.EncodeCertificates(certs)
-	r.c.Log.Debug("*************** ANGET SVID BUNDLE: %v\n", string(bb))
-
 	for _, taintedKey := range r.taintedKeys {
 		for _, cert := range certs {
 			if ok, _ := cryptoutil.PublicKeyEqual(cert.PublicKey, taintedKey); ok {
+				r.c.Log.Debug("Key is tainted and must rotate")
 				return true, nil
 			}
 		}

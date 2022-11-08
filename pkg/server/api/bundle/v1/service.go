@@ -2,14 +2,12 @@ package bundle
 
 import (
 	"context"
-	"crypto/x509"
 	"fmt"
 
 	"github.com/sirupsen/logrus"
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	bundlev1 "github.com/spiffe/spire-api-sdk/proto/spire/api/server/bundle/v1"
 	"github.com/spiffe/spire-api-sdk/proto/spire/api/types"
-	"github.com/spiffe/spire/pkg/common/pemutil"
 	"github.com/spiffe/spire/pkg/common/telemetry"
 	"github.com/spiffe/spire/pkg/server/api"
 	"github.com/spiffe/spire/pkg/server/api/rpccontext"
@@ -84,11 +82,6 @@ func (s *Service) GetBundle(ctx context.Context, req *bundlev1.GetBundleRequest)
 	commonBundle, err := s.ds.FetchBundle(dscache.WithCache(ctx), s.td.IDString())
 	if err != nil {
 		return nil, api.MakeErr(log, codes.Internal, "failed to fetch bundle", err)
-	}
-	for i, b := range commonBundle.RootCas {
-		cert, _ := x509.ParseCertificate(b.DerBytes)
-
-		log.Debug("==================== cer $v: %v", i, string(pemutil.EncodeCertificate(cert)))
 	}
 
 	if commonBundle == nil {

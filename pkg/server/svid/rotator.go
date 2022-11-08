@@ -46,7 +46,6 @@ func (r *Rotator) Interval() time.Duration {
 }
 
 func (r *Rotator) ForceRotation(ctx context.Context) error {
-	r.c.Log.Debug("******************************* FORCE SERVER ROTATION")
 	return r.rotateSVID(ctx)
 }
 
@@ -84,9 +83,6 @@ func (r *Rotator) shouldRotate(ctx context.Context) bool {
 }
 
 func (r *Rotator) isTainted(ctx context.Context, svid []*x509.Certificate) bool {
-	r.c.Log.Debug(">>>>>>>>>>>> %v\n", r.c.DataStore != nil)
-	r.c.Log.Debug(">>>>>>>>>>>> %v\n", r.c.TrustDomain)
-
 	cBundle, _ := r.c.DataStore.FetchBundle(ctx, r.c.TrustDomain.IDString())
 
 	for _, ca := range cBundle.RootCas {
@@ -95,6 +91,7 @@ func (r *Rotator) isTainted(ctx context.Context, svid []*x509.Certificate) bool 
 
 			for _, eachCert := range svid {
 				if ok, _ := cryptoutil.PublicKeyEqual(cert.PublicKey, eachCert.PublicKey); ok {
+					r.c.Log.Debug("Key is tainted and must rotate")
 					return true
 				}
 			}
