@@ -99,8 +99,10 @@ func (r *Rotator) isTainted(ctx context.Context, svid []*x509.Certificate) bool 
 		return false
 	}
 
-	bundleChain, _ := r.getSVIDBundle(svid, cBundle)
-
+	bundleChain, err := r.getSVIDBundle(svid, cBundle)
+	if err != nil {
+		r.c.Log.Debugf("Failed to get bundle: %v\n", err)
+	}
 	for _, ca := range taintedCerts {
 		cert, _ := x509.ParseCertificate(ca.DerBytes)
 
@@ -119,7 +121,7 @@ func (r *Rotator) getSVIDBundle(svid []*x509.Certificate, bundle *common.Bundle)
 	leaf := svid[0]
 
 	intermediatesPool := x509.NewCertPool()
-	for _, eachCert := range svid[:1] {
+	for _, eachCert := range svid[1:] {
 		intermediatesPool.AddCert(eachCert)
 	}
 
