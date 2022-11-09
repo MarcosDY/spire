@@ -177,27 +177,30 @@ func (r *rotator) rotateSVIDIfNeeded(ctx context.Context) (err error) {
 }
 
 func (r *rotator) getSVIDBundle(svid []*x509.Certificate) ([]*x509.Certificate, error) {
-	// SVID has intermediate
-	if len(svid) > 1 {
-		return svid[1:], nil
-	}
 	bundle, err := r.getBundle()
 	if err != nil {
 		return nil, err
 	}
 
-	leaf := svid[0]
-
+	rootPool := x509.NewCertPool()
 	for _, rootCA := range bundle.RootCAs() {
-		certPool := x509.NewCertPool()
-		certPool.AddCert(rootCA)
+		rootPool.AddCert(rootCA)
 
-		chain, err := leaf.Verify(x509.VerifyOptions{Roots: certPool})
-		if err == nil {
-			return chain[0][1:], nil
-		}
 	}
 
+	intermediatePool := x509.NewCertPool()
+	for _, intermediateCA := range svid[1:] {
+		intermediatePool.AddCert(intermediateCA)
+	}
+
+	leaf := svid[0]
+	chain, err := leaf.Verify(x509.VerifyOptions{
+		Intermediates: intermediatePool,
+		Roots:         rootPool,
+	})
+	if err == nil {
+		return chain[0][1:], nil
+	}
 	return nil, errors.New("no bundle found")
 }
 

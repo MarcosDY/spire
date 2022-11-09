@@ -404,27 +404,38 @@ func (m *Manager) isTainted(ctx context.Context, slot *x509CASlot) (bool, error)
 		return false, err
 	}
 
-	slotCert := slot.x509CA.Certificate
-	for _, root := range b.RootCas {
-		if root.TaintedKey {
-			// TODO: replace it with some kind of cache to avoid parsing
-			cert, err := x509.ParseCertificate(root.DerBytes)
+	var taintedKeys []*x509.Certificate
+	for _, rootCA := range b.RootCas {
+		if rootCA.TaintedKey {
+			cert, err := x509.ParseCertificate(rootCA.DerBytes)
 			if err != nil {
 				return false, err
 			}
-
-			certPool := x509.NewCertPool()
-			certPool.AddCert(cert)
-
-			_, err = slotCert.Verify(x509.VerifyOptions{
-				Roots: certPool,
-			})
-
-			// No error so it was signed by this
-			if err == nil {
-				return true, nil
-			}
+			taintedKeys = append(taintedKeys, cert)
 		}
+	}
+
+	if len(taintedKeys) == 0 {
+		return false, nil
+	}
+
+	rootPool := x509.NewCertPool()
+	for _, rootCA := range taintedKeys {
+		rootPool.AddCert(rootCA)
+	}
+
+	intermediatePool := x509.NewCertPool()
+	for _, intermediateCA := range slot.x509CA.UpstreamChain {
+		intermediatePool.AddCert(intermediateCA)
+	}
+
+	slotCA := slot.x509CA.Certificate
+	if _, err := slotCA.Verify(x509.VerifyOptions{
+		Intermediates: intermediatePool,
+		Roots:         rootPool,
+	}); err == nil {
+		// Chain is verified using a tainted CA
+		return true, nil
 	}
 
 	return false, nil
@@ -1220,7 +1231,6 @@ func (u *bundleUpdater) AppendX509Roots(ctx context.Context, roots []*x509certif
 			DerBytes:   root.Certificate.Raw,
 			TaintedKey: root.Tainted,
 		})
-		// u.log.Debugf(">>>>>>>>>>>>>>>> bRoot %v :  tainted: %v \n %v\n", i, root.Tainted, string(pemutil.EncodeCertificate(root.Certificate)))
 	}
 
 	// TODO: this approach is flacky since, if we prepare a new bundle we lost the oportunity to revoke

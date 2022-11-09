@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/spiffe/spire/pkg/common/telemetry"
 	telemetry_server "github.com/spiffe/spire/pkg/common/telemetry/server"
 	"github.com/spiffe/spire/pkg/server/ca"
+	"github.com/spiffe/spire/proto/spire/common"
 )
 
 type Rotator struct {
@@ -85,20 +87,58 @@ func (r *Rotator) shouldRotate(ctx context.Context) bool {
 func (r *Rotator) isTainted(ctx context.Context, svid []*x509.Certificate) bool {
 	cBundle, _ := r.c.DataStore.FetchBundle(ctx, r.c.TrustDomain.IDString())
 
-	for _, ca := range cBundle.RootCas {
-		if ca.TaintedKey {
-			cert, _ := x509.ParseCertificate(ca.DerBytes)
+	var taintedCerts []*common.Certificate
+	for _, eachCert := range cBundle.RootCas {
+		if eachCert.TaintedKey {
+			taintedCerts = append(taintedCerts, eachCert)
+		}
+	}
 
-			for _, eachCert := range svid {
-				if ok, _ := cryptoutil.PublicKeyEqual(cert.PublicKey, eachCert.PublicKey); ok {
-					r.c.Log.Debug("Key is tainted and must rotate")
-					return true
-				}
+	if len(taintedCerts) == 0 {
+		// No tainted certs
+		return false
+	}
+
+	bundleChain, _ := r.getSVIDBundle(svid, cBundle)
+
+	for _, ca := range taintedCerts {
+		cert, _ := x509.ParseCertificate(ca.DerBytes)
+
+		for _, eachCert := range bundleChain {
+			if ok, _ := cryptoutil.PublicKeyEqual(cert.PublicKey, eachCert.PublicKey); ok {
+				r.c.Log.Debug("Key is tainted and must rotate")
+				return true
 			}
 		}
 	}
 
 	return false
+}
+
+func (r *Rotator) getSVIDBundle(svid []*x509.Certificate, bundle *common.Bundle) ([]*x509.Certificate, error) {
+	leaf := svid[0]
+
+	intermediatesPool := x509.NewCertPool()
+	for _, eachCert := range svid[:1] {
+		intermediatesPool.AddCert(eachCert)
+	}
+
+	rootPool := x509.NewCertPool()
+	for _, rootCA := range bundle.RootCas {
+		cert, err := x509.ParseCertificate(rootCA.DerBytes)
+		if err != nil {
+			return nil, err
+		}
+
+		rootPool.AddCert(cert)
+	}
+
+	chain, err := leaf.Verify(x509.VerifyOptions{Intermediates: intermediatesPool, Roots: rootPool})
+	if err == nil {
+		return chain[0][1:], nil
+	}
+
+	return nil, errors.New("no bundle found")
 }
 
 // rotateSVID cuts a new server SVID from the CA plugin and installs
