@@ -11,6 +11,7 @@ import (
 
 	"github.com/andres-erbsen/clock"
 	observer "github.com/imkira/go-observer"
+	"github.com/sirupsen/logrus"
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/spiffe/spire/pkg/agent/client"
 	"github.com/spiffe/spire/pkg/agent/common/backoff"
@@ -111,7 +112,7 @@ type Cache interface {
 	SetJWTSVID(id spiffeid.ID, audience []string, svid *client.JWTSVID)
 
 	// ForceJWTRotation force rotation of JWT-SVIDs using tainted key stored on cache
-	ForceJWTRotation(taintedKeys map[string]struct{}) error
+	ForceJWTRotation(taintedKeys map[string]struct{}, log logrus.FieldLogger) error
 
 	// Entries get all registration entries
 	Entries() []*common.RegistrationEntry
@@ -285,8 +286,6 @@ func (m *manager) runSynchronizer(ctx context.Context) error {
 		if err := m.pushStatus(ctx); err != nil {
 			m.c.Log.WithError(err).Error("Push status failed")
 		}
-
-		m.cache.ForceJWTRotation(m.jwtTaintedKeysKID)
 
 		err := m.synchronize(ctx)
 		switch {

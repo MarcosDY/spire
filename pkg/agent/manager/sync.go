@@ -55,7 +55,7 @@ func (m *manager) synchronize(ctx context.Context) (err error) {
 		return err
 	}
 
-	if err := m.cache.ForceJWTRotation(m.jwtTaintedKeysKID); err != nil {
+	if err := m.cache.ForceJWTRotation(m.jwtTaintedKeysKID, m.c.Log); err != nil {
 		m.c.Log.Debug("Failed to force rotation on JWT keys: %v", err)
 	}
 
