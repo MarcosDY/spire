@@ -630,7 +630,7 @@ func (m *Manager) rotateJWTKey(ctx context.Context) error {
 		m.activateJWTKey()
 	}
 
-	// Current X509 CA is tainted, we must rotate and mark actual as tainted too
+	// Current JWT Authority is tainted, we must rotate and mark actual as tainted too
 	isTainted, err := m.isJWTTainted(ctx, m.currentJWTKey)
 	if err != nil {
 		return fmt.Errorf("failed to validate if certificate is tainted: %w", err)
@@ -648,10 +648,11 @@ func (m *Manager) rotateJWTKey(ctx context.Context) error {
 			return err
 		}
 
+		// TODO: it must be already tainted?
 		// Taint old since it depends of a taited upstream
-		if _, err := m.TaintJWTAuthority(ctx, ""); err != nil {
-			return err
-		}
+		// if _, err := m.TaintJWTAuthority(ctx, ""); err != nil {
+		// return err
+		// }
 
 		return nil
 	}
