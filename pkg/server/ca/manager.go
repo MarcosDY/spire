@@ -59,12 +59,13 @@ type AutorityUpdater interface {
 	GetJWTAuthorities() []*KeyState
 	PrepareJWTAuthority(ctx context.Context) (*KeyState, error)
 	ActivateJWTAuthority() (*KeyState, error)
-	TaintJWTAuthority(ctx context.Context) (*KeyState, error)
-	RevokeJWTAuthority(ctx context.Context) (*KeyState, error)
+	TaintJWTAuthority(ctx context.Context, keyID string) (*KeyState, error)
+	RevokeJWTAuthority(ctx context.Context, keyID string) (*KeyState, error)
 	// X509
 	GetX509Authorities() []*KeyState
 	PrepareX509Authority(ctx context.Context) (*KeyState, error)
 	ActivateX509Authority() (*KeyState, error)
+	// TODO: ADD options to receive an identifier
 	TaintX509Authority(ctx context.Context) (*KeyState, error)
 	RevokeX509Authority(ctx context.Context) (*KeyState, error)
 }
@@ -241,37 +242,55 @@ func (m *Manager) ActivateJWTAuthority() (*KeyState, error) {
 	}, nil
 }
 
-func (m *Manager) TaintJWTAuthority(ctx context.Context) (*KeyState, error) {
-	nextJWTKey := m.nextJWTKey
-	if !nextJWTKey.IsEmpty() {
-		return nil, errors.New("unable to taint a prepared key")
+func (m *Manager) TaintJWTAuthority(ctx context.Context, keyID string) (*KeyState, error) {
+	if keyID == "" {
+		nextJWTKey := m.nextJWTKey
+		if !nextJWTKey.IsEmpty() {
+			return nil, errors.New("unable to taint a prepared key")
+		}
+		keyID = m.nextJWTKey.keyID
 	}
 
 	ds := m.c.Catalog.GetDataStore()
-	if err := ds.TaintJWTKey(ctx, m.c.TrustDomain.IDString(), nextJWTKey.publicKey); err != nil {
+	jwtKey, err := ds.TaintJWTKey(ctx, m.c.TrustDomain.IDString(), keyID)
+	if err != nil {
 		return nil, fmt.Errorf("failed to persist tainted key: %w", err)
 	}
 
+	publicKey, err := x509.ParsePKIXPublicKey(jwtKey.PkixBytes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse public key: %w", err)
+	}
+
 	return &KeyState{
 		Status:    Old,
-		PublicKey: nextJWTKey.publicKey,
+		PublicKey: publicKey,
 	}, nil
 }
 
-func (m *Manager) RevokeJWTAuthority(ctx context.Context) (*KeyState, error) {
-	nextJWTKey := m.nextJWTKey
-	if !nextJWTKey.IsEmpty() {
-		return nil, errors.New("unable to revoke a prepared key")
+func (m *Manager) RevokeJWTAuthority(ctx context.Context, keyID string) (*KeyState, error) {
+	if keyID == "" {
+		nextJWTKey := m.nextJWTKey
+		if !nextJWTKey.IsEmpty() {
+			return nil, errors.New("unable to taint a prepared key")
+		}
+		keyID = m.nextJWTKey.keyID
 	}
 
 	ds := m.c.Catalog.GetDataStore()
-	if err := ds.RevokeJWTKey(ctx, m.c.TrustDomain.IDString(), nextJWTKey.publicKey); err != nil {
+	jwtKey, err := ds.RevokeJWTKey(ctx, m.c.TrustDomain.IDString(), keyID)
+	if err != nil {
 		return nil, fmt.Errorf("failed to revoke JWT authority: %w", err)
+	}
+
+	publicKey, err := x509.ParsePKIXPublicKey(jwtKey.PkixBytes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse public key: %w", err)
 	}
 
 	return &KeyState{
 		Status:    Old,
-		PublicKey: nextJWTKey.publicKey,
+		PublicKey: publicKey,
 	}, nil
 }
 
@@ -353,6 +372,9 @@ func (m *Manager) RevokeX509Authority(ctx context.Context) (*KeyState, error) {
 	if err := ds.RevokeX509CA(ctx, m.c.TrustDomain.IDString(), nextX509CA.publicKey); err != nil {
 		return nil, fmt.Errorf("failed to revoke X.509 authority: %w", err)
 	}
+
+	// Remove from jornal, it is not "required" but doing it to keep journal clean
+	m.nextX509CA.Reset()
 
 	return &KeyState{
 		Status:    Old,
@@ -436,6 +458,34 @@ func (m *Manager) isTainted(ctx context.Context, slot *x509CASlot) (bool, error)
 	}); err == nil {
 		// Chain is verified using a tainted CA
 		return true, nil
+	}
+
+	return false, nil
+}
+
+func (m *Manager) isJWTTainted(ctx context.Context, slot *jwtKeySlot) (bool, error) {
+	ds := m.c.Catalog.GetDataStore()
+
+	b, err := ds.FetchBundle(ctx, m.c.TrustDomain.IDString())
+	if err != nil {
+		return false, err
+	}
+
+	var taintedKeys []*common.PublicKey
+	for _, key := range b.JwtSigningKeys {
+		if key.TaintedKey {
+			taintedKeys = append(taintedKeys, key)
+		}
+	}
+
+	if len(taintedKeys) == 0 {
+		return false, nil
+	}
+
+	for _, taintedKey := range taintedKeys {
+		if slot.jwtKey.Kid == taintedKey.Kid {
+			return true, nil
+		}
 	}
 
 	return false, nil
@@ -580,6 +630,32 @@ func (m *Manager) rotateJWTKey(ctx context.Context) error {
 		m.activateJWTKey()
 	}
 
+	// Current X509 CA is tainted, we must rotate and mark actual as tainted too
+	isTainted, err := m.isJWTTainted(ctx, m.currentJWTKey)
+	if err != nil {
+		return fmt.Errorf("failed to validate if certificate is tainted: %w", err)
+	}
+	if isTainted {
+		m.c.Log.Debug("JWT authority is tainted and must rotate")
+		if m.nextJWTKey.IsEmpty() {
+			if err := m.prepareJWTKey(ctx, m.nextJWTKey); err != nil {
+				return err
+			}
+		}
+
+		// Activate next
+		if _, err := m.ActivateJWTAuthority(); err != nil {
+			return err
+		}
+
+		// Taint old since it depends of a taited upstream
+		if _, err := m.TaintJWTAuthority(ctx, ""); err != nil {
+			return err
+		}
+
+		return nil
+	}
+
 	// if there is no next keypair set and the current is within the
 	// preparation threshold, generate one.
 	if m.nextJWTKey.IsEmpty() && m.currentJWTKey.ShouldPrepareNext(now) {
@@ -633,6 +709,7 @@ func (m *Manager) prepareJWTKey(ctx context.Context, slot *jwtKeySlot) (err erro
 	slot.jwtKey = jwtKey
 	slot.notAfter = slot.jwtKey.NotAfter
 	slot.publicKey = signer.Public()
+	slot.keyID = jwtKey.Kid
 
 	if err := m.journal.AppendJWTKey(slot.id, slot.issuedAt, slot.jwtKey); err != nil {
 		log.WithError(err).Error("Unable to append JWT key to journal")
@@ -1166,6 +1243,7 @@ type bundleUpdater struct {
 	updated       func()
 
 	lastX509Upstream map[string]*x509certificate.CertificateWithMetadata
+	lastJWTUpstream  map[string]*common.PublicKey
 }
 
 // TODO: move it logic to AppendX509Root
@@ -1259,13 +1337,54 @@ func (u *bundleUpdater) AppendX509Roots(ctx context.Context, roots []*x509certif
 }
 
 func (u *bundleUpdater) AppendJWTKeys(ctx context.Context, keys []*common.PublicKey) ([]*common.PublicKey, error) {
+	newKeys := []*common.PublicKey{}
+	newAuthorities := make(map[string]*common.PublicKey)
+
+	// TODO: all this code can be simplified with an udpate bundle...
+	// Keep keys on a map and add only new keys
+	for _, eachKey := range keys {
+		newAuthorities[eachKey.Kid] = eachKey
+		if eachKey.TaintedKey {
+			lastKey, ok := u.lastJWTUpstream[eachKey.Kid]
+			if ok && lastKey.TaintedKey {
+				// Already tainted
+				continue
+			}
+
+			// Taint only if it is not already tainted
+			if _, err := u.ds.TaintJWTKey(ctx, u.trustDomainID, eachKey.Kid); err != nil {
+				return nil, err
+			}
+		} else {
+			newKeys = append(newKeys, eachKey)
+		}
+	}
+
+	// TODO: this approach is flacky since, if we prepare a new bundle we lost the oportunity to revoke
+	for keyID, authority := range u.lastJWTUpstream {
+		// We are worry only on tainted bundles,
+		// regular bundles will be cleaned when expiring
+		if authority.TaintedKey {
+			_, found := newAuthorities[keyID]
+			if !found {
+				// Authority not found and it was tainted, so remove it
+				if _, err := u.ds.RevokeJWTKey(ctx, u.trustDomainID, keyID); err != nil {
+					return nil, fmt.Errorf("failed to revoke tainted JWT key: %w", err)
+				}
+			}
+		}
+	}
+
+	u.lastJWTUpstream = newAuthorities
+
 	bundle, err := u.appendBundle(ctx, &common.Bundle{
 		TrustDomainId:  u.trustDomainID,
-		JwtSigningKeys: keys,
+		JwtSigningKeys: newKeys,
 	})
 	if err != nil {
 		return nil, err
 	}
+
 	return bundle.JwtSigningKeys, nil
 }
 
@@ -1327,6 +1446,7 @@ func (s *x509CASlot) ShouldActivateNext(now time.Time) bool {
 type jwtKeySlot struct {
 	id        string
 	issuedAt  time.Time
+	keyID     string
 	publicKey crypto.PublicKey
 	notAfter  time.Time
 	jwtKey    *JWTKey

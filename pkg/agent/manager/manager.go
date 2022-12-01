@@ -19,6 +19,7 @@ import (
 	"github.com/spiffe/spire/pkg/agent/storage"
 	"github.com/spiffe/spire/pkg/agent/svid"
 	"github.com/spiffe/spire/pkg/common/bundleutil"
+	"github.com/spiffe/spire/pkg/common/cryptoutil"
 	"github.com/spiffe/spire/pkg/common/nodeutil"
 	"github.com/spiffe/spire/pkg/common/rotationutil"
 	"github.com/spiffe/spire/pkg/common/telemetry"
@@ -109,6 +110,9 @@ type Cache interface {
 	// SetJWTSVID adds JWT-SVID to cache
 	SetJWTSVID(id spiffeid.ID, audience []string, svid *client.JWTSVID)
 
+	// ForceJWTRotation force rotation of JWT-SVIDs using tainted key stored on cache
+	ForceJWTRotation(taintedKeys map[string]struct{}) error
+
 	// Entries get all registration entries
 	Entries() []*common.RegistrationEntry
 
@@ -144,7 +148,8 @@ type manager struct {
 	// Cache for 'storable' SVIDs
 	svidStoreCache *storecache.Cache
 
-	taintedKeys []crypto.PublicKey
+	taintedKeys       []crypto.PublicKey
+	jwtTaintedKeysKID map[string]struct{}
 }
 
 func (m *manager) Initialize(ctx context.Context) error {
@@ -281,6 +286,8 @@ func (m *manager) runSynchronizer(ctx context.Context) error {
 			m.c.Log.WithError(err).Error("Push status failed")
 		}
 
+		m.cache.ForceJWTRotation(m.jwtTaintedKeysKID)
+
 		err := m.synchronize(ctx)
 		switch {
 		case err != nil && nodeutil.ShouldAgentReattest(err):
@@ -342,7 +349,41 @@ func (m *manager) setTaintedKeys(taintedKeys []crypto.PublicKey) {
 	m.mtx.Lock()
 	defer m.mtx.Unlock()
 
-	m.taintedKeys = taintedKeys
+	jwtKeys := m.c.Bundle.JWTSigningKeys()
+	rootCAs := m.c.Bundle.RootCAs()
+
+	var x509TaintedKeys []crypto.PublicKey
+	jwtTaintedKeys := make(map[string]struct{})
+
+	for _, taintedKey := range taintedKeys {
+		if keyOnCertificates(taintedKey, rootCAs) {
+			x509TaintedKeys = append(x509TaintedKeys, taintedKey)
+			continue
+		}
+
+		for key, publicKey := range jwtKeys {
+			ok, err := cryptoutil.PublicKeyEqual(publicKey, taintedKey)
+			if err != nil {
+				m.c.Log.Debugf("failed compare public keys: %v\n", err)
+			}
+			if ok {
+				jwtTaintedKeys[key] = struct{}{}
+			}
+		}
+	}
+
+	m.taintedKeys = x509TaintedKeys
+	m.jwtTaintedKeysKID = jwtTaintedKeys
+}
+
+func keyOnCertificates(key crypto.PublicKey, certificates []*x509.Certificate) bool {
+	for _, cert := range certificates {
+		if ok, _ := cryptoutil.PublicKeyEqual(cert.PublicKey, key); ok {
+			return true
+		}
+	}
+
+	return false
 }
 
 func (m *manager) GetBundle() *cache.Bundle {

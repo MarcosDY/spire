@@ -26,9 +26,9 @@ type DataStore interface {
 
 	// Keys
 	TaintX509CAByKey(ctx context.Context, trustDomainID string, publicKey crypto.PublicKey) error
-	TaintJWTKey(ctx context.Context, trustDomainID string, publicKey crypto.PublicKey) error
-	RevokeJWTKey(ctx context.Context, trustDomainID string, publicKey crypto.PublicKey) error
 	RevokeX509CA(ctx context.Context, trustDomainID string, publicKey crypto.PublicKey) error
+	TaintJWTKey(ctx context.Context, trustDomainID string, keyID string) (*common.PublicKey, error)
+	RevokeJWTKey(ctx context.Context, trustDomainID string, keyID string) (*common.PublicKey, error)
 
 	// Entries
 	CountRegistrationEntries(context.Context) (int32, error)

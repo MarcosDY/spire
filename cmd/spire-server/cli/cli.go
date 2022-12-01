@@ -10,6 +10,7 @@ import (
 	"github.com/spiffe/spire/cmd/spire-server/cli/federation"
 	"github.com/spiffe/spire/cmd/spire-server/cli/healthcheck"
 	"github.com/spiffe/spire/cmd/spire-server/cli/jwt"
+	"github.com/spiffe/spire/cmd/spire-server/cli/jwtauthority"
 	"github.com/spiffe/spire/cmd/spire-server/cli/run"
 	"github.com/spiffe/spire/cmd/spire-server/cli/token"
 	"github.com/spiffe/spire/cmd/spire-server/cli/validate"
@@ -125,6 +126,21 @@ func (cc *CLI) Run(args []string) int {
 		},
 		"localauthority x509 revoke": func() (cli.Command, error) {
 			return x509authority.NewRevokeCommand(), nil
+		},
+		"localauthority jwt get": func() (cli.Command, error) {
+			return jwtauthority.NewGetCommand(), nil
+		},
+		"localauthority jwt activate": func() (cli.Command, error) {
+			return jwtauthority.NewActivateCommand(), nil
+		},
+		"localauthority jwt prepare": func() (cli.Command, error) {
+			return jwtauthority.NewPrepareCommand(), nil
+		},
+		"localauthority jwt taint": func() (cli.Command, error) {
+			return jwtauthority.NewTaintCommand(), nil
+		},
+		"localauthority jwt revoke": func() (cli.Command, error) {
+			return jwtauthority.NewRevokeCommand(), nil
 		},
 	}
 

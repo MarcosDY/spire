@@ -55,6 +55,10 @@ func (m *manager) synchronize(ctx context.Context) (err error) {
 		return err
 	}
 
+	if err := m.cache.ForceJWTRotation(m.jwtTaintedKeysKID); err != nil {
+		m.c.Log.Debug("Failed to force rotation on JWT keys: %v", err)
+	}
+
 	if err := m.updateCache(ctx, cacheUpdate, m.c.Log.WithField(telemetry.CacheType, "workload"), "", m.cache); err != nil {
 		return err
 	}

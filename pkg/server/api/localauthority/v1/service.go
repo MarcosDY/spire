@@ -88,8 +88,8 @@ func (s *Service) ActivateJWTAuthority(context.Context, *localauthorityv1.Activa
 	}, nil
 }
 
-func (s *Service) TaintJWTAuthority(ctx context.Context, _ *localauthorityv1.TaintJWTAuthorityRequest) (*localauthorityv1.TaintJWTAuthorityResponse, error) {
-	authority, err := s.m.TaintJWTAuthority(ctx)
+func (s *Service) TaintJWTAuthority(ctx context.Context, req *localauthorityv1.TaintJWTAuthorityRequest) (*localauthorityv1.TaintJWTAuthorityResponse, error) {
+	authority, err := s.m.TaintJWTAuthority(ctx, req.KeyId)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to taint authority: %v", err)
 	}
@@ -105,7 +105,7 @@ func (s *Service) TaintJWTAuthority(ctx context.Context, _ *localauthorityv1.Tai
 }
 
 func (s *Service) RevokeJWTAuthority(ctx context.Context, req *localauthorityv1.RevokeJWTAuthorityRequest) (*localauthorityv1.RevokeJWTAuthorityResponse, error) {
-	authority, err := s.m.RevokeJWTAuthority(ctx)
+	authority, err := s.m.RevokeJWTAuthority(ctx, req.KeyId)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to revoke JWT authority: %v", err)
 	}
@@ -175,7 +175,7 @@ func (s *Service) ActivateX509Authority(context.Context, *localauthorityv1.Activ
 	}, nil
 }
 
-func (s *Service) TaintX509Authority(ctx context.Context, _ *localauthorityv1.TaintX509AuthorityRequest) (*localauthorityv1.TaintX509AuthorityResponse, error) {
+func (s *Service) TaintX509Authority(ctx context.Context, req *localauthorityv1.TaintX509AuthorityRequest) (*localauthorityv1.TaintX509AuthorityResponse, error) {
 	log := rpccontext.Logger(ctx)
 	authority, err := s.m.TaintX509Authority(ctx)
 	if err != nil {

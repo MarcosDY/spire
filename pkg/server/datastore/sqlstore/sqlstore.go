@@ -212,23 +212,27 @@ func (ds *Plugin) TaintX509CAByKey(ctx context.Context, trustDoaminID string, pu
 }
 
 // TaintJWTKey taint a JWT Authority key
-func (ds *Plugin) TaintJWTKey(ctx context.Context, trustDoaminID string, publicKey crypto.PublicKey) error {
+func (ds *Plugin) TaintJWTKey(ctx context.Context, trustDoaminID string, keyID string) (*common.PublicKey, error) {
+	var taintedKey *common.PublicKey
 	if err := ds.withReadModifyWriteTx(ctx, func(tx *gorm.DB) (err error) {
-		return taintJWTKey(tx, trustDoaminID, publicKey)
-	}); err != nil {
+		taintedKey, err = taintJWTKey(tx, trustDoaminID, keyID)
 		return err
+	}); err != nil {
+		return nil, err
 	}
-	return nil
+	return taintedKey, nil
 }
 
 // RevokeJWTAuthority remove a public key from bundle
-func (ds *Plugin) RevokeJWTKey(ctx context.Context, trustDoaminID string, publicKey crypto.PublicKey) error {
+func (ds *Plugin) RevokeJWTKey(ctx context.Context, trustDoaminID string, keyID string) (*common.PublicKey, error) {
+	var revokedKey *common.PublicKey
 	if err := ds.withReadModifyWriteTx(ctx, func(tx *gorm.DB) (err error) {
-		return revokeJWTKey(tx, trustDoaminID, publicKey)
-	}); err != nil {
+		revokedKey, err = revokeJWTKey(tx, trustDoaminID, keyID)
 		return err
+	}); err != nil {
+		return nil, err
 	}
-	return nil
+	return revokedKey, nil
 }
 
 // RevokeX509CA remove a Root CA from bundle
@@ -859,55 +863,54 @@ func taintX509CAByKey(tx *gorm.DB, trustDomainID string, taintedPublicKey crypto
 	return nil
 }
 
-func taintJWTKey(tx *gorm.DB, trustDomainID string, taintedKey crypto.PublicKey) error {
+func taintJWTKey(tx *gorm.DB, trustDomainID string, taintedKeyID string) (*common.PublicKey, error) {
 	model := &Bundle{}
 	if err := tx.Find(model, "trust_domain = ?", trustDomainID).Error; err != nil {
-		return sqlError.Wrap(err)
+		return nil, sqlError.Wrap(err)
 	}
 
 	bundle := &common.Bundle{}
 	err := proto.Unmarshal(model.Data, bundle)
 	if err != nil {
-		return fmt.Errorf("failed to unmarshal bundle: %w", err)
+		return nil, fmt.Errorf("failed to unmarshal bundle: %w", err)
 	}
 
-	var found bool
+	var taintedKey *common.PublicKey
 	for _, jwtKey := range bundle.JwtSigningKeys {
-		pKey, err := x509.ParsePKIXPublicKey(jwtKey.PkixBytes)
-		if err != nil {
-			return fmt.Errorf("failed to parse public key: %w", err)
-		}
-
-		if ok, _ := cryptoutil.PublicKeyEqual(pKey, taintedKey); ok {
+		if jwtKey.Kid == taintedKeyID {
+			// TODO: verify that we taint a key only once
 			if jwtKey.TaintedKey {
-				return errors.New("key is already tainted")
+				return nil, errors.New("key is already tainted")
 			}
 
 			// TODO: no breaking here to be sure that we taint all
 			// keys, but that sounds like an error, and we must
 			// contain a single CA
-			found = true
+			if taintedKey != nil {
+				return nil, errors.New("another JWT Key found with the same KeyID")
+			}
+			taintedKey = jwtKey
 			jwtKey.TaintedKey = true
 		}
 	}
 
-	if !found {
-		return errors.New("no JWT key found with provided public key")
+	if taintedKey == nil {
+		return nil, errors.New("no JWT key found with provided public key")
 	}
 
 	// TODO: apply mask?
 	newModel, err := bundleToModel(bundle)
 	if err != nil {
-		return fmt.Errorf("failed to parse bundle to model: %w", err)
+		return nil, fmt.Errorf("failed to parse bundle to model: %w", err)
 	}
 
 	model.Data = newModel.Data
 
 	if err := tx.Save(model).Error; err != nil {
-		return sqlError.Wrap(err)
+		return nil, sqlError.Wrap(err)
 	}
 
-	return nil
+	return taintedKey, nil
 }
 
 func revokeX509CA(tx *gorm.DB, trustDomainID string, publicKey crypto.PublicKey) error {
@@ -952,46 +955,45 @@ func revokeX509CA(tx *gorm.DB, trustDomainID string, publicKey crypto.PublicKey)
 	return errors.New("no root CA found for given key")
 }
 
-func revokeJWTKey(tx *gorm.DB, trustDomainID string, publicKey crypto.PublicKey) error {
+func revokeJWTKey(tx *gorm.DB, trustDomainID string, keyID string) (*common.PublicKey, error) {
 	model := &Bundle{}
 	if err := tx.Find(model, "trust_domain = ?", trustDomainID).Error; err != nil {
-		return sqlError.Wrap(err)
+		return nil, sqlError.Wrap(err)
 	}
 
 	bundle := &common.Bundle{}
 	err := proto.Unmarshal(model.Data, bundle)
 	if err != nil {
-		return fmt.Errorf("failed to unmarshal bundle: %w", err)
+		return nil, fmt.Errorf("failed to unmarshal bundle: %w", err)
 	}
 
-	found := false
 	var publicKeys []*common.PublicKey
+	var revokedKey *common.PublicKey
 	for _, key := range bundle.JwtSigningKeys {
-		pKey, err := x509.ParsePKIXPublicKey(key.PkixBytes)
-		if err != nil {
-			return fmt.Errorf("failed to parse public key: %w", err)
-		}
-
-		if ok, _ := cryptoutil.PublicKeyEqual(pKey, publicKey); ok {
+		if key.Kid == keyID {
 			if !key.TaintedKey {
-				return errors.New("it is not possible to revoke an untainted key")
+				return nil, errors.New("it is not possible to revoke an untainted key")
 			}
-			found = true
+			if revokedKey != nil {
+				return nil, errors.New("another key found with the same KeyID")
+			}
+
+			revokedKey = key
 			continue
 		}
 		publicKeys = append(publicKeys, key)
 	}
 	bundle.JwtSigningKeys = publicKeys
 
-	if found {
+	if revokedKey != nil {
 		if _, err := updateBundle(tx, bundle, nil); err != nil {
-			return fmt.Errorf("failed to update bundle: %w", err)
+			return nil, fmt.Errorf("failed to update bundle: %w", err)
 		}
 
-		return nil
+		return revokedKey, nil
 	}
 
-	return errors.New("no JWT Signing key found for given key")
+	return nil, errors.New("no JWT Signing key found for given key")
 }
 
 func updateBundle(tx *gorm.DB, newBundle *common.Bundle, mask *common.BundleMask) (*common.Bundle, error) {

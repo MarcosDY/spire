@@ -111,11 +111,11 @@ func (ds *DatastoreCache) TaintX509CAByKey(ctx context.Context, trustDomainID st
 	return nil
 }
 
-func (ds *DatastoreCache) TaintJWTKey(ctx context.Context, trustDomainID string, publicKey crypto.PublicKey) error {
-	if err := ds.DataStore.TaintJWTKey(ctx, trustDomainID, publicKey); err == nil {
+func (ds *DatastoreCache) TaintJWTKey(ctx context.Context, trustDomainID string, keyID string) (taintedKey *common.PublicKey, err error) {
+	if taintedKey, err = ds.DataStore.TaintJWTKey(ctx, trustDomainID, keyID); err == nil {
 		ds.invalidateBundleEntry(trustDomainID)
 	}
-	return nil
+	return
 }
 
 func (ds *DatastoreCache) RevokeX509CA(ctx context.Context, trustDomainID string, publicKey crypto.PublicKey) error {
@@ -125,11 +125,11 @@ func (ds *DatastoreCache) RevokeX509CA(ctx context.Context, trustDomainID string
 	return nil
 }
 
-func (ds *DatastoreCache) RevokeJWTKey(ctx context.Context, trustDomainID string, publicKey crypto.PublicKey) error {
-	if err := ds.DataStore.RevokeJWTKey(ctx, trustDomainID, publicKey); err == nil {
+func (ds *DatastoreCache) RevokeJWTKey(ctx context.Context, trustDomainID string, keyID string) (revokedKey *common.PublicKey, err error) {
+	if revokedKey, err = ds.DataStore.RevokeJWTKey(ctx, trustDomainID, keyID); err == nil {
 		ds.invalidateBundleEntry(trustDomainID)
 	}
-	return nil
+	return
 }
 
 func (ds *DatastoreCache) invalidateBundleEntry(trustDomainID string) {
