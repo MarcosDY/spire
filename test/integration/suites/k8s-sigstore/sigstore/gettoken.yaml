@@ -1,0 +1,28 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: gettoken
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/initial-scale: "1"
+        autoscaling.knative.dev/min-scale: "1"
+    spec:
+      containers:
+        - name: gettoken
+          image: ghcr.io/sigstore/scaffolding/getoidctoken@sha256:60553b29f0eaddd5e3c717825af54bcc6aa6c7852cab649a6a6b102a1f4ffb0d
+          env:
+            - name: OIDC_FILE
+              value: "/var/run/sigstore/cosign/oidc-token"
+          volumeMounts:
+            - name: oidc-info
+              mountPath: /var/run/sigstore/cosign
+      volumes:
+        - name: oidc-info
+          projected:
+            sources:
+              - serviceAccountToken:
+                  path: oidc-token
+                  expirationSeconds: 600
+                  audience: sigstore
