@@ -86,30 +86,6 @@ type JWTSVIDParams struct {
 	Audience []string
 }
 
-type X509CA struct {
-	// Signer is used to sign child certificates.
-	Signer crypto.Signer
-
-	// Certificate is the CA certificate.
-	Certificate *x509.Certificate
-
-	// UpstreamChain contains the CA certificate and intermediates necessary to
-	// chain back to the upstream trust bundle. It is only set if the CA is
-	// signed by an UpstreamCA.
-	UpstreamChain []*x509.Certificate
-}
-
-type JWTKey struct {
-	// The signer used to sign keys
-	Signer crypto.Signer
-
-	// Kid is the JWT key ID (i.e. "kid" claim)
-	Kid string
-
-	// NotAfter is the expiration time of the JWT key.
-	NotAfter time.Time
-}
-
 type Config struct {
 	Log           logrus.FieldLogger
 	Metrics       telemetry.Metrics

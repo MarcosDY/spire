@@ -1,4 +1,4 @@
-package ca
+package authoritymanager
 
 import (
 	"crypto"

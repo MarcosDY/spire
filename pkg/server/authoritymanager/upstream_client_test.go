@@ -1,4 +1,4 @@
-package ca_test
+package authoritymanager
 
 import (
 	"context"
