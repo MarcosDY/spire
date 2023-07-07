@@ -150,6 +150,7 @@ func TestTLSConfig(t *testing.T) {
 	})
 
 	t.Run("success watching cert file changes", func(t *testing.T) {
+		logHook.Reset()
 		oidcServerCertUpdatedPem := pem.EncodeToMemory(&pem.Block{
 			Type:  "CERTIFICATE",
 			Bytes: oidcServerCertUpdated1.Raw,
@@ -166,10 +167,19 @@ func TestTLSConfig(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, oidcServerCert, x509Cert)
 
+		for _, e := range logHook.Entries {
+			fmt.Println(e)
+		}
+
 		clk.Add(10 * time.Millisecond)
 
 		// Assert certificate is updated
 		require.Eventuallyf(t, func() bool {
+			fmt.Println("inside eventually")
+			for _, e := range logHook.Entries {
+				fmt.Println(e)
+			}
+			logHook.Reset()
 			cert, err := tlsConfig.GetCertificate(chInfo)
 			if err != nil {
 				return false
