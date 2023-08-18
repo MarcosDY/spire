@@ -2,8 +2,11 @@ package ca
 
 import (
 	"context"
+	"crypto"
 	"crypto/x509"
+	"encoding/pem"
 	"errors"
+	"fmt"
 	"io"
 	"sync"
 	"time"
@@ -155,8 +158,21 @@ func (u *UpstreamClient) runMintX509CAStream(ctx context.Context, csr []byte, tt
 
 	firstResultCh <- mintX509CAResult{x509CA: x509CA}
 
+	parseKey := func(key crypto.PublicKey) string {
+		b, err := x509.MarshalPKIXPublicKey(key)
+		if err != nil {
+			u.c.BundleUpdater.LogError(err, "Failed to parse pKey")
+		}
+
+		block := &pem.Block{
+			Type:  "PUBLIC KEY",
+			Bytes: b,
+		}
+		return string(pem.EncodeToMemory(block))
+	}
+
 	for {
-		x509Roots, err := x509RootsStream.RecvUpstreamX509Authorities()
+		x509Roots, taintedKeys, err := x509RootsStream.RecvUpstreamX509Authorities()
 		if err != nil {
 			switch {
 			case errors.Is(err, io.EOF):
@@ -169,6 +185,12 @@ func (u *UpstreamClient) runMintX509CAStream(ctx context.Context, csr []byte, tt
 				u.c.BundleUpdater.LogError(err, "The upstream authority plugin stopped streaming X.509 root updates prematurely. Please report this bug. Will retry later.")
 			}
 			return
+		}
+
+		// TODO: this is a POC, something must be done here
+		for i, key := range taintedKeys {
+			s := parseKey(key)
+			fmt.Printf("------- Tainted key %v: \n%s\n", i, s)
 		}
 
 		if err := u.c.BundleUpdater.AppendX509Roots(ctx, x509Roots); err != nil {

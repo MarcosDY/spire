@@ -2,6 +2,13 @@ module github.com/spiffe/spire
 
 go 1.20
 
+// replace github.com/spiffe/spire-api-sdk v1.2.5-0.20230629125323-08049dbe95e6 => ../spire-api-sdk
+// replace github.com/spiffe/spire-plugin-sdk v1.4.4-0.20230721151831-bf67dde4721d => ../spire-plugin-sdk
+
+replace github.com/spiffe/spire-api-sdk v1.2.5-0.20230629125323-08049dbe95e6 => github.com/MarcosDY/spire-api-sdk v1.0.0-pre.0.20230818151034-6067bd0ff81e
+
+replace github.com/spiffe/spire-plugin-sdk v1.4.4-0.20230721151831-bf67dde4721d => github.com/MarcosDY/spire-plugin-sdk v0.0.0-20230818150923-57872f9b0f2a
+
 require (
 	cloud.google.com/go/iam v1.1.1
 	cloud.google.com/go/kms v1.15.0

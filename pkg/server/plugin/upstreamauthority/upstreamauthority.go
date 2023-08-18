@@ -2,6 +2,7 @@ package upstreamauthority
 
 import (
 	"context"
+	"crypto"
 	"crypto/x509"
 	"time"
 
@@ -39,7 +40,7 @@ type UpstreamX509AuthorityStream interface {
 	// method is called, or the context originally passed into MintX509CA is
 	// canceled. If the function returns an error, no more updates will be
 	// available over the stream.
-	RecvUpstreamX509Authorities() ([]*x509.Certificate, error)
+	RecvUpstreamX509Authorities() ([]*x509.Certificate, []crypto.PublicKey, error)
 
 	// Close() closes the stream. It MUST be called by callers of MintX509CA
 	// when they are done with the stream.

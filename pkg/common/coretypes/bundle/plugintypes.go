@@ -30,12 +30,20 @@ func ToPluginFromAPIProto(pb *apitypes.Bundle) (*plugintypes.Bundle, error) {
 		return nil, fmt.Errorf("malformed trust domain: %w", err)
 	}
 
+	var taintedKeys []*plugintypes.X509TaintedKey
+	for _, taintedKey := range pb.X509TaintedKeys {
+		taintedKeys = append(taintedKeys, &plugintypes.X509TaintedKey{
+			Key: taintedKey.Key,
+		})
+	}
+
 	return &plugintypes.Bundle{
 		TrustDomain:     td.Name(),
 		RefreshHint:     pb.RefreshHint,
 		SequenceNumber:  pb.SequenceNumber,
 		JwtAuthorities:  jwtAuthorities,
 		X509Authorities: x509Authorities,
+		X509TaintedKeys: taintedKeys,
 	}, nil
 }
 

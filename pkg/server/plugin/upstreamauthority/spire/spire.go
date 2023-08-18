@@ -2,6 +2,7 @@ package spireplugin
 
 import (
 	"context"
+	"encoding/pem"
 	"fmt"
 	"sync"
 	"time"
@@ -132,6 +133,11 @@ func (p *Plugin) SetLogger(log hclog.Logger) {
 	p.log = log
 }
 
+func rawtToPem(b []byte) string {
+	p := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: b})
+	return string(p)
+}
+
 func (p *Plugin) MintX509CAAndSubscribe(request *upstreamauthorityv1.MintX509CARequest, stream upstreamauthorityv1.UpstreamAuthority_MintX509CAAndSubscribeServer) error {
 	err := p.subscribeToPolling(stream.Context())
 	if err != nil {
@@ -142,6 +148,16 @@ func (p *Plugin) MintX509CAAndSubscribe(request *upstreamauthorityv1.MintX509CAR
 	certChain, roots, err := p.serverClient.newDownstreamX509CA(stream.Context(), request.Csr)
 	if err != nil {
 		return status.Errorf(codes.Internal, "unable to request a new Downstream X509CA: %v", err)
+	}
+
+	p.log.Debug("************ CERT CHAIN")
+	for i, cert := range certChain {
+		p.log.Debug(fmt.Sprintf("----- %v: \n%s\n", i, rawtToPem(cert.Raw)))
+	}
+
+	p.log.Debug("************ roots")
+	for i, cert := range roots {
+		p.log.Debug(fmt.Sprintf("----- %v: \n%s\n", i, rawtToPem(cert.Raw)))
 	}
 
 	var bundles []*plugintypes.X509Certificate
@@ -158,6 +174,7 @@ func (p *Plugin) MintX509CAAndSubscribe(request *upstreamauthorityv1.MintX509CAR
 	p.setBundleX509Authorities(bundles)
 
 	rootCAs := []*plugintypes.X509Certificate{}
+	taintedKeys := []*plugintypes.X509TaintedKey{}
 
 	x509CAChain, err := x509certificate.ToPluginProtos(certChain)
 	if err != nil {
@@ -167,13 +184,20 @@ func (p *Plugin) MintX509CAAndSubscribe(request *upstreamauthorityv1.MintX509CAR
 	ticker := clk.Ticker(internalPollFreq)
 	defer ticker.Stop()
 	for {
-		newRootCAs := p.getBundle().X509Authorities
+		bundle := p.getBundle()
+		newRootCAs := bundle.X509Authorities
+		newTaintedKeys := bundle.X509TaintedKeys
+
 		// Send response with new X509 authorities
-		if !areRootsEqual(rootCAs, newRootCAs) {
+		if !areRootsEqual(rootCAs, newRootCAs) || !areTaintedKeysEqual(taintedKeys, newTaintedKeys) {
+			// if !areRootsEqual(rootCAs, newRootCAs) {
 			rootCAs = newRootCAs
+			taintedKeys = newTaintedKeys
+
 			err := stream.Send(&upstreamauthorityv1.MintX509CAResponse{
 				X509CaChain:       x509CAChain,
 				UpstreamX509Roots: rootCAs,
+				X509TaintedKeys:   newTaintedKeys,
 			})
 			if err != nil {
 				p.log.Error("Cannot send X.509 CA chain and roots", "error", err)
@@ -181,6 +205,12 @@ func (p *Plugin) MintX509CAAndSubscribe(request *upstreamauthorityv1.MintX509CAR
 			}
 			if len(x509CAChain) > 0 {
 				x509CAChain = nil
+			}
+
+			p.log.Debug("************ Fetched authority")
+			for i, each := range newRootCAs {
+				pp := rawtToPem(each.Asn1)
+				p.log.Debug(fmt.Sprintf("====== %v: taited: %v \n %v\n", i, each.Tainted, pp))
 			}
 		}
 		select {
@@ -351,6 +381,18 @@ func areRootsEqual(a, b []*plugintypes.X509Certificate) bool {
 	}
 	for i, root := range a {
 		if !proto.Equal(root, b[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+func areTaintedKeysEqual(a, b []*plugintypes.X509TaintedKey) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i, taintedKey := range a {
+		if !proto.Equal(taintedKey, b[i]) {
 			return false
 		}
 	}

@@ -2,6 +2,7 @@ package upstreamauthority
 
 import (
 	"context"
+	"crypto"
 	"crypto/x509"
 	"errors"
 	"io"
@@ -145,16 +146,16 @@ type v1UpstreamX509AuthorityStream struct {
 	cancel context.CancelFunc
 }
 
-func (s *v1UpstreamX509AuthorityStream) RecvUpstreamX509Authorities() ([]*x509.Certificate, error) {
+func (s *v1UpstreamX509AuthorityStream) RecvUpstreamX509Authorities() ([]*x509.Certificate, []crypto.PublicKey, error) {
 	for {
 		resp, err := s.stream.Recv()
 		switch {
 		case errors.Is(err, io.EOF):
 			// This is expected if the plugin does not support streaming
 			// authority updates.
-			return nil, err
+			return nil, nil, err
 		case err != nil:
-			return nil, s.v1.WrapErr(err)
+			return nil, nil, s.v1.WrapErr(err)
 		}
 
 		x509Authorities, err := s.v1.parseMintX509CABundleUpdate(resp)
@@ -162,7 +163,18 @@ func (s *v1UpstreamX509AuthorityStream) RecvUpstreamX509Authorities() ([]*x509.C
 			s.v1.Log.WithError(err).Warn("Failed to parse an X.509 root update from the upstream authority plugin. Please report this bug.")
 			continue
 		}
-		return x509Authorities, nil
+
+		var keys []crypto.PublicKey
+		for _, eachKey := range resp.X509TaintedKeys {
+			key, err := x509.ParsePKIXPublicKey(eachKey.Key)
+			if err != nil {
+				return nil, nil, err
+			}
+			keys = append(keys, key)
+
+		}
+
+		return x509Authorities, keys, nil
 	}
 }
 

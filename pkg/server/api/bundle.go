@@ -24,12 +24,20 @@ func BundleToProto(b *common.Bundle) (*types.Bundle, error) {
 		return nil, fmt.Errorf("invalid trust domain id: %w", err)
 	}
 
+	var taintedKeys []*types.X509TaintedKey
+	for _, eachKey := range b.X509TaintedKeys {
+		taintedKeys = append(taintedKeys, &types.X509TaintedKey{
+			Key: eachKey.PublicKey,
+		})
+	}
+
 	return &types.Bundle{
 		TrustDomain:     td.Name(),
 		RefreshHint:     b.RefreshHint,
 		SequenceNumber:  b.SequenceNumber,
 		X509Authorities: CertificatesToProto(b.RootCas),
 		JwtAuthorities:  PublicKeysToProto(b.JwtSigningKeys),
+		X509TaintedKeys: taintedKeys,
 	}, nil
 }
 
@@ -38,6 +46,7 @@ func CertificatesToProto(rootCas []*common.Certificate) []*types.X509Certificate
 	for _, rootCA := range rootCas {
 		x509Authorities = append(x509Authorities, &types.X509Certificate{
 			Asn1: rootCA.DerBytes,
+			// TODO: Add tainted
 		})
 	}
 
