@@ -111,6 +111,10 @@ func (v1 *V1) parseMintX509CABundleUpdate(resp *upstreamauthorityv1.MintX509CARe
 	if len(resp.X509CaChain) > 0 {
 		return nil, v1.Error(codes.Internal, "plugin response has an X.509 CA chain after the first response")
 	}
+	// Expected to be empty when a tainted key is reported
+	if len(resp.UpstreamX509Roots) == 0 && len(resp.X509TaintedKeys) > 0 {
+		return nil, nil
+	}
 	return v1.parseX509Authorities(resp.UpstreamX509Roots)
 }
 

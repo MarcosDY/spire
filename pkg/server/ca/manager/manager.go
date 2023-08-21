@@ -737,6 +737,21 @@ func (u *bundleUpdater) AppendJWTKeys(ctx context.Context, keys []*common.Public
 	return bundle.JwtSigningKeys, nil
 }
 
+func (u *bundleUpdater) AppendTaintedKeys(ctx context.Context, keysToTaint []crypto.PublicKey) error {
+	// TODO: we may keep the list of previous tainted keys and only append new ones,
+	// and remove the ones that are no longer in this list from datastore
+	// To do this we'll need to add a new function into Datastore.
+	// the alternative is to provide an expiration date to tainted keys and cleanup
+	// when revoking expired bundles
+	for _, eachKey := range keysToTaint {
+		// TODO: only add new Tainted keys
+		if err := u.ds.TaintX509CA(ctx, u.trustDomainID, eachKey); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (u *bundleUpdater) LogError(err error, msg string) {
 	u.log.WithError(err).Error(msg)
 }

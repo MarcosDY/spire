@@ -21,6 +21,7 @@ import (
 // updates.
 type BundleUpdater interface {
 	AppendX509Roots(ctx context.Context, roots []*x509.Certificate) error
+	AppendTaintedKeys(ctx context.Context, keysToTaint []crypto.PublicKey) error
 	AppendJWTKeys(ctx context.Context, keys []*common.PublicKey) ([]*common.PublicKey, error)
 	LogError(err error, msg string)
 }
@@ -193,9 +194,20 @@ func (u *UpstreamClient) runMintX509CAStream(ctx context.Context, csr []byte, tt
 			fmt.Printf("------- Tainted key %v: \n%s\n", i, s)
 		}
 
-		if err := u.c.BundleUpdater.AppendX509Roots(ctx, x509Roots); err != nil {
-			u.c.BundleUpdater.LogError(err, "Failed to store X.509 roots received by the upstream authority plugin.")
-			continue
+		if len(x509Roots) > 0 {
+			if err := u.c.BundleUpdater.AppendX509Roots(ctx, x509Roots); err != nil {
+				u.c.BundleUpdater.LogError(err, "Failed to store X.509 roots received by the upstream authority plugin.")
+				continue
+			}
+		}
+
+		if len(taintedKeys) > 0 {
+			// TODO: what happens when we have more than 1 tainted key?
+			// TODO: how can we remove the "expired" tainted keys?
+			if err := u.c.BundleUpdater.AppendTaintedKeys(ctx, taintedKeys); err != nil {
+				u.c.BundleUpdater.LogError(err, "Failed to store tainted keys received by the upstream authority plugin.")
+				continue
+			}
 		}
 	}
 }

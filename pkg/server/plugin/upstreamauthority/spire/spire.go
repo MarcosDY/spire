@@ -189,15 +189,13 @@ func (p *Plugin) MintX509CAAndSubscribe(request *upstreamauthorityv1.MintX509CAR
 		newTaintedKeys := bundle.X509TaintedKeys
 
 		// Send response with new X509 authorities
-		if !areRootsEqual(rootCAs, newRootCAs) || !areTaintedKeysEqual(taintedKeys, newTaintedKeys) {
+		if !areRootsEqual(rootCAs, newRootCAs) {
 			// if !areRootsEqual(rootCAs, newRootCAs) {
 			rootCAs = newRootCAs
-			taintedKeys = newTaintedKeys
 
 			err := stream.Send(&upstreamauthorityv1.MintX509CAResponse{
 				X509CaChain:       x509CAChain,
 				UpstreamX509Roots: rootCAs,
-				X509TaintedKeys:   newTaintedKeys,
 			})
 			if err != nil {
 				p.log.Error("Cannot send X.509 CA chain and roots", "error", err)
@@ -211,6 +209,20 @@ func (p *Plugin) MintX509CAAndSubscribe(request *upstreamauthorityv1.MintX509CAR
 			for i, each := range newRootCAs {
 				pp := rawtToPem(each.Asn1)
 				p.log.Debug(fmt.Sprintf("====== %v: taited: %v \n %v\n", i, each.Tainted, pp))
+			}
+		}
+
+		if !areTaintedKeysEqual(taintedKeys, newTaintedKeys) {
+			taintedKeys = newTaintedKeys
+			err := stream.Send(&upstreamauthorityv1.MintX509CAResponse{
+				X509TaintedKeys: taintedKeys,
+			})
+			if err != nil {
+				p.log.Error("Cannot send X.509 CA chain and roots", "error", err)
+				return err
+			}
+			if len(x509CAChain) > 0 {
+				x509CAChain = nil
 			}
 		}
 		select {
