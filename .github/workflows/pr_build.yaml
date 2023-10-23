@@ -466,8 +466,10 @@ jobs:
           update: true
           install: >-
             git base-devel mingw-w64-x86_64-toolchain unzip
-      - name: Lint
-        run: make lint-code
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v3
+        with:
+          version: v1.55
       - name: Tidy check
         run: make tidy-check
       - name: Generate check
