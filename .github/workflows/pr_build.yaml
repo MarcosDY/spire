@@ -10,7 +10,7 @@ permissions:
 jobs:
   cache-deps:
     name: cache-deps (linux)
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     timeout-minutes: 30
 
     permissions:
@@ -33,7 +33,7 @@ jobs:
 
   lint:
     name: lint (linux)
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     needs: cache-deps
     timeout-minutes: 30
 
@@ -69,7 +69,7 @@ jobs:
   unit-test:
     strategy:
       matrix:
-        OS: [ubuntu-20.04, macos-latest]
+        OS: [ubuntu-22.04, macos-latest]
     runs-on: ${{ matrix.OS }}
     needs: cache-deps
     timeout-minutes: 30
@@ -94,7 +94,7 @@ jobs:
 
   unit-test-race-detector:
     name: unit-test (linux with race detection)
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     needs: cache-deps
     timeout-minutes: 30
 
@@ -118,7 +118,7 @@ jobs:
 
   artifacts:
     name: artifacts (linux)
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     needs: [cache-deps, images]
     timeout-minutes: 30
 
@@ -152,7 +152,7 @@ jobs:
 
   images:
     name: images (linux)
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     needs: [cache-deps]
     timeout-minutes: 30
 
@@ -221,7 +221,7 @@ jobs:
 
   build-matrix:
     name: Build matrix
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     needs: [cache-deps]
     permissions:
       contents: read
@@ -241,7 +241,7 @@ jobs:
 
   integration:
     name: integration (linux)
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     needs: [cache-deps, images]
     timeout-minutes: 45
 
@@ -299,7 +299,7 @@ jobs:
 
   integration-k8s:
     name: integration-k8s
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     needs: [cache-deps, images, build-matrix]
     timeout-minutes: 45
 
@@ -559,7 +559,7 @@ jobs:
           path: ./artifacts/
 
   success:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     needs: [lint, unit-test, unit-test-race-detector, artifacts, integration, lint-windows, unit-test-windows, artifacts-windows, integration-windows]
     timeout-minutes: 30
     permissions:
