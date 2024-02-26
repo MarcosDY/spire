@@ -47,7 +47,7 @@ check-provider-start() {
   CHECKINTERVAL=1
   PROVIDER_SOCKET_PATH=$1
 
-  for ((i = 1; i <= MAXCHECKS; i++)); do
+  for ((i = 1; i <= $MAXCHECKS; i++)); do
     log-info "check oidc-discovery-provider status ($(($i)) of $MAXCHECKS max)..."
     curl --unix-socket $PROVIDER_SOCKET_PATH http://localhost && return 0
     sleep "${CHECKINTERVAL}"
