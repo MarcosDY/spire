@@ -13,7 +13,7 @@ check-equal-keys() {
     fail-now "JWK key id (${PROVIDER_KEY_ID}) does not match bundle key id (${BUNDLE_KEY_ID})"
   fi
 
-  OIDC_CONFIG=$(curl --unix-socket ${RUNDIR}/conf/oidc-discovery-provider/provider-server.sock http://localhost/.well-known/openid-configuration | jq)
+  OIDC_CONFIG=$(curl -s --unix-socket ${RUNDIR}/conf/oidc-discovery-provider/provider-server.sock http://localhost/.well-known/openid-configuration | jq)
 
   EXPECTED_OIDC_CONFIG=$(jq <./expected-oidc-config.json)
 
