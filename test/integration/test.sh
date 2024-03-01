@@ -10,6 +10,8 @@ if [[ -z "${SUITES}" ]]; then
    SUITES=suites/*
 fi
 
+SUITES="suites/oidc-discovery-provider suites/nested-rotation "
+
 if [[ -n $1 ]]; then
         SUITES=$@
 fi
