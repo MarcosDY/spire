@@ -83,6 +83,7 @@ func (p *Plugin) Attest(ctx context.Context, req *workloadattestorv1.AttestReque
 	case err != nil:
 		return nil, err
 	case containerID == "":
+		p.log.Info("------- No container ID FOUND")
 		// Not a docker workload. Nothing more to do.
 		return &workloadattestorv1.AttestResponse{}, nil
 	}
@@ -98,6 +99,7 @@ func (p *Plugin) Attest(ctx context.Context, req *workloadattestorv1.AttestReque
 	if err != nil {
 		return nil, err
 	}
+	p.log.Info(fmt.Sprintf("====== container found: %+v", container.Config))
 
 	return &workloadattestorv1.AttestResponse{
 		SelectorValues: getSelectorValuesFromConfig(container.Config),

@@ -42,13 +42,14 @@ type containerHelper struct {
 	fs                cgroups.FileSystem
 }
 
-func (h *containerHelper) getContainerID(pID int32, _ hclog.Logger) (string, error) {
+func (h *containerHelper) getContainerID(pID int32, log hclog.Logger) (string, error) {
 	cgroupList, err := cgroups.GetCgroups(pID, h.fs)
 	if err != nil {
 		return "", err
 	}
 
-	return getContainerIDFromCGroups(h.containerIDFinder, cgroupList)
+	log.Info("------ Get containerID", "pid", pID)
+	return getContainerIDFromCGroups(h.containerIDFinder, cgroupList, log)
 }
 
 func getDockerHost(c *dockerPluginConfig) string {
@@ -61,15 +62,17 @@ func getDockerHost(c *dockerPluginConfig) string {
 // this isn't a docker workload, the function returns an empty string. If more
 // than one container ID is found, or the "found" container ID is blank, the
 // function will fail.
-func getContainerIDFromCGroups(finder cgroup.ContainerIDFinder, cgroups []cgroups.Cgroup) (string, error) {
+func getContainerIDFromCGroups(finder cgroup.ContainerIDFinder, cgroups []cgroups.Cgroup, log hclog.Logger) (string, error) {
 	var hasDockerEntries bool
 	var containerID string
 	for _, cgroup := range cgroups {
+		log.Info(fmt.Sprintf("------ cgroup:   %q\n", cgroup.GroupPath))
 		candidate, ok := finder.FindContainerID(cgroup.GroupPath)
 		if !ok {
 			continue
 		}
 
+		log.Info(fmt.Sprintf("------ candidate: %q\n", candidate))
 		hasDockerEntries = true
 
 		switch {
