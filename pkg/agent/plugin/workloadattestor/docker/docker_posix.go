@@ -47,6 +47,10 @@ func (h *containerHelper) getContainerID(pID int32, log hclog.Logger) (string, e
 	if err != nil {
 		return "", err
 	}
+	log.Info("****** before filtering")
+	for _, cgroup := range cgroupList {
+		log.Info("********* cgroupEach", "controllerLIst", cgroup.ControllerList, "groupPath", cgroup.GroupPath, "HierarchyID", cgroup.HierarchyID)
+	}
 
 	log.Info("------ Get containerID", "pid", pID)
 	return getContainerIDFromCGroups(h.containerIDFinder, cgroupList, log)
@@ -66,6 +70,7 @@ func getContainerIDFromCGroups(finder cgroup.ContainerIDFinder, cgroups []cgroup
 	var hasDockerEntries bool
 	var containerID string
 	for _, cgroup := range cgroups {
+		log.Info("-------- cgroupEach", "controllerLIst", cgroup.ControllerList, "groupPath", cgroup.GroupPath, "HierarchyID", cgroup.HierarchyID)
 		log.Info(fmt.Sprintf("------ cgroup:   %q\n", cgroup.GroupPath))
 		candidate, ok := finder.FindContainerID(cgroup.GroupPath)
 		if !ok {

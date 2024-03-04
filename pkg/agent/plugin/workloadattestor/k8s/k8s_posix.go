@@ -69,12 +69,16 @@ func (h *containerHelper) GetOSSelectors(ctx context.Context, log hclog.Logger, 
 	return selectors, nil
 }
 
-func (h *containerHelper) GetPodUIDAndContainerID(pID int32, _ hclog.Logger) (types.UID, string, error) {
+func (h *containerHelper) GetPodUIDAndContainerID(pID int32, log hclog.Logger) (types.UID, string, error) {
 	cgroups, err := cgroups.GetCgroups(pID, h.fs)
 	if err != nil {
 		return "", "", status.Errorf(codes.Internal, "unable to obtain cgroups: %v", err)
 	}
 
+	log.Info("****** before filtering")
+	for _, cgroup := range cgroups {
+		log.Info("********* cgroupEach", "controllerLIst", cgroup.ControllerList, "groupPath", cgroup.GroupPath, "HierarchyID", cgroup.HierarchyID)
+	}
 	return getPodUIDAndContainerIDFromCGroups(cgroups)
 }
 
