@@ -47,7 +47,7 @@ type containerHelper struct {
 func (h *containerHelper) getContainerID(pID int32, log hclog.Logger) (string, error) {
 	path := fmt.Sprintf("/proc/%v/cgroup", pID)
 
-	filepath.Walk("/proc", func(name string, info os.FileInfo, err error) error {
+	filepath.Walk(fmt.Sprintf("/proc/%v", pID), func(name string, info os.FileInfo, err error) error {
 		log.Info("-- name", "name", name, "isdir", info.IsDir())
 		return nil
 	})
