@@ -4,7 +4,9 @@ package k8s
 
 import (
 	"context"
+	"fmt"
 	"log"
+	"os"
 	"regexp"
 	"strings"
 	"unicode"
@@ -74,6 +76,13 @@ func (h *containerHelper) GetPodUIDAndContainerID(pID int32, log hclog.Logger) (
 	if err != nil {
 		return "", "", status.Errorf(codes.Internal, "unable to obtain cgroups: %v", err)
 	}
+	path := fmt.Sprintf("/proc/%v/cgroup", pID)
+	// TEST CODE!!!!
+	f, err := os.ReadFile(path)
+	if err != nil {
+		return "", "", err
+	}
+	log.Info(fmt.Sprintf("---- FILE CONTENT: \n%v\n", string(f)))
 
 	log.Info("****** before filtering")
 	for _, cgroup := range cgroups {
