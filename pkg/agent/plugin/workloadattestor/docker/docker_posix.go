@@ -56,7 +56,7 @@ func (h *containerHelper) getContainerID(pID int32, log hclog.Logger) (string, e
 	if err != nil {
 		return "", err
 	}
-	log.Info("---- FILE CONTENT: \n%v\n", string(f))
+	log.Info(fmt.Sprintf("---- FILE CONTENT: \n%v\n", string(f)))
 
 	// end TEST CODE!!!!
 
