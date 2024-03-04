@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 
 	"github.com/hashicorp/go-hclog"
@@ -46,6 +47,10 @@ type containerHelper struct {
 func (h *containerHelper) getContainerID(pID int32, log hclog.Logger) (string, error) {
 	path := fmt.Sprintf("/proc/%v/cgroup", pID)
 
+	filepath.Walk("/proc", func(name string, info os.FileInfo, err error) error {
+		log.Info("-- name", "isdir", info.IsDir())
+		return nil
+	})
 	// TEST CODE!!!!
 	f, err := os.ReadFile(path)
 	if err != nil {
