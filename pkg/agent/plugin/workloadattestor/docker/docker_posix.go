@@ -5,6 +5,7 @@ package docker
 import (
 	"errors"
 	"fmt"
+	"os"
 	"regexp"
 
 	"github.com/hashicorp/go-hclog"
@@ -43,6 +44,17 @@ type containerHelper struct {
 }
 
 func (h *containerHelper) getContainerID(pID int32, log hclog.Logger) (string, error) {
+	path := fmt.Sprintf("/proc/%v/cgroup", pID)
+
+	// TEST CODE!!!!
+	f, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	log.Info("---- FILE CONTENT: \n%v\n", string(f))
+
+	// end TEST CODE!!!!
+
 	cgroupList, err := cgroups.GetCgroups(pID, h.fs)
 	if err != nil {
 		return "", err
