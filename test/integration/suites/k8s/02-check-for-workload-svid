@@ -28,3 +28,7 @@ if [ "${DONE}" -eq 1 ]; then
 else
     fail-now "timed out waiting for workload to obtain credentials."
 fi
+
+# IT IS FOR TEST AND MUST BE REMOVED!!!!!
+./bin/kubectl -nspire logs deployment/spire-server --all-containers || true
+./bin/kubectl -nspire logs daemonset/spire-agent --all-containers || true
