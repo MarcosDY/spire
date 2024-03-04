@@ -36,3 +36,7 @@ sed -i.bak "s#CGROUP_MATCHERS#$CGROUP_MATCHERS#" intermediateA/agent/agent.conf
 sed -i.bak "s#CGROUP_MATCHERS#$CGROUP_MATCHERS#" intermediateB/agent/agent.conf
 
 docker build --target nested-agent-alpine -t nested-agent-alpine .
+
+echo "DISPLAY DOCKER INFO!!!"
+docker info
+docker-compose --version
