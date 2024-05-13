@@ -5,8 +5,8 @@ package sqlstore
 import (
 	"errors"
 
-	"github.com/jinzhu/gorm"
 	"github.com/sirupsen/logrus"
+	"gorm.io/gorm"
 )
 
 type sqliteDB struct {

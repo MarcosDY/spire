@@ -19,8 +19,9 @@ import (
 	"github.com/hashicorp/hcl"
 	"github.com/hashicorp/hcl/hcl/ast"
 	"github.com/hashicorp/hcl/hcl/printer"
-	"github.com/jinzhu/gorm"
 	"github.com/sirupsen/logrus"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/spiffe/spire-api-sdk/proto/spire/api/types"
@@ -876,18 +877,14 @@ func (ds *Plugin) openConnection(config *configuration, isReadOnly bool) error {
 	}
 
 	if sqlDb == nil || connectionString != sqlDb.connectionString || config.databaseTypeConfig.databaseType != ds.db.databaseType {
-		db, version, supportsCTE, dialect, err := ds.openDB(config, isReadOnly)
+		db, raw, version, supportsCTE, dialect, err := ds.openDB(config, isReadOnly)
 		if err != nil {
 			return err
 		}
 
-		raw := db.DB()
-		if raw == nil {
-			return sqlError.New("unable to get raw database object")
-		}
-
+		// Close raw inside sqldb
 		if sqlDb != nil {
-			sqlDb.Close()
+			sqlDb.raw.Close()
 		}
 
 		ds.log.WithFields(logrus.Fields{
@@ -913,18 +910,19 @@ func (ds *Plugin) openConnection(config *configuration, isReadOnly bool) error {
 		ds.db = sqlDb
 	}
 
-	sqlDb.LogMode(config.LogSQL)
+	// TODO: what mode must we set here?
+	// sqlDb.LogMode(config.LogSQL)
 	return nil
 }
 
 func (ds *Plugin) Close() error {
 	var errs errs.Group
 	if ds.db != nil {
-		errs.Add(ds.db.Close())
+		errs.Add(ds.db.raw.Close())
 	}
 
 	if ds.roDb != nil {
-		errs.Add(ds.roDb.Close())
+		errs.Add(ds.roDb.raw.Close())
 	}
 	return errs.Err()
 }
@@ -954,7 +952,7 @@ func (ds *Plugin) withReadModifyWriteTx(ctx context.Context, op func(tx *gorm.DB
 			// hot standby mode for this operation to work properly (see issue #3039).
 			tx = tx.Set("gorm:query_option", "FOR UPDATE")
 		}
-		return op(tx)
+		return op(tx.WithContext(ctx))
 	}, false)
 }
 
@@ -984,7 +982,7 @@ func (ds *Plugin) withTx(ctx context.Context, op func(tx *gorm.DB) error, readOn
 		defer db.opMu.Unlock()
 	}
 
-	tx := db.BeginTx(ctx, nil)
+	tx := db.WithContext(ctx).Begin()
 	if err := tx.Error; err != nil {
 		return sqlError.Wrap(err)
 	}
@@ -1015,7 +1013,7 @@ func (ds *Plugin) gormToGRPCStatus(err error) error {
 
 	code := codes.Unknown
 	switch {
-	case gorm.IsRecordNotFoundError(unwrapped):
+	case errors.Is(unwrapped, gorm.ErrRecordNotFound):
 		code = codes.NotFound
 	case ds.db.dialect.isConstraintViolation(unwrapped):
 		code = codes.AlreadyExists
@@ -1025,7 +1023,7 @@ func (ds *Plugin) gormToGRPCStatus(err error) error {
 	return status.Error(code, err.Error())
 }
 
-func (ds *Plugin) openDB(cfg *configuration, isReadOnly bool) (*gorm.DB, string, bool, dialect, error) {
+func (ds *Plugin) openDB(cfg *configuration, isReadOnly bool) (*gorm.DB, *sql.DB, string, bool, dialect, error) {
 	var dialect dialect
 
 	ds.log.WithField(telemetry.DatabaseType, cfg.databaseTypeConfig.databaseType).Info("Opening SQL database")
@@ -1037,54 +1035,77 @@ func (ds *Plugin) openDB(cfg *configuration, isReadOnly bool) (*gorm.DB, string,
 	case isMySQLDbType(cfg.databaseTypeConfig.databaseType):
 		dialect = mysqlDB{}
 	default:
-		return nil, "", false, nil, sqlError.New("unsupported database_type: %v", cfg.databaseTypeConfig.databaseType)
+		return nil, nil, "", false, nil, sqlError.New("unsupported database_type: %v", cfg.databaseTypeConfig.databaseType)
 	}
 
 	db, version, supportsCTE, err := dialect.connect(cfg, isReadOnly)
 	if err != nil {
-		return nil, "", false, nil, sqlError.Wrap(err)
+		return nil, nil, "", false, nil, sqlError.Wrap(err)
 	}
 
-	db.SetLogger(gormLogger{
+	db.Logger = &gormLogger{
 		log: ds.log.WithField(telemetry.SubsystemName, "gorm"),
-	})
-	db.DB().SetMaxOpenConns(100) // default value
+	}
+
+	if ds.useServerTimestamps {
+		db.NowFunc = func() time.Time {
+			// Round to nearest second to be consistent with how timestamps are rounded in CreateRegistrationEntry calls
+			return time.Now().Round(time.Second)
+		}
+	}
+
+	openDB, err := db.DB()
+	if err != nil {
+		return nil, nil, "", false, nil, err
+	}
+
+	// TODO: mmm must we set it here? looks like openDB is not used?
+	openDB.SetMaxOpenConns(100) // default value
 	if cfg.MaxOpenConns != nil {
-		db.DB().SetMaxOpenConns(*cfg.MaxOpenConns)
+		openDB.SetMaxOpenConns(*cfg.MaxOpenConns)
 	}
 	if cfg.MaxIdleConns != nil {
-		db.DB().SetMaxIdleConns(*cfg.MaxIdleConns)
+		openDB.SetMaxIdleConns(*cfg.MaxIdleConns)
 	}
 	if cfg.ConnMaxLifetime != nil {
 		connMaxLifetime, err := time.ParseDuration(*cfg.ConnMaxLifetime)
 		if err != nil {
-			return nil, "", false, nil, fmt.Errorf("failed to parse conn_max_lifetime %q: %w", *cfg.ConnMaxLifetime, err)
+			return nil, nil, "", false, nil, fmt.Errorf("failed to parse conn_max_lifetime %q: %w", *cfg.ConnMaxLifetime, err)
 		}
-		db.DB().SetConnMaxLifetime(connMaxLifetime)
-	}
-	if ds.useServerTimestamps {
-		db.SetNowFuncOverride(func() time.Time {
-			// Round to nearest second to be consistent with how timestamps are rounded in CreateRegistrationEntry calls
-			return time.Now().Round(time.Second)
-		})
+		openDB.SetConnMaxLifetime(connMaxLifetime)
 	}
 
 	if !isReadOnly {
 		if err := migrateDB(db, cfg.databaseTypeConfig.databaseType, cfg.DisableMigration, ds.log); err != nil {
-			db.Close()
-			return nil, "", false, nil, err
+			openDB.Close()
+			return nil, nil, "", false, nil, err
 		}
 	}
 
-	return db, version, supportsCTE, dialect, nil
+	return db, openDB, version, supportsCTE, dialect, nil
 }
 
 type gormLogger struct {
 	log logrus.FieldLogger
 }
 
-func (logger gormLogger) Print(v ...any) {
-	logger.log.Debug(gorm.LogFormatter(v...)...)
+func (l *gormLogger) LogMode(logger.LogLevel) logger.Interface {
+	return l
+}
+
+func (l *gormLogger) Info(_ context.Context, msg string, args ...interface{}) {
+	l.log.Infof(msg, args...)
+}
+
+func (l *gormLogger) Warn(_ context.Context, msg string, args ...interface{}) {
+	l.log.Warnf(msg, args...)
+}
+
+func (l *gormLogger) Error(_ context.Context, msg string, args ...interface{}) {
+	l.log.Errorf(msg, args...)
+}
+
+func (l *gormLogger) Trace(context.Context, time.Time, func() (string, int64), error) {
 }
 
 func createBundle(tx *gorm.DB, bundle *common.Bundle) (*common.Bundle, error) {
@@ -1107,7 +1128,7 @@ func updateBundle(tx *gorm.DB, newBundle *common.Bundle, mask *common.BundleMask
 	}
 
 	model := &Bundle{}
-	if err := tx.Find(model, "trust_domain = ?", newModel.TrustDomain).Error; err != nil {
+	if err := tx.First(model, "trust_domain = ?", newModel.TrustDomain).Error; err != nil {
 		return nil, sqlError.Wrap(err)
 	}
 
@@ -1169,8 +1190,8 @@ func setBundle(tx *gorm.DB, b *common.Bundle) (*common.Bundle, error) {
 
 	// fetch existing or create new
 	model := &Bundle{}
-	result := tx.Find(model, "trust_domain = ?", newModel.TrustDomain)
-	if result.RecordNotFound() {
+	result := tx.Where("trust_domain = ?", newModel.TrustDomain).First(model)
+	if errors.Is(result.Error, gorm.ErrRecordNotFound) {
 		bundle, err := createBundle(tx, b)
 		if err != nil {
 			return nil, err
@@ -1195,8 +1216,8 @@ func appendBundle(tx *gorm.DB, b *common.Bundle) (*common.Bundle, error) {
 
 	// fetch existing or create new
 	model := &Bundle{}
-	result := tx.Find(model, "trust_domain = ?", newModel.TrustDomain)
-	if result.RecordNotFound() {
+	result := tx.Where("trust_domain = ?", newModel.TrustDomain).First(model)
+	if errors.Is(result.Error, gorm.ErrRecordNotFound) {
 		bundle, err := createBundle(tx, b)
 		if err != nil {
 			return nil, err
@@ -1230,7 +1251,7 @@ func appendBundle(tx *gorm.DB, b *common.Bundle) (*common.Bundle, error) {
 
 func deleteBundle(tx *gorm.DB, trustDomainID string, mode datastore.DeleteMode) error {
 	model := new(Bundle)
-	if err := tx.Find(model, "trust_domain = ?", trustDomainID).Error; err != nil {
+	if err := tx.First(model, "trust_domain = ?", trustDomainID).Error; err != nil {
 		return sqlError.Wrap(err)
 	}
 
@@ -1244,18 +1265,25 @@ func deleteBundle(tx *gorm.DB, trustDomainID string, mode datastore.DeleteMode) 
 	if entriesCount > 0 {
 		switch mode {
 		case datastore.Delete:
-			// TODO: figure out how to do this gracefully with GORM.
-			if err := tx.Exec(bindVars(tx, `DELETE FROM registered_entries WHERE id in (
-				SELECT
-					registered_entry_id
-				FROM
-					federated_registration_entries
-				WHERE
-					bundle_id = ?)`), model.ID).Error; err != nil {
+			// TODO: add unit test to cover cases where we have another bundles associated to the same entry
+			// Load all associated entries
+			associatedEntries := []RegisteredEntry{}
+			if err := entriesAssociation.Find(&associatedEntries); err != nil {
 				return sqlError.Wrap(err)
 			}
+
+			// Delete bundle with associations
+			if err := tx.Select("FederatedEntries").Delete(model).Error; err != nil {
+				return sqlError.Wrap(err)
+			}
+
+			// Now we can delete all entries
+			if err := tx.Select("Selectors").Delete(associatedEntries).Error; err != nil {
+				return sqlError.Wrap(err)
+			}
+
 		case datastore.Dissociate:
-			if err := entriesAssociation.Clear().Error; err != nil {
+			if err := entriesAssociation.Clear(); err != nil {
 				return sqlError.Wrap(err)
 			}
 		default:
@@ -1273,7 +1301,7 @@ func deleteBundle(tx *gorm.DB, trustDomainID string, mode datastore.DeleteMode) 
 // fetchBundle returns the bundle matching the specified Trust Domain.
 func fetchBundle(tx *gorm.DB, trustDomainID string) (*common.Bundle, error) {
 	model := new(Bundle)
-	err := tx.Find(model, "trust_domain = ?", trustDomainID).Error
+	err := tx.First(model, "trust_domain = ?", trustDomainID).Error
 	switch {
 	case errors.Is(err, gorm.ErrRecordNotFound):
 		return nil, nil
@@ -1293,7 +1321,8 @@ func fetchBundle(tx *gorm.DB, trustDomainID string) (*common.Bundle, error) {
 func countBundles(tx *gorm.DB) (int32, error) {
 	tx = tx.Model(&Bundle{})
 
-	var count int
+	// TODO: it can cause a pression error.. may we update count to return int64?
+	var count int64
 	if err := tx.Count(&count).Error; err != nil {
 		return 0, sqlError.Wrap(err)
 	}
@@ -1551,7 +1580,7 @@ func revokeJWTKey(tx *gorm.DB, trustDomainID string, authorityID string) (*commo
 
 func getBundle(tx *gorm.DB, trustDomainID string) (*common.Bundle, error) {
 	model := &Bundle{}
-	if err := tx.Find(model, "trust_domain = ?", trustDomainID).Error; err != nil {
+	if err := tx.First(model, "trust_domain = ?", trustDomainID).Error; err != nil {
 		return nil, sqlError.Wrap(err)
 	}
 
@@ -1583,7 +1612,7 @@ func createAttestedNode(tx *gorm.DB, node *common.AttestedNode) (*common.Atteste
 
 func fetchAttestedNode(tx *gorm.DB, spiffeID string) (*common.AttestedNode, error) {
 	var model AttestedNode
-	err := tx.Find(&model, "spiffe_id = ?", spiffeID).Error
+	err := tx.First(&model, "spiffe_id = ?", spiffeID).Error
 	switch {
 	case errors.Is(err, gorm.ErrRecordNotFound):
 		return nil, nil
@@ -1594,7 +1623,8 @@ func fetchAttestedNode(tx *gorm.DB, spiffeID string) (*common.AttestedNode, erro
 }
 
 func countAttestedNodes(tx *gorm.DB) (int32, error) {
-	var count int
+	// TODO: possible pression error must we update all counters to return int64?
+	var count int64
 	if err := tx.Model(&AttestedNode{}).Count(&count).Error; err != nil {
 		return 0, sqlError.Wrap(err)
 	}
@@ -1948,6 +1978,7 @@ func buildListAttestedNodesQueryCTE(req *datastore.ListAttestedNodesRequest, dbT
 	 	    node_resolver_map_entries nr       
 	    ON
 	        nr.spiffe_id=filtered_nodes.spiffe_id
+	    ORDER BY nr.id ASC
 	)
 `)
 	}
@@ -2240,7 +2271,7 @@ FROM attested_node_entries N
 
 func updateAttestedNode(tx *gorm.DB, n *common.AttestedNode, mask *common.AttestedNodeMask) (*common.AttestedNode, error) {
 	var model AttestedNode
-	if err := tx.Find(&model, "spiffe_id = ?", n.SpiffeId).Error; err != nil {
+	if err := tx.First(&model, "spiffe_id = ?", n.SpiffeId).Error; err != nil {
 		return nil, sqlError.Wrap(err)
 	}
 
@@ -2282,7 +2313,7 @@ func deleteAttestedNodeAndSelectors(tx *gorm.DB, spiffeID string) (*common.Attes
 		return nil, sqlError.Wrap(err)
 	}
 
-	if err := tx.Find(&nodeModel, "spiffe_id = ?", spiffeID).Error; err != nil {
+	if err := tx.First(&nodeModel, "spiffe_id = ?", spiffeID).Error; err != nil {
 		return nil, sqlError.Wrap(err)
 	}
 
@@ -2315,17 +2346,24 @@ func setNodeSelectors(tx *gorm.DB, spiffeID string, selectors []*common.Selector
 		}
 	}
 
+	// No selectors to add
+	if len(selectors) == 0 {
+		return nil
+	}
+
+	var models []*NodeSelector
 	for _, selector := range selectors {
-		model := &NodeSelector{
+		models = append(models, &NodeSelector{
 			SpiffeID: spiffeID,
 			Type:     selector.Type,
 			Value:    selector.Value,
-		}
-		if err := tx.Create(model).Error; err != nil {
-			return sqlError.Wrap(err)
-		}
+		})
 	}
 
+	// Create all selectors in the same insert
+	if err := tx.Create(models).Error; err != nil {
+		return sqlError.Wrap(err)
+	}
 	return nil
 }
 
@@ -2452,7 +2490,7 @@ func createRegistrationEntry(tx *gorm.DB, entry *common.RegistrationEntry) (*com
 		return nil, err
 	}
 
-	if err := tx.Model(&newRegisteredEntry).Association("FederatesWith").Append(federatesWith).Error; err != nil {
+	if err := tx.Model(&newRegisteredEntry).Association("FederatesWith").Append(federatesWith); err != nil {
 		return nil, err
 	}
 
@@ -3874,7 +3912,7 @@ func applyPagination(p *datastore.Pagination, entryTx *gorm.DB) (*gorm.DB, error
 	if p.PageSize == 0 {
 		return nil, status.Error(codes.InvalidArgument, "cannot paginate with pagesize = 0")
 	}
-	entryTx = entryTx.Order("id asc").Limit(p.PageSize)
+	entryTx = entryTx.Order("id asc").Limit(int(p.PageSize))
 
 	if len(p.Token) > 0 {
 		id, err := strconv.ParseUint(p.Token, 10, 32)
@@ -3893,7 +3931,7 @@ func updateRegistrationEntry(tx *gorm.DB, e *common.RegistrationEntry, mask *com
 
 	// Get the existing entry
 	entry := RegisteredEntry{}
-	if err := tx.Find(&entry, "entry_id = ?", e.EntryId).Error; err != nil {
+	if err := tx.First(&entry, "entry_id = ?", e.EntryId).Error; err != nil {
 		return nil, sqlError.Wrap(err)
 	}
 	if mask == nil || mask.StoreSvid {
@@ -3977,7 +4015,7 @@ func updateRegistrationEntry(tx *gorm.DB, e *common.RegistrationEntry, mask *com
 			return nil, err
 		}
 
-		if err := tx.Model(&entry).Association("FederatesWith").Replace(federatesWith).Error; err != nil {
+		if err := tx.Model(&entry).Association("FederatesWith").Replace(federatesWith); err != nil {
 			return nil, err
 		}
 		// The FederatesWith field in entry is filled in by the call to modelToEntry below
@@ -3993,7 +4031,7 @@ func updateRegistrationEntry(tx *gorm.DB, e *common.RegistrationEntry, mask *com
 
 func deleteRegistrationEntry(tx *gorm.DB, entryID string) (*common.RegistrationEntry, error) {
 	entry := RegisteredEntry{}
-	if err := tx.Find(&entry, "entry_id = ?", entryID).Error; err != nil {
+	if err := tx.First(&entry, "entry_id = ?", entryID).Error; err != nil {
 		return nil, sqlError.Wrap(err)
 	}
 
@@ -4011,12 +4049,8 @@ func deleteRegistrationEntry(tx *gorm.DB, entryID string) (*common.RegistrationE
 }
 
 func deleteRegistrationEntrySupport(tx *gorm.DB, entry RegisteredEntry) error {
-	if err := tx.Model(&entry).Association("FederatesWith").Clear().Error; err != nil {
+	if err := tx.Model(&entry).Association("FederatesWith").Clear(); err != nil {
 		return err
-	}
-
-	if err := tx.Delete(&entry).Error; err != nil {
-		return sqlError.Wrap(err)
 	}
 
 	// Delete existing selectors
@@ -4026,6 +4060,11 @@ func deleteRegistrationEntrySupport(tx *gorm.DB, entry RegisteredEntry) error {
 
 	// Delete existing dns_names
 	if err := tx.Exec("DELETE FROM dns_names WHERE registered_entry_id = ?", entry.ID).Error; err != nil {
+		return sqlError.Wrap(err)
+	}
+
+	// Delete Entries at the end, may we add cascade instead?
+	if err := tx.Delete(&entry).Error; err != nil {
 		return sqlError.Wrap(err)
 	}
 
@@ -4137,7 +4176,7 @@ func createJoinToken(tx *gorm.DB, token *datastore.JoinToken) error {
 
 func fetchJoinToken(tx *gorm.DB, token string) (*datastore.JoinToken, error) {
 	var model JoinToken
-	err := tx.Find(&model, "token = ?", token).Error
+	err := tx.First(&model, "token = ?", token).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	} else if err != nil {
@@ -4149,7 +4188,7 @@ func fetchJoinToken(tx *gorm.DB, token string) (*datastore.JoinToken, error) {
 
 func deleteJoinToken(tx *gorm.DB, token string) error {
 	var model JoinToken
-	if err := tx.Find(&model, "token = ?", token).Error; err != nil {
+	if err := tx.First(&model, "token = ?", token).Error; err != nil {
 		return sqlError.Wrap(err)
 	}
 
@@ -4196,7 +4235,7 @@ func createFederationRelationship(tx *gorm.DB, fr *datastore.FederationRelations
 
 func deleteFederationRelationship(tx *gorm.DB, trustDomain spiffeid.TrustDomain) error {
 	model := new(FederatedTrustDomain)
-	if err := tx.Find(model, "trust_domain = ?", trustDomain.Name()).Error; err != nil {
+	if err := tx.First(model, "trust_domain = ?", trustDomain.Name()).Error; err != nil {
 		return sqlError.Wrap(err)
 	}
 	if err := tx.Delete(model).Error; err != nil {
@@ -4207,7 +4246,7 @@ func deleteFederationRelationship(tx *gorm.DB, trustDomain spiffeid.TrustDomain)
 
 func fetchFederationRelationship(tx *gorm.DB, trustDomain spiffeid.TrustDomain) (*datastore.FederationRelationship, error) {
 	var model FederatedTrustDomain
-	err := tx.Find(&model, "trust_domain = ?", trustDomain.Name()).Error
+	err := tx.First(&model, "trust_domain = ?", trustDomain.Name()).Error
 	switch {
 	case errors.Is(err, gorm.ErrRecordNotFound):
 		return nil, nil
@@ -4224,9 +4263,13 @@ func listFederationRelationships(tx *gorm.DB, req *datastore.ListFederationRelat
 		return nil, status.Error(codes.InvalidArgument, "cannot paginate with pagesize = 0")
 	}
 
+	// Before applying pagination, create a copy of DB to prevent filtering
+	cleanTx := tx
+
 	p := req.Pagination
 	var err error
 	if p != nil {
+		// TODO: may we refactor to use Scopes? https://gorm.io/docs/scopes.html
 		tx, err = applyPagination(p, tx)
 		if err != nil {
 			return nil, err
@@ -4253,7 +4296,7 @@ func listFederationRelationships(tx *gorm.DB, req *datastore.ListFederationRelat
 	}
 	for _, model := range federationRelationships {
 		model := model // alias the loop variable since we pass it by reference below
-		federationRelationship, err := modelToFederationRelationship(tx, &model)
+		federationRelationship, err := modelToFederationRelationship(cleanTx, &model)
 		if err != nil {
 			return nil, err
 		}
@@ -4266,7 +4309,7 @@ func listFederationRelationships(tx *gorm.DB, req *datastore.ListFederationRelat
 
 func updateFederationRelationship(tx *gorm.DB, fr *datastore.FederationRelationship, mask *types.FederationRelationshipMask) (*datastore.FederationRelationship, error) {
 	var model FederatedTrustDomain
-	err := tx.Find(&model, "trust_domain = ?", fr.TrustDomain.Name()).Error
+	err := tx.First(&model, "trust_domain = ?", fr.TrustDomain.Name()).Error
 	if err != nil {
 		return nil, fmt.Errorf("unable to fetch federation relationship: %w", err)
 	}
@@ -4483,7 +4526,9 @@ func bundleToModel(pb *common.Bundle) (*Bundle, error) {
 
 func modelToEntry(tx *gorm.DB, model RegisteredEntry) (*common.RegistrationEntry, error) {
 	var fetchedSelectors []*Selector
-	if err := tx.Model(&model).Related(&fetchedSelectors).Error; err != nil {
+
+	// if err := tx.Model(&model).Related(&fetchedSelectors).Error; err != nil {
+	if err := tx.Model(&model).Association("Selectors").Find(&fetchedSelectors); err != nil {
 		return nil, sqlError.Wrap(err)
 	}
 
@@ -4496,7 +4541,8 @@ func modelToEntry(tx *gorm.DB, model RegisteredEntry) (*common.RegistrationEntry
 	}
 
 	var fetchedDNSs []*DNSName
-	if err := tx.Model(&model).Related(&fetchedDNSs).Order("registered_entry_id ASC").Error; err != nil {
+	if err := tx.Model(&model).Association("DNSList").Find(&fetchedDNSs); err != nil {
+		// if err := tx.Model(&model).Related(&fetchedDNSs).Order("registered_entry_id ASC").Error; err != nil {
 		return nil, sqlError.Wrap(err)
 	}
 
@@ -4509,7 +4555,7 @@ func modelToEntry(tx *gorm.DB, model RegisteredEntry) (*common.RegistrationEntry
 	}
 
 	var fetchedBundles []*Bundle
-	if err := tx.Model(&model).Association("FederatesWith").Find(&fetchedBundles).Error; err != nil {
+	if err := tx.Model(&model).Association("FederatesWith").Find(&fetchedBundles); err != nil {
 		return nil, sqlError.Wrap(err)
 	}
 
@@ -4601,14 +4647,16 @@ func makeFederatesWith(tx *gorm.DB, ids []string) ([]*Bundle, error) {
 	return bundles, nil
 }
 
-func bindVars(db *gorm.DB, query string) string {
-	dialect := db.Dialect()
-	if dialect.BindVar(1) == "?" {
-		return query
-	}
+// TODO:  this function is used always with a single parameter, looks like this is
+// no longer required?
+// func bindVars(db *gorm.DB, query string) string {
+// dialect := db.Dialect()
+// if dialect.BindVar(1) == "?" {
+// return query
+// }
 
-	return bindVarsFn(dialect.BindVar, query)
-}
+// return bindVarsFn(dialect.BindVar, query)
+// }
 
 func bindVarsFn(fn func(int) string, query string) string {
 	var buf bytes.Buffer
@@ -4669,10 +4717,13 @@ func getConnectionString(cfg *configuration, isReadOnly bool) string {
 }
 
 func queryVersion(gormDB *gorm.DB, query string) (string, error) {
-	db := gormDB.DB()
-	if db == nil {
-		return "", sqlError.New("unable to get raw database object")
+	db, err := gormDB.DB()
+	if err != nil {
+		return "", sqlError.Wrap(err)
 	}
+	// if db == nil {
+	// return "", sqlError.New("unable to get raw database object")
+	// }
 
 	var version string
 	if err := db.QueryRow(query).Scan(&version); err != nil {
@@ -4697,7 +4748,7 @@ func nullableUnixTimeToDBTime(unixTime int64) *time.Time {
 }
 
 func lookupSimilarEntry(ctx context.Context, db *sqlDB, tx *gorm.DB, entry *common.RegistrationEntry) (*common.RegistrationEntry, error) {
-	resp, err := listRegistrationEntriesOnce(ctx, tx.CommonDB().(queryContext), db.databaseType, db.supportsCTE, &datastore.ListRegistrationEntriesRequest{
+	resp, err := listRegistrationEntriesOnce(ctx, tx.ConnPool.(queryContext), db.databaseType, db.supportsCTE, &datastore.ListRegistrationEntriesRequest{
 		BySpiffeID: entry.SpiffeId,
 		ByParentID: entry.ParentId,
 		BySelectors: &datastore.BySelectors{

@@ -129,6 +129,43 @@ var (
 			CREATE INDEX idx_federated_registration_entries_registered_entry_id ON "federated_registration_entries"(registered_entry_id) ;
 			COMMIT;
 			`,
+		24: `
+			PRAGMA foreign_keys=OFF;
+			BEGIN TRANSACTION;
+			CREATE TABLE IF NOT EXISTS "bundles" ("id" integer,"created_at" datetime,"updated_at" datetime,"trust_domain" text NOT NULL,"data" blob,PRIMARY KEY ("id"));
+			INSERT INTO bundles VALUES(1,'2023-12-29 13:43:44.885176-03:00','2023-12-29 13:43:44.917521-03:00','spiffe://example.org',X'0a147370696666653a2f2f6578616d706c652e6f726712df030adc03308201d83082015ea0030201020214449db4c88cda977653f4d5e4770aec9b4b1e970c300a06082a8648ce3d040304301e310b3009060355040613025553310f300d060355040a0c06535049464645301e170d3233303531353032303530365a170d3238303531333032303530365a301e310b3009060355040613025553310f300d060355040a0c065350494646453076301006072a8648ce3d020106052b8104002203620004f57073b72f16fdec785ebd117735018227bfa2475a51385e485d0f42f540693b1768fd49ef2bf40e195ac38e48ec2bfd1cfdb51ce98cc48959d177aab0e97db0ce47e7b1c1416bb46c83577f0e2375e1dd079be4d57c8dc81410c5e5294b1867a35d305b301d0603551d0e04160414928ae360c6aaa7cf6aff8d1716b0046aa61c10ff300f0603551d130101ff040530030101ff300e0603551d0f0101ff04040302010630190603551d1104123010860e7370696666653a2f2f6c6f63616c300a06082a8648ce3d0403040368003065023100e7843c85f844778a95c9cc1b2cdcce9bf1d0ae9d67d7e6b6c5cf3c894d37e8530f6a7711d4f2ea82c3833df5b2b6d75102300a2287548b879888c6bdf88dab55b8fc80ec490059f484b2c4177403997b463e9011b3da82f8a6e29254eee45a6293641a85010a5b3059301306072a8648ce3d020106082a8648ce3d03010703420004df6f1f45438786cd90d36b5ef941c20f8d7ef816cd7c6ffecaa7b47a44c83a78ca2dc4b7b3b97ede334b7cde41dffb6d4c104e413a1f7206c6c5c4e93468098a12206757686537564f6b7a414935744944327164514b315057774d6271745736435718c091c1ac062801');
+			CREATE TABLE IF NOT EXISTS "registered_entries" ("id" integer,"created_at" datetime,"updated_at" datetime,"entry_id" text,"spiffe_id" text,"parent_id" text,"ttl" integer,"admin" numeric,"downstream" numeric,"expiry" integer,"revision_number" integer,"store_svid" numeric,"hint" text,"jwt_svid_ttl" integer,PRIMARY KEY ("id"));
+			CREATE TABLE IF NOT EXISTS "federated_registration_entries" ("registered_entry_id" integer,"bundle_id" integer,PRIMARY KEY ("registered_entry_id","bundle_id"),CONSTRAINT "fk_federated_registration_entries_bundle" FOREIGN KEY ("bundle_id") REFERENCES "bundles"("id"),CONSTRAINT "fk_federated_registration_entries_registered_entry" FOREIGN KEY ("registered_entry_id") REFERENCES "registered_entries"("id"));
+			CREATE TABLE IF NOT EXISTS "attested_node_entries" ("id" integer,"created_at" datetime,"updated_at" datetime,"spiffe_id" text,"data_type" text,"serial_number" text,"expires_at" datetime,"new_serial_number" text,"new_expires_at" datetime,"can_reattest" numeric,PRIMARY KEY ("id"));
+			CREATE TABLE IF NOT EXISTS "attested_node_entries_events" ("id" integer,"created_at" datetime,"updated_at" datetime,"spiffe_id" text,PRIMARY KEY ("id"));
+			CREATE TABLE IF NOT EXISTS "node_resolver_map_entries" ("id" integer,"created_at" datetime,"updated_at" datetime,"spiffe_id" text,"type" text,"value" text,PRIMARY KEY ("id"));
+			CREATE TABLE IF NOT EXISTS "registered_entries_events" ("id" integer,"created_at" datetime,"updated_at" datetime,"entry_id" text,PRIMARY KEY ("id"));
+			CREATE TABLE IF NOT EXISTS "join_tokens" ("id" integer,"created_at" datetime,"updated_at" datetime,"token" text,"expiry" integer,PRIMARY KEY ("id"));
+			CREATE TABLE IF NOT EXISTS "selectors" ("id" integer,"created_at" datetime,"updated_at" datetime,"registered_entry_id" integer,"type" text,"value" text,PRIMARY KEY ("id"),CONSTRAINT "fk_registered_entries_selectors" FOREIGN KEY ("registered_entry_id") REFERENCES "registered_entries"("id"));
+			CREATE TABLE IF NOT EXISTS "migrations" ("id" integer,"created_at" datetime,"updated_at" datetime,"version" integer,"code_version" text,PRIMARY KEY ("id"));
+			INSERT INTO migrations VALUES(1,'2023-12-29 13:43:44.874425-03:00','2023-12-29 13:43:44.874425-03:00',24,'1.9.0-dev-unk');
+			CREATE TABLE IF NOT EXISTS "dns_names" ("id" integer,"created_at" datetime,"updated_at" datetime,"registered_entry_id" integer,"value" text,PRIMARY KEY ("id"),CONSTRAINT "fk_registered_entries_dns_list" FOREIGN KEY ("registered_entry_id") REFERENCES "registered_entries"("id"));
+			CREATE TABLE IF NOT EXISTS "federated_trust_domains" ("id" integer,"created_at" datetime,"updated_at" datetime,"trust_domain" text NOT NULL,"bundle_endpoint_url" text,"bundle_endpoint_profile" text,"endpoint_spiffe_id" text,"implicit" numeric,PRIMARY KEY ("id"));
+			CREATE TABLE IF NOT EXISTS "ca_journals" ("id" integer,"created_at" datetime,"updated_at" datetime,"data" blob,"active_x509_authority_id" text,"active_jwt_authority_id" text,PRIMARY KEY ("id"));
+			CREATE UNIQUE INDEX "idx_bundles_trust_domain" ON "bundles"("trust_domain");
+			CREATE INDEX "idx_registered_entries_spiffe_id" ON "registered_entries"("spiffe_id");
+			CREATE UNIQUE INDEX "idx_registered_entries_entry_id" ON "registered_entries"("entry_id");
+			CREATE INDEX "idx_registered_entries_hint" ON "registered_entries"("hint");
+			CREATE INDEX "idx_registered_entries_expiry" ON "registered_entries"("expiry");
+			CREATE INDEX "idx_registered_entries_parent_id" ON "registered_entries"("parent_id");
+			CREATE INDEX "idx_attested_node_entries_expires_at" ON "attested_node_entries"("expires_at");
+			CREATE UNIQUE INDEX "idx_attested_node_entries_spiffe_id" ON "attested_node_entries"("spiffe_id");
+			CREATE UNIQUE INDEX "idx_node_resolver_map" ON "node_resolver_map_entries"("spiffe_id","type","value");
+			CREATE UNIQUE INDEX "idx_join_tokens_token" ON "join_tokens"("token");
+			CREATE INDEX "idx_selectors_type_value" ON "selectors"("type","value");
+			CREATE UNIQUE INDEX "idx_selector_entry" ON "selectors"("registered_entry_id","type","value");
+			CREATE UNIQUE INDEX "idx_dns_entry" ON "dns_names"("registered_entry_id","value");
+			CREATE UNIQUE INDEX "idx_federated_trust_domains_trust_domain" ON "federated_trust_domains"("trust_domain");
+			CREATE INDEX "idx_ca_journals_active_jwt_authority_id" ON "ca_journals"("active_jwt_authority_id");
+			CREATE INDEX "idx_ca_journals_active_x509_authority_id" ON "ca_journals"("active_x509_authority_id");
+			CREATE INDEX "idx_federated_registration_entries_registered_entry_id" ON "federated_registration_entries"("registered_entry_id");
+			COMMIT;
+		`,
 	}
 )
 

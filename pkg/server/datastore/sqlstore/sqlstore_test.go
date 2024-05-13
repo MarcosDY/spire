@@ -2886,34 +2886,38 @@ func (s *PluginSuite) testListRegistrationEntries(dataConsistency datastore.Data
 	}
 }
 
-func (s *PluginSuite) TestListRegistrationEntriesWhenCruftRowsExist() {
-	_, err := s.ds.CreateRegistrationEntry(ctx, &common.RegistrationEntry{
-		Selectors: []*common.Selector{
-			{Type: "TYPE", Value: "VALUE"},
-		},
-		SpiffeId: "SpiffeId",
-		ParentId: "ParentId",
-		DnsNames: []string{
-			"abcd.efg",
-			"somehost",
-		},
-	})
-	s.Require().NoError(err)
-
-	// This is gross. Since the bug that left selectors around has been fixed
-	// (#1191), I'm not sure how else to test this other than just sneaking in
-	// there and removing the registered_entries row.
-	res, err := s.ds.db.raw.Exec("DELETE FROM registered_entries")
-	s.Require().NoError(err)
-	rowsAffected, err := res.RowsAffected()
-	s.Require().NoError(err)
-	s.Require().Equal(int64(1), rowsAffected)
-
-	// Assert that no rows are returned.
-	resp, err := s.ds.ListRegistrationEntries(ctx, &datastore.ListRegistrationEntriesRequest{})
-	s.Require().NoError(err)
-	s.Require().Empty(resp.Entries)
-}
+// TODO: foreign keys are added... so no way to remove an entry and keep selectors around...
+// this test can no longer be exersided... commenting for now to start disccussion
+/*
+ * func (s *PluginSuite) TestListRegistrationEntriesWhenCruftRowsExist() {
+ *         _, err := s.ds.CreateRegistrationEntry(ctx, &common.RegistrationEntry{
+ *                 Selectors: []*common.Selector{
+ *                         {Type: "TYPE", Value: "VALUE"},
+ *                 },
+ *                 SpiffeId: "SpiffeId",
+ *                 ParentId: "ParentId",
+ *                 DnsNames: []string{
+ *                         "abcd.efg",
+ *                         "somehost",
+ *                 },
+ *         })
+ *         s.Require().NoError(err)
+ *
+ *         // This is gross. Since the bug that left selectors around has been fixed
+ *         // (#1191), I'm not sure how else to test this other than just sneaking in
+ *         // there and removing the registered_entries row.
+ *         res, err := s.ds.db.raw.Exec("DELETE FROM registered_entries")
+ *         s.Require().NoError(err)
+ *         rowsAffected, err := res.RowsAffected()
+ *         s.Require().NoError(err)
+ *         s.Require().Equal(int64(1), rowsAffected)
+ *
+ *         // Assert that no rows are returned.
+ *         resp, err := s.ds.ListRegistrationEntries(ctx, &datastore.ListRegistrationEntriesRequest{})
+ *         s.Require().NoError(err)
+ *         s.Require().Empty(resp.Entries)
+ * }
+ */
 
 func (s *PluginSuite) TestUpdateRegistrationEntry() {
 	entry := s.createRegistrationEntry(&common.RegistrationEntry{
@@ -4498,6 +4502,7 @@ func (s *PluginSuite) TestListFederationRelationships() {
 		EndpointSPIFFEID:      spiffeid.RequireFromString("spiffe://example-2.org/test"),
 		TrustDomainBundle:     trustDomainBundle,
 	}
+
 	_, err = s.ds.CreateFederationRelationship(ctx, fr2)
 	s.Require().NoError(err)
 
@@ -4872,6 +4877,8 @@ func (s *PluginSuite) TestMigration() {
 				prepareDB(true)
 			case 23:
 				prepareDB(true)
+			case 24:
+				prepareDB(true)
 			default:
 				t.Fatalf("no migration test added for schema version %d", schemaVersion)
 			}
@@ -5172,7 +5179,8 @@ func (s *PluginSuite) TestConfigure() {
 			require.NoError(t, err)
 			defer p.Close()
 
-			db := p.db.DB.DB()
+			db, err := p.db.DB.DB()
+			require.NoError(t, err)
 			require.Equal(t, tt.expectMaxOpenConns, db.Stats().MaxOpenConnections)
 
 			// begin many queries simultaneously
@@ -5274,6 +5282,10 @@ func wipeMySQL(t *testing.T, connString string) {
 	db, err := sql.Open("mysql", connString)
 	require.NoError(t, err)
 	defer db.Close()
+
+	// GORM create foreign keys that creates dependencies between tables
+	// we are no longer able to remove all tables in any order...
+	dropTables(t, db, []string{"federated_registration_entries", "selectors"})
 
 	rows, err := db.Query(`SELECT table_name FROM information_schema.tables WHERE table_schema = 'spire';`)
 	require.NoError(t, err)

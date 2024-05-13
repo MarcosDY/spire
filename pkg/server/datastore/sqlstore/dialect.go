@@ -1,6 +1,6 @@
 package sqlstore
 
-import "github.com/jinzhu/gorm"
+import "gorm.io/gorm"
 
 type dialect interface {
 	connect(cfg *configuration, isReadOnly bool) (db *gorm.DB, version string, supportsCTE bool, err error)

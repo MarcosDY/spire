@@ -7,10 +7,10 @@ import (
 	"strconv"
 
 	"github.com/blang/semver/v4"
-	"github.com/jinzhu/gorm"
 	"github.com/sirupsen/logrus"
 	"github.com/spiffe/spire/pkg/common/telemetry"
 	"github.com/spiffe/spire/pkg/common/version"
+	"gorm.io/gorm"
 )
 
 // Each time the database requires a migration, the "schema" version is
@@ -236,11 +236,13 @@ import (
 // | v1.9.5  |        |                                                                           |
 // |---------|        |                                                                           |
 // | v1.9.6  |        |                                                                           |
+// |*********|********|***************************************************************************|
+// | v1.10.0 | 24     | Migrate GORM v2                                                           |
 // ================================================================================================
 
 const (
 	// the latest schema version of the database in the code
-	latestSchemaVersion = 23
+	latestSchemaVersion = 24
 
 	// lastMinorReleaseSchemaVersion is the schema version supported by the
 	// last minor release. When the migrations are opportunistically pruned
@@ -260,7 +262,9 @@ func migrateDB(db *gorm.DB, dbType string, disableMigration bool, log logrus.Fie
 		return sqlError.New("current migration code not compatible with current release version")
 	}
 
-	isNew := !db.HasTable(&Migration{})
+	migrator := db.Migrator()
+
+	isNew := !migrator.HasTable(&Migration{})
 	if err := db.Error; err != nil {
 		return sqlError.Wrap(err)
 	}
@@ -270,7 +274,7 @@ func migrateDB(db *gorm.DB, dbType string, disableMigration bool, log logrus.Fie
 	}
 
 	// ensure migrations table exists so we can check versioning in all cases
-	if err := db.AutoMigrate(&Migration{}).Error; err != nil {
+	if err := db.AutoMigrate(&Migration{}); err != nil {
 		return sqlError.Wrap(err)
 	}
 
@@ -343,6 +347,7 @@ func migrateDB(db *gorm.DB, dbType string, disableMigration bool, log logrus.Fie
 			tx.Rollback()
 			return err
 		}
+		log.WithField("next_version", schemaVersion).Info("----- Next version")
 		if err := tx.Commit().Error; err != nil {
 			return sqlError.Wrap(err)
 		}
@@ -405,7 +410,7 @@ func initDB(db *gorm.DB, dbType string, log logrus.FieldLogger) (err error) {
 		CAJournal{},
 	}
 
-	if err := tableOptionsForDialect(tx, dbType).AutoMigrate(tables...).Error; err != nil {
+	if err := tableOptionsForDialect(tx, dbType).AutoMigrate(tables...); err != nil {
 		tx.Rollback()
 		return sqlError.Wrap(err)
 	}
@@ -443,10 +448,19 @@ func migrateVersion(tx *gorm.DB, currVersion int, log logrus.FieldLogger) (versi
 	log.WithField(telemetry.VersionInfo, currVersion).Info("Migrating version")
 
 	nextVersion := currVersion + 1
-	if err := tx.Model(&Migration{}).Updates(Migration{
+	// Updating always migration row with ID 1
+	migrationRow := new(Migration)
+	if err := tx.First(migrationRow).Error; err != nil {
+		return 0, sqlError.Wrap(err)
+	}
+
+	// TODO: ALL ------ logs must be removed and are only for testings
+	log.Info("------ Before update")
+	if err := tx.Model(migrationRow).Updates(Migration{
 		Version:     nextVersion,
 		CodeVersion: version.Version(),
 	}).Error; err != nil {
+		log.WithError(err).Info("------ failed ot update")
 		return 0, sqlError.Wrap(err)
 	}
 
@@ -464,10 +478,15 @@ func migrateVersion(tx *gorm.DB, currVersion int, log logrus.FieldLogger) (versi
 	case 22:
 		// TODO: remove this migration in 1.9.0
 		err = migrateToV23(tx)
+
+	case 23:
+		// TODO: remove this migration in 1.11.0
+		err = migrateToV24(tx, log)
 	default:
 		err = sqlError.New("no migration support for unknown schema version %d", currVersion)
 	}
 	if err != nil {
+		log.WithError(err).Info("----- Failed to migrate!!!!")
 		return 0, err
 	}
 
@@ -475,19 +494,44 @@ func migrateVersion(tx *gorm.DB, currVersion int, log logrus.FieldLogger) (versi
 }
 
 func migrateToV22(tx *gorm.DB) error {
-	if err := tx.AutoMigrate(&RegisteredEntryEvent{}, &AttestedNodeEvent{}).Error; err != nil {
+	if err := tx.AutoMigrate(&RegisteredEntryEvent{}, &AttestedNodeEvent{}); err != nil {
 		return sqlError.Wrap(err)
 	}
 	return nil
 }
 
 func migrateToV23(tx *gorm.DB) error {
-	if err := tx.AutoMigrate(&CAJournal{}).Error; err != nil {
+	if err := tx.AutoMigrate(&CAJournal{}); err != nil {
 		return sqlError.Wrap(err)
 	}
 	return nil
 }
 
+func migrateToV24(tx *gorm.DB, log logrus.FieldLogger) error {
+	log.Info("----- Inside migrate 24")
+	allModels := []any{
+		&Bundle{},
+		&AttestedNode{},
+		&AttestedNodeEvent{},
+		&NodeSelector{},
+		&RegisteredEntry{},
+		&RegisteredEntryEvent{},
+		&JoinToken{},
+		&Selector{},
+		&Migration{},
+		&DNSName{},
+		&FederatedTrustDomain{},
+		&Migration{},
+		&CAJournal{},
+	}
+	if err := tx.AutoMigrate(allModels...); err != nil {
+		log.WithError(err).Info("----- Failed to automigrate v24")
+		return sqlError.Wrap(err)
+	}
+	return nil
+}
+
+// TODO: verify this...
 func addFederatedRegistrationEntriesRegisteredEntryIDIndex(tx *gorm.DB) error {
 	// GORM creates the federated_registration_entries implicitly with a primary
 	// key tuple (bundle_id, registered_entry_id). Unfortunately, MySQL5 does
@@ -495,8 +539,13 @@ func addFederatedRegistrationEntriesRegisteredEntryIDIndex(tx *gorm.DB) error {
 	// during registration entry list operations. We can't use gorm AutoMigrate
 	// to introduce the index since there is no explicit struct to add tags to
 	// so we have to manually create it.
-	if err := tx.Table("federated_registration_entries").AddIndex("idx_federated_registration_entries_registered_entry_id", "registered_entry_id").Error; err != nil {
+
+	if err := tx.Migrator().AutoMigrate(&FederatedRegistrationEntries{}); err != nil {
 		return sqlError.Wrap(err)
 	}
+	if err := tx.SetupJoinTable(&Bundle{}, "FederatedEntries", &FederatedRegistrationEntries{}); err != nil {
+		return sqlError.Wrap(err)
+	}
+
 	return nil
 }
