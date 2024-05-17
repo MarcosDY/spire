@@ -518,11 +518,10 @@ func migrateToV24(tx *gorm.DB, log logrus.FieldLogger) error {
 		&RegisteredEntryEvent{},
 		&JoinToken{},
 		&Selector{},
-		&Migration{},
 		&DNSName{},
 		&FederatedTrustDomain{},
-		&Migration{},
 		&CAJournal{},
+		&Migration{},
 	}
 	if err := tx.AutoMigrate(allModels...); err != nil {
 		log.WithError(err).Info("----- Failed to automigrate v24")
