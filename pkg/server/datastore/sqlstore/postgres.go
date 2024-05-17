@@ -6,13 +6,9 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
-
-	// _ "github.com/lib/pq" // Driver is required
 	"github.com/spiffe/spire/pkg/server/datastore/sqldriver/awsrds"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
-	// gorm postgres dialect init registration
-	// _ "github.com/jinzhu/gorm/dialects/postgres"
 )
 
 type postgresDB struct{}
@@ -47,10 +43,14 @@ func (p postgresDB) connect(cfg *configuration, isReadOnly bool) (db *gorm.DB, v
 		if err != nil {
 			return nil, "", false, err
 		}
-		db, errOpen = gorm.Open(awsrds.PostgresDriverName, dsn)
+
+		db, errOpen = gorm.Open(postgres.New(postgres.Config{
+			DSN:        dsn,
+			DriverName: awsrds.PostgresDriverName,
+		}))
 	// db, errOpen = gorm.Open(postgres.Open(dsn))
 	default:
-		db, errOpen = gorm.Open(postgres.Open(dsn))
+		db, errOpen = gorm.Open(postgres.Open(connString))
 	}
 
 	if errOpen != nil {

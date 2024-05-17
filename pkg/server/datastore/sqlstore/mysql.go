@@ -32,7 +32,7 @@ func (my mysqlDB) connect(cfg *configuration, isReadOnly bool) (db *gorm.DB, ver
 		return nil, "", false, err
 	}
 
-	var errOpen error
+	var dialector gorm.Dialector
 	switch {
 	case cfg.databaseTypeConfig.AWSMySQL != nil:
 		awsrdsConfig := &awsrds.Config{
@@ -49,16 +49,19 @@ func (my mysqlDB) connect(cfg *configuration, isReadOnly bool) (db *gorm.DB, ver
 		if err != nil {
 			return nil, "", false, err
 		}
-		// TODO: resolve thiS!!!!!!!!
-		db, errOpen = gorm.Open(awsrds.MySQLDriverName, dsn)
-	default:
-		dialector := gorm_mysql.New(gorm_mysql.Config{
-			DriverName: "mysql",
-			DSN:        connString,
+
+		dialector = gorm_mysql.New(gorm_mysql.Config{
+			DriverName: awsrds.MySQLDriverName,
+			DSN:        dsn,
 		})
-		db, errOpen = gorm.Open(dialector)
+	default:
+		dialector = gorm_mysql.New(gorm_mysql.Config{
+			DriverName: "mysql",
+			DSN:        mysqlConfig.FormatDSN(),
+		})
 	}
 
+	db, errOpen := gorm.Open(dialector)
 	if errOpen != nil {
 		return nil, "", false, errOpen
 	}

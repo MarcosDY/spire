@@ -13,7 +13,6 @@ import (
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/jackc/pgx/v5"
-	"github.com/jinzhu/gorm"
 	"github.com/lib/pq"
 )
 
@@ -154,12 +153,6 @@ func escapeSpecialCharsPostgres(s string) string {
 }
 
 func registerPostgres() {
-	d, ok := gorm.GetDialect("postgres")
-	if !ok {
-		panic("could not find postgres dialect")
-	}
-
-	gorm.RegisterDialect(PostgresDriverName, d)
 	sql.Register(PostgresDriverName, &sqlDriverWrapper{
 		sqlDriver:    &pq.Driver{},
 		tokenBuilder: &awsTokenBuilder{},
@@ -168,12 +161,6 @@ func registerPostgres() {
 }
 
 func registerMySQL() {
-	d, ok := gorm.GetDialect("mysql")
-	if !ok {
-		panic("could not find mysql dialect")
-	}
-
-	gorm.RegisterDialect(MySQLDriverName, d)
 	sql.Register(MySQLDriverName, &sqlDriverWrapper{
 		sqlDriver:    &mysql.MySQLDriver{},
 		tokenBuilder: &awsTokenBuilder{},

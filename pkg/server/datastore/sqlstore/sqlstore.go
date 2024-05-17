@@ -4791,7 +4791,7 @@ func createCAJournal(tx *gorm.DB, caJournal *datastore.CAJournal) (*datastore.CA
 
 func fetchCAJournal(tx *gorm.DB, activeX509AuthorityID string) (*datastore.CAJournal, error) {
 	var model CAJournal
-	err := tx.Find(&model, "active_x509_authority_id = ?", activeX509AuthorityID).Error
+	err := tx.First(&model, "active_x509_authority_id = ?", activeX509AuthorityID).Error
 	switch {
 	case errors.Is(err, gorm.ErrRecordNotFound):
 		return nil, nil
@@ -4817,7 +4817,7 @@ func listCAJournalsForTesting(tx *gorm.DB) (caJournals []*datastore.CAJournal, e
 
 func updateCAJournal(tx *gorm.DB, caJournal *datastore.CAJournal) (*datastore.CAJournal, error) {
 	var model CAJournal
-	if err := tx.Find(&model, "id = ?", caJournal.ID).Error; err != nil {
+	if err := tx.First(&model, "id = ?", caJournal.ID).Error; err != nil {
 		return nil, sqlError.Wrap(err)
 	}
 
@@ -4841,7 +4841,7 @@ func validateCAJournal(caJournal *datastore.CAJournal) error {
 
 func deleteCAJournal(tx *gorm.DB, caJournalID uint) error {
 	model := new(CAJournal)
-	if err := tx.Find(model, "id = ?", caJournalID).Error; err != nil {
+	if err := tx.First(model, "id = ?", caJournalID).Error; err != nil {
 		return sqlError.Wrap(err)
 	}
 	if err := tx.Delete(model).Error; err != nil {
