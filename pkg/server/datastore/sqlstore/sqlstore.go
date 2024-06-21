@@ -1777,7 +1777,7 @@ func pruneAttestedNodesEvents(tx *gorm.DB, olderThan time.Duration) error {
 
 func fetchAttestedNodeEvent(db *sqlDB, eventID uint) (*datastore.AttestedNodeEvent, error) {
 	event := AttestedNodeEvent{}
-	if err := db.Find(&event, "id = ?", eventID).Error; err != nil {
+	if err := db.First(&event, "id = ?", eventID).Error; err != nil {
 		return nil, sqlError.Wrap(err)
 	}
 
@@ -4111,7 +4111,7 @@ func createRegistrationEntryEvent(tx *gorm.DB, event *datastore.RegistrationEntr
 
 func fetchRegistrationEntryEvent(db *sqlDB, eventID uint) (*datastore.RegistrationEntryEvent, error) {
 	event := RegisteredEntryEvent{}
-	if err := db.Find(&event, "id = ?", eventID).Error; err != nil {
+	if err := db.First(&event, "id = ?", eventID).Error; err != nil {
 		return nil, sqlError.Wrap(err)
 	}
 
@@ -4791,7 +4791,7 @@ func createCAJournal(tx *gorm.DB, caJournal *datastore.CAJournal) (*datastore.CA
 
 func fetchCAJournal(tx *gorm.DB, activeX509AuthorityID string) (*datastore.CAJournal, error) {
 	var model CAJournal
-	err := tx.First(&model, "active_x509_authority_id = ?", activeX509AuthorityID).Error
+	err := tx.Last(&model, "active_x509_authority_id = ?", activeX509AuthorityID).Error
 	switch {
 	case errors.Is(err, gorm.ErrRecordNotFound):
 		return nil, nil
