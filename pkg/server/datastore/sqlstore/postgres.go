@@ -5,12 +5,10 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jinzhu/gorm"
-	"github.com/lib/pq"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/spiffe/spire/pkg/server/datastore/sqldriver/awsrds"
-
-	// gorm postgres dialect init registration
-	_ "github.com/jinzhu/gorm/dialects/postgres"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
 )
 
 type postgresDB struct{}
@@ -45,12 +43,18 @@ func (p postgresDB) connect(cfg *configuration, isReadOnly bool) (db *gorm.DB, v
 		if err != nil {
 			return nil, "", false, err
 		}
-		db, errOpen = gorm.Open(awsrds.PostgresDriverName, dsn)
+
+		db, errOpen = gorm.Open(postgres.New(postgres.Config{
+			DSN:        dsn,
+			DriverName: awsrds.PostgresDriverName,
+		}))
+	// db, errOpen = gorm.Open(postgres.Open(dsn))
 	default:
-		db, errOpen = gorm.Open("postgres", connString)
+		db, errOpen = gorm.Open(postgres.Open(connString))
 	}
 
 	if errOpen != nil {
+		// return nil, "", false, sqlError.Wrap(err)
 		return nil, "", false, errOpen
 	}
 
@@ -65,8 +69,8 @@ func (p postgresDB) connect(cfg *configuration, isReadOnly bool) (db *gorm.DB, v
 }
 
 func (p postgresDB) isConstraintViolation(err error) bool {
-	var e *pq.Error
+	var e *pgconn.PgError
 	ok := errors.As(err, &e)
 	// "23xxx" is the constraint violation class for PostgreSQL
-	return ok && e.Code.Class() == "23"
+	return ok && e.Code[:2] == "23"
 }

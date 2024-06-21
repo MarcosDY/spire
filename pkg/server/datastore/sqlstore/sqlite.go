@@ -8,12 +8,13 @@ import (
 	"path/filepath"
 	"runtime"
 
-	"github.com/jinzhu/gorm"
 	"github.com/mattn/go-sqlite3"
 	"github.com/sirupsen/logrus"
+	"gorm.io/gorm"
 
 	// gorm sqlite dialect init registration
-	_ "github.com/jinzhu/gorm/dialects/sqlite"
+	// _ "github.com/jinzhu/gorm/dialects/sqlite"
+	"gorm.io/driver/sqlite"
 )
 
 type sqliteDB struct {
@@ -53,7 +54,9 @@ func openSQLite3(connString string) (*gorm.DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	db, err := gorm.Open("sqlite3", embellished)
+	// TODO: may we add PrepareStmt? https://gorm.io/docs/v2_release_note.html#Prepared-Statement-Mode
+	db, err := gorm.Open(sqlite.Open(embellished), &gorm.Config{})
+	// db, err := gorm.Open("sqlite3", embellished)
 	if err != nil {
 		return nil, sqlError.Wrap(err)
 	}

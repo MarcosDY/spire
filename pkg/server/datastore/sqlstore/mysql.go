@@ -7,15 +7,17 @@ import (
 	"os"
 
 	"github.com/go-sql-driver/mysql"
-	"github.com/jinzhu/gorm"
 	"github.com/spiffe/spire/pkg/server/datastore/sqldriver/awsrds"
+	"gorm.io/gorm"
 
 	// gorm mysql `cloudsql` dialect, for GCP
 	// Cloud SQL Proxy
 	_ "github.com/GoogleCloudPlatform/cloudsql-proxy/proxy/dialers/mysql"
-	// gorm mysql dialect init registration
-	// also needed for GCP Cloud SQL Proxy
-	_ "github.com/jinzhu/gorm/dialects/mysql"
+	// TODO: is it still required?
+	// // gorm mysql dialect init registration
+	// // also needed for GCP Cloud SQL Proxy
+	// _ "gorm.io/gorm/dialects/mysql"
+	gorm_mysql "gorm.io/driver/mysql"
 )
 
 type mysqlDB struct{}
@@ -30,7 +32,7 @@ func (my mysqlDB) connect(cfg *configuration, isReadOnly bool) (db *gorm.DB, ver
 		return nil, "", false, err
 	}
 
-	var errOpen error
+	var dialector gorm.Dialector
 	switch {
 	case cfg.databaseTypeConfig.AWSMySQL != nil:
 		awsrdsConfig := &awsrds.Config{
@@ -47,11 +49,19 @@ func (my mysqlDB) connect(cfg *configuration, isReadOnly bool) (db *gorm.DB, ver
 		if err != nil {
 			return nil, "", false, err
 		}
-		db, errOpen = gorm.Open(awsrds.MySQLDriverName, dsn)
+
+		dialector = gorm_mysql.New(gorm_mysql.Config{
+			DriverName: awsrds.MySQLDriverName,
+			DSN:        dsn,
+		})
 	default:
-		db, errOpen = gorm.Open("mysql", mysqlConfig.FormatDSN())
+		dialector = gorm_mysql.New(gorm_mysql.Config{
+			DriverName: "mysql",
+			DSN:        mysqlConfig.FormatDSN(),
+		})
 	}
 
+	db, errOpen := gorm.Open(dialector)
 	if errOpen != nil {
 		return nil, "", false, errOpen
 	}
@@ -70,12 +80,16 @@ func (my mysqlDB) connect(cfg *configuration, isReadOnly bool) (db *gorm.DB, ver
 }
 
 func (my mysqlDB) supportsCTE(gormDB *gorm.DB) (bool, error) {
-	db := gormDB.DB()
+	db, err := gormDB.DB()
+	if err != nil {
+		return false, err
+	}
+
 	if db == nil {
 		return false, errors.New("unable to get raw database object")
 	}
 	var value int64
-	err := db.QueryRow("WITH a AS (SELECT 1 AS v) SELECT * FROM a;").Scan(&value)
+	err = db.QueryRow("WITH a AS (SELECT 1 AS v) SELECT * FROM a;").Scan(&value)
 	switch {
 	case err == nil:
 		return true, nil

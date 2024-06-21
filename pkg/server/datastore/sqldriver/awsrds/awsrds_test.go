@@ -11,8 +11,9 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/feature/rds/auth"
-	"github.com/jinzhu/gorm"
 	"github.com/stretchr/testify/require"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
 )
 
 const (
@@ -250,8 +251,10 @@ func TestAWSRDS(t *testing.T) {
 			require.NoError(t, err)
 
 			fakeSQLDriverWrapper.tokenBuilder = testCase.tokenProvider
-
-			db, err := gorm.Open(fakeSQLDriverName, dsn)
+			db, err := gorm.Open(postgres.New(postgres.Config{
+				DSN:        dsn,
+				DriverName: fakeSQLDriverName,
+			}))
 			if testCase.expectedError != "" {
 				require.EqualError(t, err, testCase.expectedError)
 				return
@@ -285,7 +288,10 @@ func TestCacheToken(t *testing.T) {
 	require.Empty(t, fakeSQLDriverWrapper.tokensMap[dsn])
 
 	// Calling to Open should map firstToken to the dsn.
-	db, err := gorm.Open(fakeSQLDriverName, dsn)
+	db, err := gorm.Open(postgres.New(postgres.Config{
+		DSN:        dsn,
+		DriverName: fakeSQLDriverName,
+	}))
 	require.NoError(t, err)
 	require.NotNil(t, db)
 
@@ -310,7 +316,10 @@ func TestCacheToken(t *testing.T) {
 	nowFunc = func() time.Time { return initialTime.Add(time.Second * 15) }
 
 	// Call Open again, the cached token should be used.
-	db, err = gorm.Open(fakeSQLDriverName, dsn)
+	db, err = gorm.Open(postgres.New(postgres.Config{
+		DSN:        dsn,
+		DriverName: fakeSQLDriverName,
+	}))
 	require.NoError(t, err)
 	require.NotNil(t, db)
 
@@ -333,7 +342,10 @@ func TestCacheToken(t *testing.T) {
 	nowFunc = func() time.Time { return newTime.Add(-clockSkew) }
 
 	// Call Open again, the new token should be used.
-	db, err = gorm.Open(fakeSQLDriverName, dsn)
+	db, err = gorm.Open(postgres.New(postgres.Config{
+		DSN:        dsn,
+		DriverName: fakeSQLDriverName,
+	}))
 	require.NoError(t, err)
 	require.NotNil(t, db)
 

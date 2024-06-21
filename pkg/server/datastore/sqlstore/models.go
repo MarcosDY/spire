@@ -7,7 +7,7 @@ import (
 // Model is used as a base for other models. Similar to gorm.Model without `DeletedAt`.
 // We don't want soft-delete support.
 type Model struct {
-	ID        uint `gorm:"primary_key"`
+	ID        uint `gorm:"primaryKey"`
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
@@ -16,7 +16,7 @@ type Model struct {
 type Bundle struct {
 	Model
 
-	TrustDomain string `gorm:"not null;unique_index"`
+	TrustDomain string `gorm:"not null;uniqueIndex;size:55"`
 	Data        []byte `gorm:"size:16777215"` // make MySQL to use MEDIUMBLOB (max 16MB) - doesn't affect PostgreSQL/SQLite
 
 	FederatedEntries []RegisteredEntry `gorm:"many2many:federated_registration_entries;"`
@@ -26,7 +26,7 @@ type Bundle struct {
 type AttestedNode struct {
 	Model
 
-	SpiffeID        string `gorm:"unique_index"`
+	SpiffeID        string `gorm:"uniqueIndex;size:255"`
 	DataType        string
 	SerialNumber    string
 	ExpiresAt       time.Time `gorm:"index"`
@@ -34,7 +34,10 @@ type AttestedNode struct {
 	NewExpiresAt    *time.Time
 	CanReattest     bool
 
-	Selectors []*NodeSelector
+	// TODO: this relationship is never used..
+	// there is a relationship by spiffeID, may we make spiffeID,
+	// if we want to keep this we'll need to add a foreign key.
+	// Selectors []*NodeSelector
 }
 
 // TableName gets table name of AttestedNode
@@ -46,7 +49,7 @@ func (AttestedNode) TableName() string {
 type AttestedNodeEvent struct {
 	Model
 
-	SpiffeID string
+	SpiffeID string `gorm:"size:255"`
 }
 
 // TableName gets table name for AttestedNodeEvent
@@ -57,7 +60,7 @@ func (AttestedNodeEvent) TableName() string {
 type V3AttestedNode struct {
 	Model
 
-	SpiffeID     string `gorm:"unique_index"`
+	SpiffeID     string `gorm:"uniqueIndex;size:255"`
 	DataType     string
 	SerialNumber string
 	ExpiresAt    time.Time
@@ -71,9 +74,9 @@ func (V3AttestedNode) TableName() string {
 type NodeSelector struct {
 	Model
 
-	SpiffeID string `gorm:"unique_index:idx_node_resolver_map"`
-	Type     string `gorm:"unique_index:idx_node_resolver_map"`
-	Value    string `gorm:"unique_index:idx_node_resolver_map"`
+	SpiffeID string `gorm:"uniqueIndex:idx_node_resolver_map;size:255"`
+	Type     string `gorm:"uniqueIndex:idx_node_resolver_map;size:255"`
+	Value    string `gorm:"uniqueIndex:idx_node_resolver_map;size:255"`
 }
 
 // TableName gets table name of NodeSelector
@@ -81,12 +84,17 @@ func (NodeSelector) TableName() string {
 	return "node_resolver_map_entries"
 }
 
+type FederatedRegistrationEntries struct {
+	BundleID          uint `gorm:"primaryKey"`
+	RegisteredEntryID uint `gorm:"primaryKey;index:idx_federated_registration_entries_registered_entry_id"`
+}
+
 // RegisteredEntry holds a registered entity entry
 type RegisteredEntry struct {
 	Model
 
-	EntryID  string `gorm:"unique_index"`
-	SpiffeID string `gorm:"index"`
+	EntryID  string `gorm:"uniqueIndex;size:255"`
+	SpiffeID string `gorm:"index;size:255"`
 	ParentID string `gorm:"index"`
 	// TTL of identities derived from this entry. This field represents the X509-SVID TTL of the Entry
 	TTL           int32
@@ -118,7 +126,7 @@ type RegisteredEntry struct {
 type RegisteredEntryEvent struct {
 	Model
 
-	EntryID string
+	EntryID string `gorm:"size:255"`
 }
 
 // TableName gets table name for RegisteredEntryEvent
@@ -130,24 +138,24 @@ func (RegisteredEntryEvent) TableName() string {
 type JoinToken struct {
 	Model
 
-	Token  string `gorm:"unique_index"`
+	Token  string `gorm:"uniqueIndex;size:255"`
 	Expiry int64
 }
 
 type Selector struct {
 	Model
 
-	RegisteredEntryID uint   `gorm:"unique_index:idx_selector_entry"`
-	Type              string `gorm:"unique_index:idx_selector_entry;index:idx_selectors_type_value"`
-	Value             string `gorm:"unique_index:idx_selector_entry;index:idx_selectors_type_value"`
+	RegisteredEntryID uint   `gorm:"uniqueIndex:idx_selector_entry"`
+	Type              string `gorm:"uniqueIndex:idx_selector_entry;index:idx_selectors_type_value;size:255"`
+	Value             string `gorm:"uniqueIndex:idx_selector_entry;index:idx_selectors_type_value;size:255"`
 }
 
 // DNSName holds a DNS for a registration entry
 type DNSName struct {
 	Model
 
-	RegisteredEntryID uint   `gorm:"unique_index:idx_dns_entry"`
-	Value             string `gorm:"unique_index:idx_dns_entry"`
+	RegisteredEntryID uint   `gorm:"uniqueIndex:idx_dns_entry;size:255"`
+	Value             string `gorm:"uniqueIndex:idx_dns_entry;size:255"`
 }
 
 // TableName gets table name for DNS entries
@@ -162,7 +170,7 @@ type FederatedTrustDomain struct {
 	Model
 
 	// TrustDomain is the trust domain name (e.g., "example.org") to federate with.
-	TrustDomain string `gorm:"not null;unique_index"`
+	TrustDomain string `gorm:"not null;uniqueIndex;size:255"`
 
 	// BundleEndpointURL is the URL of the SPIFFE bundle endpoint that provides the trust
 	// bundle to federate with.
