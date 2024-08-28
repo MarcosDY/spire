@@ -41,6 +41,12 @@ type UpdateEntries struct {
 	// Bundles is a set of ALL trust bundles available to the agent, keyed by trust domain
 	Bundles map[spiffeid.TrustDomain]*spiffebundle.Bundle
 
+	// TaintedX509Authorities is a set of all tainted X.509 authorities notified by the server.
+	TaintedX509Authorities []string
+
+	// TaintedJWTAuthorities is a set of all tainted JWT authorities notified by the server.
+	TaintedJWTAuthorities []string
+
 	// RegistrationEntries is a set of ALL registration entries available to the
 	// agent, keyed by registration entry id.
 	RegistrationEntries map[string]*common.RegistrationEntry
@@ -411,6 +417,10 @@ func (c *Cache) UpdateSVIDs(update *UpdateSVIDs) {
 		c.notifyBySelectorSet(notifySet)
 		clearSelectorSet(notifySet)
 	}
+}
+
+func (c *Cache) TaintX509SVIDs(context.Context, []*x509.Certificate) {
+	// This cache is going to be removed in 1.11...
 }
 
 // GetStaleEntries obtains a list of stale entries
