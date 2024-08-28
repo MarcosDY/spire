@@ -2,6 +2,7 @@ package cache
 
 import (
 	"context"
+	"crypto/x509"
 	"fmt"
 	"sort"
 	"sync"
@@ -14,6 +15,7 @@ import (
 	"github.com/spiffe/spire/pkg/agent/common/backoff"
 	"github.com/spiffe/spire/pkg/common/telemetry"
 	agentmetrics "github.com/spiffe/spire/pkg/common/telemetry/agent"
+	"github.com/spiffe/spire/pkg/common/x509util"
 	"github.com/spiffe/spire/proto/spire/common"
 )
 
@@ -481,6 +483,35 @@ func (c *LRUCache) UpdateSVIDs(update *UpdateSVIDs) {
 		c.notifyBySelectorSet(notifySet)
 		clearSelectorSet(notifySet)
 	}
+}
+
+func (c *LRUCache) TaintX509SVIDs(taintedX509Authorities []*x509.Certificate) {
+	// TOOD: add elapsed time metrics
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	start := time.Now()
+
+	taintedSVIDs := 0
+	for key, svid := range c.svids {
+		// no process already tainted or empty SVIDs
+		if svid == nil {
+			continue
+		}
+
+		if tainted := x509util.IsSignedByRoot(svid.Chain, taintedX509Authorities); tainted {
+			taintedSVIDs += 1
+			delete(c.svids, key)
+		}
+	}
+
+	// TODO: remove....
+	c.log.Debugf("******************************************************")
+	c.log.Debugf("Duration to process %d svids: %v", taintedSVIDs, time.Since(start))
+	c.log.Debugf("******************************************************")
+
+	agentmetrics.AddCacheManagerExpiredSVIDsSample(c.metrics, "", float32(taintedSVIDs))
+	c.log.WithField(telemetry.TaintedSVIDs, taintedSVIDs).Debug("Tainted X.509 SVIDs")
 }
 
 // GetStaleEntries obtains a list of stale entries
