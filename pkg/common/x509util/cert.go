@@ -75,6 +75,9 @@ func RawCertsFromCertificates(certs []*x509.Certificate) [][]byte {
 
 // IsSignedByRoot checks if the provided certificate chain is signed by one of the specified root CAs.
 func IsSignedByRoot(chain []*x509.Certificate, rootCAs []*x509.Certificate) bool {
+	if len(chain) == 0 {
+		return false
+	}
 	rootPool := x509.NewCertPool()
 	for _, x509Authority := range rootCAs {
 		rootPool.AddCert(x509Authority)

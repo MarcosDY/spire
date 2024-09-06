@@ -39,7 +39,7 @@ type SVIDCache interface {
 
 	// TaintX509SVIDs marks all SVIDs signed by a tainted X.509 authority as tainted
 	// to force their rotation.
-	TaintX509SVIDs(taintedX509Authorities []*x509.Certificate)
+	TaintX509SVIDs(ctx context.Context, taintedX509Authorities []*x509.Certificate)
 }
 
 func (m *manager) syncSVIDs(ctx context.Context) (err error) {
@@ -52,7 +52,7 @@ func (m *manager) syncSVIDs(ctx context.Context) (err error) {
 }
 
 // processTaintedAuthorities verifies if a new authority is tainted and forces rotation in all caches if required.
-func (m *manager) processTaintedAuthorities(x509Authorities []string, jwtAuthorities []string) error {
+func (m *manager) processTaintedAuthorities(ctx context.Context, x509Authorities []string, jwtAuthorities []string) error {
 	newTaintedX509Authorities := getNewItems(m.processedTaintedX509Authorities, x509Authorities)
 	if len(newTaintedX509Authorities) > 0 {
 		m.c.Log.WithField(telemetry.SubjectKeyIDs, strings.Join(newTaintedX509Authorities, ",")).
@@ -64,10 +64,10 @@ func (m *manager) processTaintedAuthorities(x509Authorities []string, jwtAuthori
 		}
 
 		// Taint all regular X.509 SVIDs
-		m.cache.TaintX509SVIDs(taintedX509Authorities)
+		m.cache.TaintX509SVIDs(ctx, taintedX509Authorities)
 
 		// Taint all SVIDStore SVIDs
-		m.svidStoreCache.TaintX509SVIDs(taintedX509Authorities)
+		m.svidStoreCache.TaintX509SVIDs(ctx, taintedX509Authorities)
 
 		// Notify rotator about new tainted authorities
 		if err := m.svid.NotifyTaintedAuthorities(taintedX509Authorities); err != nil {
@@ -98,7 +98,7 @@ func (m *manager) synchronize(ctx context.Context) (err error) {
 	}
 
 	// Process all tainted authorities. The bundle is shared between both caches using regular cache data.
-	if err := m.processTaintedAuthorities(cacheUpdate.TaintedX509Authorities, cacheUpdate.TaintedJWTAuthorities); err != nil {
+	if err := m.processTaintedAuthorities(ctx, cacheUpdate.TaintedX509Authorities, cacheUpdate.TaintedJWTAuthorities); err != nil {
 		return err
 	}
 
