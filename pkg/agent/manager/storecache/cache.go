@@ -1,6 +1,7 @@
 package storecache
 
 import (
+	"context"
 	"crypto/x509"
 	"sort"
 	"sync"
@@ -223,7 +224,7 @@ func (c *Cache) UpdateSVIDs(update *cache.UpdateSVIDs) {
 	}
 }
 
-func (c *Cache) TaintX509SVIDs(taintedX509Authorities []*x509.Certificate) {
+func (c *Cache) TaintX509SVIDs(ctx context.Context, taintedX509Authorities []*x509.Certificate) {
 	// TOOD: add elapsed time metrics
 	c.mtx.Lock()
 	defer c.mtx.Unlock()

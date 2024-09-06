@@ -485,33 +485,76 @@ func (c *LRUCache) UpdateSVIDs(update *UpdateSVIDs) {
 	}
 }
 
-func (c *LRUCache) TaintX509SVIDs(taintedX509Authorities []*x509.Certificate) {
-	// TOOD: add elapsed time metrics
+func (c *LRUCache) scheduleRotation(ctx context.Context, entriesToForce []string, taintedX509Authorities []*x509.Certificate) {
+	// TODO: move to const
+	batch := 100
+	// TODO: search const used for sync interval...
+	interval := 5 * time.Second
+
+	ticker := c.clk.Ticker(interval)
+	defer ticker.Stop()
+
+	for len(entriesToForce) > 0 {
+		processingEntries := entriesToForce[:batch]
+		c.processTaintedSVIDs(processingEntries, taintedX509Authorities)
+
+		processingEntries = processingEntries[batch:]
+		c.log.WithField(telemetry.Count, len(processingEntries)).Debug("entries to process")
+
+		select {
+		case <-ticker.C:
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+func (c *LRUCache) processTaintedSVIDs(entries []string, taintedX509Authorities []*x509.Certificate) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	start := time.Now()
-
 	taintedSVIDs := 0
+	for _, processingEntry := range entries {
+		svid, ok := c.svids[processingEntry]
+		if !ok {
+			// SVID is not longer there
+			continue
+		}
+
+		if svid == nil {
+			// no SVID stored
+			continue
+		}
+
+		if tainted := x509util.IsSignedByRoot(svid.Chain, taintedX509Authorities); tainted {
+			taintedSVIDs += 1
+			delete(c.svids, processingEntry)
+		}
+
+	}
+
+	agentmetrics.AddCacheManagerTaintedSVIDsSample(c.metrics, "", float32(taintedSVIDs))
+	c.log.WithField(telemetry.TaintedSVIDs, taintedSVIDs).Debug("Tainted X.509 SVIDs")
+}
+
+func (c *LRUCache) TaintX509SVIDs(ctx context.Context, taintedX509Authorities []*x509.Certificate) {
+	// TODO: add elapsed time metrics
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	var entriesToProcess []string
 	for key, svid := range c.svids {
 		// no process already tainted or empty SVIDs
 		if svid == nil {
 			continue
 		}
 
-		if tainted := x509util.IsSignedByRoot(svid.Chain, taintedX509Authorities); tainted {
-			taintedSVIDs += 1
-			delete(c.svids, key)
-		}
+		entriesToProcess = append(entriesToProcess, key)
 	}
 
-	// TODO: remove....
-	c.log.Debugf("******************************************************")
-	c.log.Debugf("Duration to process %d svids: %v", taintedSVIDs, time.Since(start))
-	c.log.Debugf("******************************************************")
+	go c.scheduleRotation(ctx, entriesToProcess, taintedX509Authorities)
 
-	agentmetrics.AddCacheManagerExpiredSVIDsSample(c.metrics, "", float32(taintedSVIDs))
-	c.log.WithField(telemetry.TaintedSVIDs, taintedSVIDs).Debug("Tainted X.509 SVIDs")
+	c.log.Debug("Scheduling rotation of tainted authorities")
 }
 
 // GetStaleEntries obtains a list of stale entries

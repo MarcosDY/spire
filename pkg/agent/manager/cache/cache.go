@@ -419,7 +419,7 @@ func (c *Cache) UpdateSVIDs(update *UpdateSVIDs) {
 	}
 }
 
-func (c *Cache) TaintX509SVIDs(taintedX509Authorities []*x509.Certificate) {
+func (c *Cache) TaintX509SVIDs(context.Context, []*x509.Certificate) {
 	// This cache is going to be removed in 1.11...
 }
 
