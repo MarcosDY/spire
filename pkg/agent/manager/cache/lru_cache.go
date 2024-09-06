@@ -495,11 +495,19 @@ func (c *LRUCache) scheduleRotation(ctx context.Context, entriesToForce []string
 	defer ticker.Stop()
 
 	for len(entriesToForce) > 0 {
+		if batch > len(entriesToForce) {
+			batch = len(entriesToForce)
+		}
 		processingEntries := entriesToForce[:batch]
+		start := time.Now()
 		c.processTaintedSVIDs(processingEntries, taintedX509Authorities)
 
-		processingEntries = processingEntries[batch:]
-		c.log.WithField(telemetry.Count, len(processingEntries)).Debug("entries to process")
+		c.log.Debugf("******************************************************")
+		c.log.Debugf("Duration to process %d svids: %v", len(processingEntries), time.Since(start))
+		c.log.Debugf("******************************************************")
+
+		entriesToForce = entriesToForce[batch:]
+		c.log.WithField(telemetry.Count, batch).Debug("entries to process")
 
 		select {
 		case <-ticker.C:
