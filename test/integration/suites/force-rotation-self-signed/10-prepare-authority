@@ -1,0 +1,19 @@
+#!/bin/bash
+
+amountBundles=$(docker compose exec -T root-server \
+	/opt/spire/bin/spire-server bundle show -output json | jq '.x509_authorities | map(select(.asn1)) | length')
+
+if [[ $amountBundles -ne 1 ]];
+then
+	fail-now "Only one bundle expected at start"
+fi
+
+preparedAuthorityID=$(docker compose exec -T -e SPIRE_SERVER_FFLAGS=forced_rotation root-server \
+	/opt/spire/bin/spire-server \
+	localauthority x509 prepare -output json | jq .prepared_authority.authority_id)
+
+echo $preparedAuthorityID
+
+check-log-line root-server 'X509 CA prepared.*local_authority_id=${preparedAuthorityID}'
+
+
