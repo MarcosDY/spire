@@ -1,0 +1,28 @@
+#!/bin/bash
+
+oldAuthority=$(docker compose exec -T -e SPIRE_SERVER_FFLAGS=forced_rotation root-server \
+	/opt/spire/bin/spire-server \
+	localauthority x509 show -output json | jq .old.authority_id)
+
+rootSVID=$(docker compose exec -u 1001 -T root-agent \
+      /opt/spire/bin/spire-agent api fetch x509 \
+      -socketPath /opt/spire/sockets/workload_api.sock -output json)
+intermediateASVID=$(docker compose exec -u 1001 -T intermediateA-agent \
+      /opt/spire/bin/spire-agent api fetch x509 \
+      -socketPath /opt/spire/sockets/workload_api.sock -output json)
+intermediateBSVID=$(docker compose exec -u 1001 -T intermediateB-agent \
+      /opt/spire/bin/spire-agent api fetch x509 \
+      -socketPath /opt/spire/sockets/workload_api.sock -output json)
+leafASVID=$(docker compose exec -u 1001 -T leafA-agent \
+      /opt/spire/bin/spire-agent api fetch x509 \
+      -socketPath /opt/spire/sockets/workload_api.sock -output json)
+leafBSVID=$(docker compose exec -u 1001 -T leafB-agent \
+      /opt/spire/bin/spire-agent api fetch x509 \
+      -socketPath /opt/spire/sockets/workload_api.sock -output json)
+
+taintedAuthority=$(docker compose exec -T -e SPIRE_SERVER_FFLAGS=forced_rotation root-server \
+	/opt/spire/bin/spire-server \
+	localauthority x509 taint -authorityID ${oldAuthority} -output json | jq .tainted_authority.authority_id)
+
+check-log-line root-server "X.509 authority tainted successfully.*local_authority_id=${activateAuthority}"
+
