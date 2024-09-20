@@ -2,19 +2,15 @@
 
 preparedAuthority=$(docker compose exec -T -e SPIRE_SERVER_FFLAGS=forced_rotation root-server \
 	/opt/spire/bin/spire-server \
-	localauthority x509 show -output json | jq .prepared.authority_id)
+	localauthority x509 show -output json | jq .prepared.authority_id -r)
 
 activatedAuthority=$(docker compose exec -T -e SPIRE_SERVER_FFLAGS=forced_rotation root-server \
 	/opt/spire/bin/spire-server \
 	localauthority x509 activate -authorityID ${preparedAuthority} -output json | jq .activated_authority.authority_id)
 
-check-log-line root-server "X509 CA prepared.*local_authority_id=${preparedAuthority}"
-
-activateAuthority=$(docker compose exec -T -e SPIRE_SERVER_FFLAGS=forced_rotation root-server \
-	/opt/spire/bin/spire-server \
-	localauthority x509 prepare -output json | jq .prepared_authority.authority_id)
+check-log-line root-server 'X509 CA prepared.*local_authority_id=${activatedAuthority}'
 
 log-info "Activated authority: ${activateAuthority}"
-check-log-line root-server "X509 CA activated.*local_authority_id=${activateAuthority}"
+check-log-line root-server 'X509 CA activated.*local_authority_id=${activateAuthority}'
 check-log-line root-server "Successfully rotated X.509 CA"
 

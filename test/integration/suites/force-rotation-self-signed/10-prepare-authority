@@ -31,6 +31,8 @@ check-x509Authorities() {
   fail-now "Expected bundle: $expectedBundle \n got: $x509Authorities \n difference: $difference"
 }
 
+fail-now "just to test...."
+
 x509Authorities=$(docker compose exec -T root-server \
 	/opt/spire/bin/spire-server bundle show -output json | jq '.x509_authorities' -c)
 
