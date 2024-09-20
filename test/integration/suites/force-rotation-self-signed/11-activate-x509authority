@@ -1,14 +1,12 @@
 #!/bin/bash
 
-preparedauthority=$(docker compose exec -t -e spire_server_fflags=forced_rotation root-server \
+preparedauthority=$(docker compose exec -t -e SPIRE_SERVER_FFLAGS=forced_rotation root-server \
 	/opt/spire/bin/spire-server \
 	localauthority x509 show -output json | jq .prepared.authority_id -r)
 
-echo "prepared authority: ${preparedauthority}"
-
-activatedauthority=$(docker compose exec -t -e spire_server_fflags=forced_rotation root-server \
+activatedauthority=$(docker compose exec -t -e SPIRE_SERVER_FFLAGS=forced_rotation root-server \
 	/opt/spire/bin/spire-server \
-	localauthority x509 activate -authorityid ${preparedauthority} -output json | jq .activated_authority.authority_id)
+	localauthority x509 activate -authorityID ${preparedauthority} -output json | jq .activated_authority.authority_id)
 
 log-info "Activated authority: ${activateAuthority}"
 
