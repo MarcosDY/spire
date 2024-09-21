@@ -20,7 +20,7 @@ check-x509Authorities() {
     difference=$(diff <(echo $expectedBundle) <(echo $x509Authorities))
     if [[ $difference == "" ]];
     then
-      return 0
+      return
     fi
 
     log-info "difference: $difference"

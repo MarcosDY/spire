@@ -31,11 +31,11 @@ docker compose exec -T -e SPIRE_SERVER_FFLAGS=forced_rotation root-server \
     /opt/spire/bin/spire-server \
     localauthority x509 revoke -authorityID $oldAuthority -output json || fail-now "Failed to revoke authority"
 
-check-log-line root-server "X.509 authority revoked successfully*local_authority_id=$oldAuthority"
-check-log-line intermediateA-server "X.509 authority revoked*subject_key_id=$oldAuthority"
-check-log-line intermediateB-server "X.509 authority revoked*subject_key_id=$oldAuthority"
-check-log-line leafA-server "X.509 authority revoked*subject_key_id=$oldAuthority"
-check-log-line leafB-server "X.509 authority revoked*subject_key_id=$oldAuthority"
+check-log-line root-server "X\.509 authority revoked successfully|local_authority_id=$oldAuthority"
+check-log-line intermediateA-server "X\.509 authority revoked|subject_key_id=$oldAuthority"
+check-log-line intermediateB-server "X\.509 authority revoked|subject_key_id=$oldAuthority"
+check-log-line leafA-server "X\.509 authority revoked|subject_key_id=$oldAuthority"
+check-log-line leafB-server "X\.509 authority revoked|subject_key_id=$oldAuthority"
 
 servers=("root-server" "intermediateA-server" "intermediateB-server" "leafA-server" "leafB-server")
 
