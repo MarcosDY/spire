@@ -30,7 +30,7 @@ check_tainted_authorities() {
         docker compose exec -u 1001 -T "$agent" \
           /opt/spire/bin/spire-agent api fetch x509 \
           -socketPath /opt/spire/sockets/workload_api.sock \
-          -write /tmp || fail-now "x509-SVID check failed"
+          -write /tmp || fail-now "x509-SVID check failed for $agent"
 
         docker compose exec -T "$agent" \
             openssl verify -verbose -CAfile /opt/spire/conf/agent/non-tainted.pem \

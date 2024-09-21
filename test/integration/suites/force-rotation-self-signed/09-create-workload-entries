@@ -1,5 +1,14 @@
 #!/bin/bash
 
+log-debug "creating rootA workload registration entry..."
+docker compose exec -T rootA-server \
+    /opt/spire/bin/spire-server entry create \
+    -parentID "spiffe://domain.test/spire/agent/x509pop/$(fingerprint rootA/agent/agent.crt.pem)" \
+    -spiffeID "spiffe://domain.test/rootA/workload" \
+    -selector "unix:uid:1001" \
+    -x509SVIDTTL 0
+check-synced-entry "rootA-agent" "spiffe://domain.test/rootA/workload"
+
 log-debug "creating intermediateA workload registration entry..."
 docker compose exec -T intermediateA-server \
     /opt/spire/bin/spire-server entry create \
