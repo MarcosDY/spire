@@ -9,7 +9,7 @@ services:
   root-agent:
     # Share the host pid namespace so this agent can attest the intermediate servers
     pid: "host"
-    image: spire-agent:latest-local
+    image: nested-agent-alpine
     depends_on: ["root-server"]
     hostname: root-agent
     volumes:
