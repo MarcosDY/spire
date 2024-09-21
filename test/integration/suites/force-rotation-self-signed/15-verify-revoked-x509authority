@@ -1,0 +1,32 @@
+#!/bin/bash
+
+oldAuthority=$(docker compose exec -T -e SPIRE_SERVER_FFLAGS=forced_rotation root-server \
+    /opt/spire/bin/spire-server \
+    localauthority x509 show -output json | jq .active.authority_id -r)
+log-debug "Revoked authority: $oldAuthority"
+
+agents=("root-agent" "intermediateA-agent" "intermediateB-agent" "leafA-agent" "leafB-agent")
+for agent in "${agents[@]}"; do
+    docker compose exec -u 1001 -T $agent \
+      /opt/spire/bin/spire-agent api fetch x509 \
+      -socketPath /opt/spire/sockets/workload_api.sock \
+      -write /tmp || fail-now "x509-SVID check failed for $agent"
+
+    bundle=$(docker compose exec -T $agent openssl x509 -in /tmp/bundle.0.pem)
+    bundleCount=$(echo $bundle | grep -c "BEGIN CERTIFICATE")
+
+    if [ $bundleCount -eq 1 ]; then
+        log-debug "Validation successful for $agent: There is exactly one certificate in the chain."
+    else
+        fail-now "Validation failed for $agent: Expected 1 certificate, but found $bundleCount."
+    fi
+
+    ski=$(docker compose exec -T $agent openssl x509 -in /tmp/bundle.0.pem -text | grep -A 1 'Subject Key Identifier' | tail -n 1 | tr -d ' ' | tr -d ':' | tr '[:upper:]' '[:lower:]')
+
+    echo $ski
+    if [ "$ski" == "$oldAuthority" ]; then
+        log-debug "Subject Key Identifier matches for $agent: $ski"
+    else
+        fail-now "Subject Key Identifier does not match for $agent. Found: $ski"
+    fi
+done
