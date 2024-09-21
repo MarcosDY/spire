@@ -42,6 +42,7 @@ servers=("root-server" "intermediateA-server" "intermediateB-server" "leafA-serv
 for server in "${servers[@]}"; do
     RETRY_COUNT=0
     while [[ $RETRY_COUNT -lt $MAX_RETRIES ]]; do
+        log-debug "Checking if X.509 Authority is revoked on $server"
         x509AuthoritiesCount=$(docker compose exec -T $server \
             /opt/spire/bin/spire-server \
         bundle show -output json | jq '.x509_authorities | length')
