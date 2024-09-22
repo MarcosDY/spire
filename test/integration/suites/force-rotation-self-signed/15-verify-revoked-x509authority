@@ -17,7 +17,7 @@ for agent in "${agents[@]}"; do
           -socketPath /opt/spire/sockets/workload_api.sock \
           -write /tmp; then
 
-            bundleCount=$(docker compose exec -T leafA-agent \
+            bundleCount=$(docker compose exec -T $agent \
 		    openssl storeutl -noout -text -certs /tmp/bundle.0.pem | grep -c "Certificate:")
             if [ $bundleCount -eq 1 ]; then
                 log-debug "Validation successful for $agent: There is exactly one certificate in the chain."
