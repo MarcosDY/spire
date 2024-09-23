@@ -1062,7 +1062,7 @@ func TestTaintX509SVIDs(t *testing.T) {
 		},
 		{
 			Level:   logrus.DebugLevel,
-			Message: "Entries left to process",
+			Message: "Tainted entries left to be processed",
 			Data:    logrus.Fields{telemetry.Count: "6"},
 		},
 	}
@@ -1083,7 +1083,7 @@ func TestTaintX509SVIDs(t *testing.T) {
 		},
 		{
 			Level:   logrus.DebugLevel,
-			Message: "Entries left to process",
+			Message: "Tainted entries left to be processed",
 			Data:    logrus.Fields{telemetry.Count: "2"},
 		},
 	}
@@ -1104,7 +1104,7 @@ func TestTaintX509SVIDs(t *testing.T) {
 		},
 		{
 			Level:   logrus.DebugLevel,
-			Message: "Finished to process all tainted entries",
+			Message: "Finished processing all tainted entries",
 		},
 	}
 	expectMetrics = append([]fakemetrics.MetricItem{
