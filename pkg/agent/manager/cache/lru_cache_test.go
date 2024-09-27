@@ -1056,13 +1056,13 @@ func TestTaintX509SVIDs(t *testing.T) {
 			Data:    logrus.Fields{telemetry.Count: "10"},
 		},
 		{
-			Level:   logrus.DebugLevel,
+			Level:   logrus.InfoLevel,
 			Message: "Tainted X.509 SVIDs",
 			Data:    logrus.Fields{telemetry.TaintedSVIDs: "3"},
 		},
 		{
-			Level:   logrus.DebugLevel,
-			Message: "Tainted entries left to be processed",
+			Level:   logrus.InfoLevel,
+			Message: "There are tainted X.509 SVIDs left to be processed",
 			Data:    logrus.Fields{telemetry.Count: "6"},
 		},
 	}
@@ -1077,13 +1077,13 @@ func TestTaintX509SVIDs(t *testing.T) {
 
 	expectLog = []spiretest.LogEntry{
 		{
-			Level:   logrus.DebugLevel,
+			Level:   logrus.InfoLevel,
 			Message: "Tainted X.509 SVIDs",
 			Data:    logrus.Fields{telemetry.TaintedSVIDs: "3"},
 		},
 		{
-			Level:   logrus.DebugLevel,
-			Message: "Tainted entries left to be processed",
+			Level:   logrus.InfoLevel,
+			Message: "There are tainted X.509 SVIDs left to be processed",
 			Data:    logrus.Fields{telemetry.Count: "2"},
 		},
 	}
@@ -1098,12 +1098,12 @@ func TestTaintX509SVIDs(t *testing.T) {
 
 	expectLog = []spiretest.LogEntry{
 		{
-			Level:   logrus.DebugLevel,
+			Level:   logrus.InfoLevel,
 			Message: "Tainted X.509 SVIDs",
 			Data:    logrus.Fields{telemetry.TaintedSVIDs: "2"},
 		},
 		{
-			Level:   logrus.DebugLevel,
+			Level:   logrus.InfoLevel,
 			Message: "Finished processing all tainted entries",
 		},
 	}
