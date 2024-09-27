@@ -1,10 +1,10 @@
-# Nested Rotation Suite
+# Force rotation in selt-signed X.509 authority Suite
 
 ## Description
 
-This suite sets a very low TTLs and ensures that workload SVIDs are valid
-across many SVID and SPIRE server CA rotation periods using nested servers.
-Integration test is configured to work with 3 layers for server/agents:
+This test suite configures a self-signed CA in the root-server,
+and excersices forced rotation of CA certificates across nested servers.
+The integration test is structured with three layers of server/agents pairs:
 
                          root-server
                               |
@@ -20,7 +20,7 @@ Integration test is configured to work with 3 layers for server/agents:
 
 Test steps:
 
-- Fetch an X509-SVID from `intermediateA-agent` and validate it them on `intermediateB-agent`
-- Fetch an X509-SVID from `leafA-agent` and validate it on `leafB-agent`
-- Fetch a JWT-SVID from `intermediateA-agent` and validate it on `intermediateB-agent`
-- Fetch a JWT-SVID from `leafA-agent` and validate it on `leafB-agent`
+1. **Prepare a new X.509 authority**: Validate that the new X.509 authority is propagated to all nested servers.
+2. **Activate the new X.509 authority**: Ensure the new X.509 authority becomes active.
+3. **Taint the old X.509 authority**: Confirm that the tainted authority is propagated to nested servers and that all X.509 SVIDs are rotated accordingly.
+4. **Revoke the tainted X.509 authority**: Validate the revocation propagates to all nested servers, and that all SVIDs removes the revoked authority.
