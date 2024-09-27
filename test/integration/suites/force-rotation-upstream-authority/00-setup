@@ -29,7 +29,11 @@ EOF
 "${ROOTDIR}/setup/x509pop/setup.sh" conf/server conf/agent
 
 # Generate dummy upstream CA
-generate_cert "conf/server/dummy_upstream_ca.key" "conf/server/dummy_upstream_ca.crt"
+generate_cert "conf/server/old_upstream_ca.key" "conf/server/old_upstream_ca.crt"
 
 # Generate new upstream CA
 generate_cert "conf/server/new_upstream_ca.key" "conf/server/new_upstream_ca.crt"
+
+cp conf/server/old_upstream_ca.crt conf/server/dummy_upstream_ca.crt
+cp conf/server/old_upstream_ca.key conf/server/dummy_upstream_ca.key
+

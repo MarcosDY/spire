@@ -1,8 +1,5 @@
 #!/bin/bash
 
-NUMCHECKS=15
-CHECKINTERVAL=2
-
 check-logs() {
   local component=$1
   shift
