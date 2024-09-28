@@ -16,7 +16,7 @@ oldAuthority=$(docker compose exec -T -e SPIRE_SERVER_FFLAGS=forced_rotation roo
 # Taint the old authority
 docker compose exec -T -e SPIRE_SERVER_FFLAGS=forced_rotation root-server \
       /opt/spire/bin/spire-server \
-      localauthority x509 taint -authorityID "${oldAuthority}" -output json | jq .tainted_authority.authority_id || fail-now "Failed to taint old authority"
+      localauthority x509 taint -authorityID "${oldAuthority}" || fail-now "Failed to taint old authority"
 
 # Root server logs
 check-logs root-server \

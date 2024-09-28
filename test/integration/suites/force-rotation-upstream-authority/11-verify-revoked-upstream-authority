@@ -3,23 +3,16 @@
 MAX_RETRIES=10
 RETRY_DELAY=2 # seconds between retries
 
-fetch-active-authority() {
-    docker compose exec -T -e SPIRE_SERVER_FFLAGS=forced_rotation root-server \
-        /opt/spire/bin/spire-server localauthority x509 show -output json | jq -r .active.authority_id
-}
-
 validate-agent() {
     local agent=$1
     local retry_count=0
 
     while [[ $retry_count -lt $MAX_RETRIES ]]; do
-        docker compose exec -u 1001 -T $agent \
+        docker compose exec -T $agent \
             /opt/spire/bin/spire-agent api fetch x509 \
-            -socketPath /opt/spire/sockets/workload_api.sock \
-            -write /tmp || fail_now "x509-SVID check failed for $agent"
+            -write /opt/spire/conf/agent || fail-now "x509-SVID check failed for $agent"
 
-        local bundle_count=$(docker compose exec -T $agent \
-            openssl storeutl -noout -text -certs /tmp/bundle.0.pem | grep -c "Certificate:")
+        local bundle_count=$(openssl storeutl -noout -text -certs conf/agent/bundle.0.pem | grep -c "Certificate:")
         if [ $bundle_count -eq 1 ]; then
             log-debug "Validation successful for $agent: There is exactly one certificate in the chain."
             return 0
@@ -40,8 +33,7 @@ check_ski() {
     local agent=$1
     local old_authority=$2
 
-    local ski=$(docker compose exec -T $agent \
-	    openssl x509 -in /tmp/bundle.0.pem -text | grep \
+    local ski=$(openssl x509 -in conf/agent/bundle.0.pem -text | grep \
 	    -A 1 'Subject Key Identifier' | tail -n 1 | tr -d ' ' | tr -d ':' | tr '[:upper:]' '[:lower:]')
 
     if [ "$ski" == "$old_authority" ]; then
@@ -51,11 +43,12 @@ check_ski() {
     fi
 }
 
-active_authority=$(fetch-active-authority)
-log-debug "Active authority: $active_authority"
+activeUpstreamAuthority=$(docker compose exec -T -e SPIRE_SERVER_FFLAGS=forced_rotation spire-server \
+      /opt/spire/bin/spire-server \
+      localauthority x509 show -output json | jq -r .active.upstream_authority_subject_key_id) || fail-now "Failed to fetch old upstrem authority ID"
 
-agents=("root-agent" "intermediateA-agent" "intermediateB-agent" "leafA-agent" "leafB-agent")
-for agent in "${agents[@]}"; do
-    validate-agent "$agent"
-    check_ski "$agent" "$active_authority"
-done
+log-debug "Active upstream authority: $activeUpstreamAuthority"
+
+validate-agent spire-agent 
+check_ski spire-agent "$activeUpstreamAuthority"
+

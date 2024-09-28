@@ -44,3 +44,4 @@ if [ "$new_dummy_ca_skid" == "$upstream_authority_id" ]; then
     log-debug "Prepared X.509 authority is using new upstream authorityh"
 else
     fail-now "Subject Key Identifier does not match. Found: $upstream_authority_id Expected: $new_dummy_ca_skid"
+fi

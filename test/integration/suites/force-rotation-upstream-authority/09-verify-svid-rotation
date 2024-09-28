@@ -12,14 +12,12 @@ verify-svid() {
     local agent=$1
     local agent_dir=$2
 
-    docker compose exec -u 1001 -T "$agent" \
-        /opt/spire/bin/spire-agent api fetch x509 \
-        -socketPath /opt/spire/sockets/workload_api.sock \
-        -write /tmp || fail-now "x509-SVID check failed for $agent"
-
     docker compose exec -T "$agent" \
-        openssl verify -verbose -CAfile /opt/spire/conf/agent/non-tainted.pem \
-        -untrusted /tmp/svid.0.pem /tmp/svid.0.pem
+        /opt/spire/bin/spire-agent api fetch x509 \
+        -write $agent_dir || fail-now "x509-SVID check failed for $agent"
+
+    openssl verify -verbose -CAfile conf/server/new_upstream_ca.crt \
+        -untrusted ${agent_dir}/svid.0.pem ${agent_dir}/svid.0.pem
 }
 
 check-tainted-authorities() {
@@ -28,12 +26,7 @@ check-tainted-authorities() {
     local agent_dir=$3
 
     x509Authorities=$(fetch-x509-authorities "$server")
-
-    taintedFound=$(echo "$x509Authorities" | jq '.[] | select(.tainted == true)') || fail-now "Tainted authority not found"
-
-    nonTaintedFound=$(echo "$x509Authorities" | jq '.[] | select(.tainted == false)') || fail-now "Non-tainted authority not found"
-
-    echo "$nonTaintedFound" | jq -r .asn1 | base64 -d | openssl x509 -inform der > "$agent_dir/agent/non-tainted.pem"
+    echo "$x509Authorities" | jq '.[] | select(.tainted == true)' || fail-now "Tainted authority not found"
 
     RETRY_COUNT=0
 
@@ -45,7 +38,7 @@ check-tainted-authorities() {
             break
         else
             RETRY_COUNT=$((RETRY_COUNT + 1))
-            echo "Verification failed, retrying in $RETRY_DELAY seconds... ($RETRY_COUNT/$MAX_RETRIES)"
+	    log-debug "Verification failed, retrying in $RETRY_DELAY seconds... ($RETRY_COUNT/$MAX_RETRIES)"
             sleep $RETRY_DELAY
         fi
 
@@ -56,4 +49,5 @@ check-tainted-authorities() {
 }
 
 # Root
-check-tainted-authorities "spire-server" "spire-agent" "root"
+check-tainted-authorities "spire-server" "spire-agent" "conf/agent"
+
