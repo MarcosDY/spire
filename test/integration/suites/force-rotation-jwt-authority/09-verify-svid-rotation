@@ -5,7 +5,7 @@ active_authority=$(docker compose exec -t -e SPIRE_SERVER_FFLAGS=forced_rotation
     localauthority jwt show -output json | jq -r .active.authority_id) || fail-now "Failed to fetch active JWT authority ID"
 
 jwt_svid=$(docker compose exec spire-agent ./bin/spire-agent \
-        api fetch jwt -audience aud -output json | jq -c '.[0].svids.[0].svid') || fail-now "Failed to fetch JWT SVID"
+        api fetch jwt -audience aud -output json | jq -c '.[0].svids[0].svid') || fail-now "Failed to fetch JWT SVID"
 
 oldJWT=$(cat conf/agent/jwt_svid)
 if [[ $oldJWT == $jwt_svid ]]; then
