@@ -38,8 +38,8 @@ while [[ $retry_count -lt $max_retries ]]; do
         # Re-fetch the JWT SVID and keys
         svid_json=$(docker compose exec spire-agent ./bin/spire-agent \
             api fetch jwt -audience aud -output json)
-        jwt_svid=$(echo $svid_json | jq -c '.[0].svids.[0].svid')
-        keys=$(echo $svid_json | jq -c '.[1].bundles.["spiffe://domain.test"] | @base64d | fromjson')
+        jwt_svid=$(echo $svid_json | jq -c '.[0].svids[0].svid')
+        keys=$(echo $svid_json | jq -c '.[1].bundles["spiffe://domain.test"] | @base64d | fromjson')
     fi
 done
 
