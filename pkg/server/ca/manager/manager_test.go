@@ -397,6 +397,7 @@ func TestUpstreamProcessTaintedAuthority(t *testing.T) {
 	err := test.m.PrepareX509CA(ctx)
 	require.NoError(t, err)
 
+	test.m.dropBundleUpdated()
 	go test.m.ProcessBundleUpdates(ctx)
 
 	// Taint first root
@@ -412,7 +413,7 @@ func TestUpstreamProcessTaintedAuthority(t *testing.T) {
 	case received := <-test.ca.taintedAuthoritiesCh:
 		require.Equal(t, expectedTaintedAuthorities, received)
 	case <-ctx.Done():
-		assert.Fail(t, "deadline reached")
+		require.Fail(t, "deadline reached")
 	}
 
 	bundle := test.fetchBundle(ctx)
@@ -1516,7 +1517,7 @@ func (m *managerTest) validateSelfSignedX509CA(bundle *x509.Certificate, signer 
 }
 
 type fakeCA struct {
-	mu     sync.Mutex
+	mu     sync.RWMutex
 	x509CA *ca.X509CA
 	jwtKey *ca.JWTKey
 
@@ -1524,8 +1525,8 @@ type fakeCA struct {
 }
 
 func (s *fakeCA) X509CA() *ca.X509CA {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	return s.x509CA
 }
 
@@ -1536,8 +1537,8 @@ func (s *fakeCA) SetX509CA(x509CA *ca.X509CA) {
 }
 
 func (s *fakeCA) JWTKey() *ca.JWTKey {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	return s.jwtKey
 }
 
@@ -1548,5 +1549,7 @@ func (s *fakeCA) SetJWTKey(jwtKey *ca.JWTKey) {
 }
 
 func (s *fakeCA) NotifyTaintedX509Authorities(taintedAuthorities []*x509.Certificate) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.taintedAuthoritiesCh <- taintedAuthorities
 }
