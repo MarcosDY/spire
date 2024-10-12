@@ -20,17 +20,17 @@ searching="JWT key prepared|local_authority_id=${prepared_authority_id}"
 check-log-line spire-server "$searching"
 
 # Check for updated x509 authorities in spire-server
+# Check for updated JWT authorities in spire-server
 jwt_authorities=$(docker compose exec -T spire-server \
     /opt/spire/bin/spire-server bundle show -output json | jq '.jwt_authorities' -c)
 amount_authorities=$(echo "$jwt_authorities" | jq length)
 
-# Ensure two bundles are present after preparation
+# Ensure two JWT authorities are present after preparation
 if [[ $amount_authorities -ne 2 ]]; then
-    fail-now "Two bundles expected after prepare"
+    fail-now "Two JWT authorities expected after prepare"
 fi
 
 # Ensure the prepared authority is present
-if [[ $(echo "$jwt_authorities" | jq -r ".[] | select(.key_id == \"$prepared_authority_id\")") == "" ]]; then
+if ! echo "$jwt_authorities" | jq -e ".[] | select(.key_id == \"$prepared_authority_id\")" > /dev/null; then
     fail-now "Prepared authority not found"
 fi
-

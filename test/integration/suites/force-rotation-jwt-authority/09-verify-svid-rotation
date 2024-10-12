@@ -19,4 +19,3 @@ skid=$(echo "$jwt_svid" | jq -r 'split(".") | .[0] | @base64d | fromjson | .kid'
 if [[ $skid != $active_authority ]]; then
     fail-now "JWT SVID key ID does not match the active authority ID, got $skid, expected $active_authority"
 fi
-
