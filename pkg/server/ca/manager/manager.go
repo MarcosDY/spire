@@ -652,6 +652,8 @@ func (m *Manager) processTaintedUpstreamAuthorities(ctx context.Context, tainted
 		return errors.New("processing of tainted upstream authorities must not be reached when not using an upstream authority; please report this bug")
 	}
 
+	fmt.Printf("tainted authorities len: %d\n", len(taintedAuthorities))
+
 	if len(taintedAuthorities) == 0 {
 		// No tainted keys found
 		return nil
@@ -661,6 +663,7 @@ func (m *Manager) processTaintedUpstreamAuthorities(ctx context.Context, tainted
 
 	currentSlotCA := m.currentX509CA.x509CA
 	if ok := isX509AuthorityTainted(currentSlotCA, taintedAuthorities); ok {
+		fmt.Println("Current root CA is tainted, preparing rotation")
 		m.c.Log.Info("Current root CA is signed by a tainted upstream authority, preparing rotation")
 		if ok := m.shouldPrepareX509CA(taintedAuthorities); ok {
 			if err := m.PrepareX509CA(ctx); err != nil {

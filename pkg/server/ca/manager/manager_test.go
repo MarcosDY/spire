@@ -423,7 +423,7 @@ func TestUpstreamProcessTaintedAuthority(t *testing.T) {
 	spiretest.AssertProtoListEqual(t, expectRootCas, bundle.RootCas)
 }
 
-func TestUpstreamProcessTaintedAuthorityBackoff(t *testing.T) {
+func TestBackoffUpstreamProcessTaintedAuthority(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 
