@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/x509"
 	"errors"
+	"fmt"
 	"io"
 	"sync"
 	"time"
@@ -155,6 +156,7 @@ func (u *UpstreamClient) runMintX509CAStream(ctx context.Context, csr []byte, tt
 		return
 	}
 
+	fmt.Println("Syncing X.509 roots")
 	if err := u.c.BundleUpdater.SyncX509Roots(ctx, x509Roots); err != nil {
 		firstResultCh <- mintX509CAResult{err: err}
 		return
@@ -163,6 +165,7 @@ func (u *UpstreamClient) runMintX509CAStream(ctx context.Context, csr []byte, tt
 	firstResultCh <- mintX509CAResult{x509CA: x509CA}
 
 	for {
+		fmt.Println("Waiting for x509RootsStream.RecvUpstreamX509Authorities")
 		x509Roots, err := x509RootsStream.RecvUpstreamX509Authorities()
 		if err != nil {
 			switch {

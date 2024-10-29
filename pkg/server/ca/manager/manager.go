@@ -645,6 +645,8 @@ func (m *Manager) notifyTaintedAuthorities(ctx context.Context, taintedAuthoriti
 }
 
 func (m *Manager) processTaintedUpstreamAuthorities(ctx context.Context, taintedAuthorities []*x509.Certificate) error {
+	fmt.Println("Processing tainted keys on upstream authority")
+
 	// Nothing to rotate if no upstream authority is used
 	if m.upstreamClient == nil {
 		return errors.New("processing of tainted upstream authorities must not be reached when not using an upstream authority; please report this bug")

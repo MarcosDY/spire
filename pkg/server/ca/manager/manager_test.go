@@ -401,8 +401,10 @@ func TestUpstreamProcessTaintedAuthority(t *testing.T) {
 	go test.m.ProcessBundleUpdates(ctx)
 
 	// Taint first root
+	fmt.Println("Tainting authority")
 	err = fakeUA.TaintAuthority(0)
 	require.NoError(t, err)
+	fmt.Println("AFTER Tainting authority")
 
 	// Get the roots again and verify that the first X.509 authority is tainted
 	x509Roots := fakeUA.X509Roots()
