@@ -623,6 +623,7 @@ func (m *Manager) notifyTaintedAuthorities(ctx context.Context, taintedAuthoriti
 		if err == nil {
 			break
 		}
+		fmt.Printf("Failed to process tainted keys on upstream authority: %v\n", err)
 
 		nextDuration := taintBackoff.NextBackOff()
 		if nextDuration == backoff.Stop {
