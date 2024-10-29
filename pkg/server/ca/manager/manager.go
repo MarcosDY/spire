@@ -241,6 +241,7 @@ func (m *Manager) PrepareX509CA(ctx context.Context) (err error) {
 
 	now := m.c.Clock.Now()
 	km := m.c.Catalog.GetKeyManager()
+	fmt.Println("X509CA Key ID: ", slot.KmKeyID())
 	signer, err := km.GenerateKey(ctx, slot.KmKeyID(), m.c.X509CAKeyType)
 	if err != nil {
 		return err
@@ -248,11 +249,13 @@ func (m *Manager) PrepareX509CA(ctx context.Context) (err error) {
 
 	var x509CA *ca.X509CA
 	if m.upstreamClient != nil {
+		fmt.Println("Upstream Sign X509 CA")
 		x509CA, err = m.upstreamSignX509CA(ctx, signer)
 		if err != nil {
 			return err
 		}
 	} else {
+		fmt.Println("Self Sign X509 CA")
 		x509CA, err = m.selfSignX509CA(ctx, signer)
 		if err != nil {
 			return err
@@ -270,6 +273,7 @@ func (m *Manager) PrepareX509CA(ctx context.Context) (err error) {
 	slot.notAfter = slot.x509CA.Certificate.NotAfter
 
 	if err := m.journal.AppendX509CA(ctx, slot.id, slot.issuedAt, slot.x509CA); err != nil {
+		fmt.Printf("Unable to append X509 CA to journal: %v\n", err)
 		log.WithError(err).Error("Unable to append X509 CA to journal")
 	}
 
