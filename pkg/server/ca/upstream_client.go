@@ -91,8 +91,10 @@ func (u *UpstreamClient) MintX509CA(ctx context.Context, csr []byte, ttl time.Du
 
 	select {
 	case result := <-firstResultCh:
+		fmt.Println("++++++++++++++++first result channel")
 		return result.x509CA, result.err
 	case <-ctx.Done():
+		fmt.Println("++++++++++++++++context done")
 		return nil, ctx.Err()
 	}
 }
@@ -134,8 +136,10 @@ func (u *UpstreamClient) WaitUntilPublishJWTKeyStreamDone(ctx context.Context) e
 }
 
 func (u *UpstreamClient) runMintX509CAStream(ctx context.Context, csr []byte, ttl time.Duration, validateX509CA ValidateX509CAFunc, firstResultCh chan<- mintX509CAResult) {
+	fmt.Println("++++++++++++++++Minting X.509 CA")
 	x509CA, x509Roots, x509RootsStream, err := u.c.UpstreamAuthority.MintX509CA(ctx, csr, ttl)
 	if err != nil {
+		fmt.Printf("++++++++++++++++Error minting X.509 CA: %v\n", err)
 		firstResultCh <- mintX509CAResult{err: err}
 		return
 	}
@@ -147,17 +151,21 @@ func (u *UpstreamClient) runMintX509CAStream(ctx context.Context, csr []byte, tt
 		x509RootCerts = append(x509RootCerts, eachRoot.Certificate)
 	}
 
+	fmt.Println("++++++++++++++++Validating X.509 CA")
 	// Before we append the roots and return the response, we must first
 	// validate that the minted intermediate can sign a valid, conformant
 	// X509-SVID chain of trust using the provided callback.
 	if err := validateX509CA(x509CA, x509RootCerts); err != nil {
 		err = status.Errorf(codes.InvalidArgument, "X509 CA minted by upstream authority is invalid: %v", err)
+		fmt.Printf("++++++++++++++++Error validating X.509 CA: %v\n", err)
 		firstResultCh <- mintX509CAResult{err: err}
+		fmt.Printf("++++++++++++++++AFter return")
 		return
 	}
 
-	fmt.Println("Syncing X.509 roots")
+	fmt.Println("++++++++++++++++syncking roots")
 	if err := u.c.BundleUpdater.SyncX509Roots(ctx, x509Roots); err != nil {
+		fmt.Printf("++++++++++++++++Error syncing X.509 roots: %v\n", err)
 		firstResultCh <- mintX509CAResult{err: err}
 		return
 	}
@@ -165,7 +173,7 @@ func (u *UpstreamClient) runMintX509CAStream(ctx context.Context, csr []byte, tt
 	firstResultCh <- mintX509CAResult{x509CA: x509CA}
 
 	for {
-		fmt.Println("Waiting for x509RootsStream.RecvUpstreamX509Authorities")
+		fmt.Println("++++++++++++++++Waiting for x509RootsStream.RecvUpstreamX509Authorities")
 		x509Roots, err := x509RootsStream.RecvUpstreamX509Authorities()
 		if err != nil {
 			switch {
@@ -182,6 +190,7 @@ func (u *UpstreamClient) runMintX509CAStream(ctx context.Context, csr []byte, tt
 		}
 
 		if err := u.c.BundleUpdater.SyncX509Roots(ctx, x509Roots); err != nil {
+			fmt.Printf("++++++++++++++++Error syncing X.509 roots: %v\n", err)
 			u.c.BundleUpdater.LogError(err, "Failed to store X.509 roots received by the upstream authority plugin.")
 			continue
 		}

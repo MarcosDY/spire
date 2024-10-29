@@ -234,6 +234,7 @@ func (m *Manager) PrepareX509CA(ctx context.Context) (err error) {
 		slot = m.nextX509CA
 	}
 
+	fmt.Println("Prepare X509 CA")
 	log := m.c.Log.WithField(telemetry.Slot, slot.id)
 	log.Debug("Preparing X509 CA")
 
@@ -252,6 +253,7 @@ func (m *Manager) PrepareX509CA(ctx context.Context) (err error) {
 		fmt.Println("Upstream Sign X509 CA")
 		x509CA, err = m.upstreamSignX509CA(ctx, signer)
 		if err != nil {
+			fmt.Printf("Unable to sign X509 CA: %v\n", err)
 			return err
 		}
 	} else {
@@ -261,6 +263,7 @@ func (m *Manager) PrepareX509CA(ctx context.Context) (err error) {
 			return err
 		}
 	}
+	fmt.Println("SIGNED!!!!!!!!!!!!!!!!!!!")
 
 	slot.issuedAt = now
 	slot.x509CA = x509CA
@@ -272,10 +275,12 @@ func (m *Manager) PrepareX509CA(ctx context.Context) (err error) {
 	slot.publicKey = slot.x509CA.Certificate.PublicKey
 	slot.notAfter = slot.x509CA.Certificate.NotAfter
 
+	fmt.Println("BEFORE APPEND")
 	if err := m.journal.AppendX509CA(ctx, slot.id, slot.issuedAt, slot.x509CA); err != nil {
 		fmt.Printf("Unable to append X509 CA to journal: %v\n", err)
 		log.WithError(err).Error("Unable to append X509 CA to journal")
 	}
+	fmt.Println("AFTER APPEND")
 
 	m.c.Log.WithFields(logrus.Fields{
 		telemetry.Slot:                slot.id,
@@ -780,6 +785,7 @@ func (m *Manager) fetchOptionalBundle(ctx context.Context) (*common.Bundle, erro
 }
 
 func (m *Manager) upstreamSignX509CA(ctx context.Context, signer crypto.Signer) (*ca.X509CA, error) {
+	fmt.Println("------Upstream Sign X509 CA")
 	template, err := m.c.CredBuilder.BuildUpstreamSignedX509CACSR(ctx, credtemplate.UpstreamSignedX509CAParams{
 		PublicKey: signer.Public(),
 	})
@@ -787,6 +793,7 @@ func (m *Manager) upstreamSignX509CA(ctx context.Context, signer crypto.Signer) 
 		return nil, err
 	}
 
+	fmt.Println("------Create CSR")
 	csr, err := x509.CreateCertificateRequest(rand.Reader, template, signer)
 	if err != nil {
 		return nil, err
@@ -799,10 +806,13 @@ func (m *Manager) upstreamSignX509CA(ctx context.Context, signer crypto.Signer) 
 		Clock:         m.c.Clock,
 	}
 
+	fmt.Println("------MInting X509 CA")
 	caChain, err := m.upstreamClient.MintX509CA(ctx, csr, m.caTTL, validator.ValidateUpstreamX509CA)
 	if err != nil {
 		return nil, err
 	}
+
+	fmt.Println("------BEfore return")
 
 	return &ca.X509CA{
 		Signer:        signer,
@@ -915,12 +925,14 @@ func (u *bundleUpdater) SyncX509Roots(ctx context.Context, roots []*x509certific
 		TrustDomainId: u.trustDomainID,
 		RootCas:       make([]*common.Certificate, 0, len(roots)),
 	}
+	fmt.Println("??????????????? sync roots")
 
 	x509Authorities, err := u.fetchX509Authorities(ctx)
 	if err != nil {
 		return err
 	}
 
+	fmt.Println("??????????????? after fetch")
 	newAuthorities := make(map[string]struct{}, len(roots))
 	var taintedAuthorities []*x509.Certificate
 	for _, root := range roots {
