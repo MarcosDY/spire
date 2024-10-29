@@ -393,7 +393,6 @@ func TestUpstreamProcessTaintedAuthority(t *testing.T) {
 	test.initAndActivateUpstreamSignedManager(ctx, upstreamAuthority)
 	require.True(t, test.m.IsUpstreamAuthority())
 
-	test.m.dropBundleUpdated()
 	go test.m.ProcessBundleUpdates(ctx)
 
 	// Prepared must be tainted too
