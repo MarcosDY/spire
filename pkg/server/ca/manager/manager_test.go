@@ -395,14 +395,9 @@ func TestUpstreamProcessTaintedAuthority(t *testing.T) {
 
 	go test.m.ProcessBundleUpdates(ctx)
 
-	// Prepared must be tainted too
-	err := test.m.PrepareX509CA(ctx)
-	require.NoError(t, err)
-	fmt.Println("AGTER PREPARE")
-
 	// Taint first root
 	fmt.Println("Tainting authority")
-	err = fakeUA.TaintAuthority(0)
+	err := fakeUA.TaintAuthority(0)
 	require.NoError(t, err)
 	fmt.Println("AFTER Tainting authority")
 
