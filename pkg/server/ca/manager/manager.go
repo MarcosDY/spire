@@ -234,6 +234,7 @@ func (m *Manager) PrepareX509CA(ctx context.Context) (err error) {
 		slot = m.nextX509CA
 	}
 
+	fmt.Println("Prepare X509 CA")
 	log := m.c.Log.WithField(telemetry.Slot, slot.id)
 	log.Debug("Preparing X509 CA")
 
@@ -241,6 +242,7 @@ func (m *Manager) PrepareX509CA(ctx context.Context) (err error) {
 
 	now := m.c.Clock.Now()
 	km := m.c.Catalog.GetKeyManager()
+	fmt.Println("X509CA Key ID: ", slot.KmKeyID())
 	signer, err := km.GenerateKey(ctx, slot.KmKeyID(), m.c.X509CAKeyType)
 	if err != nil {
 		return err
@@ -248,16 +250,20 @@ func (m *Manager) PrepareX509CA(ctx context.Context) (err error) {
 
 	var x509CA *ca.X509CA
 	if m.upstreamClient != nil {
+		fmt.Println("Upstream Sign X509 CA")
 		x509CA, err = m.upstreamSignX509CA(ctx, signer)
 		if err != nil {
+			fmt.Printf("Unable to sign X509 CA: %v\n", err)
 			return err
 		}
 	} else {
+		fmt.Println("Self Sign X509 CA")
 		x509CA, err = m.selfSignX509CA(ctx, signer)
 		if err != nil {
 			return err
 		}
 	}
+	fmt.Println("SIGNED!!!!!!!!!!!!!!!!!!!")
 
 	slot.issuedAt = now
 	slot.x509CA = x509CA
@@ -269,9 +275,12 @@ func (m *Manager) PrepareX509CA(ctx context.Context) (err error) {
 	slot.publicKey = slot.x509CA.Certificate.PublicKey
 	slot.notAfter = slot.x509CA.Certificate.NotAfter
 
+	fmt.Println("BEFORE APPEND")
 	if err := m.journal.AppendX509CA(ctx, slot.id, slot.issuedAt, slot.x509CA); err != nil {
+		fmt.Printf("Unable to append X509 CA to journal: %v\n", err)
 		log.WithError(err).Error("Unable to append X509 CA to journal")
 	}
+	fmt.Println("AFTER APPEND")
 
 	m.c.Log.WithFields(logrus.Fields{
 		telemetry.Slot:                slot.id,
@@ -623,6 +632,7 @@ func (m *Manager) notifyTaintedAuthorities(ctx context.Context, taintedAuthoriti
 		if err == nil {
 			break
 		}
+		fmt.Printf("Failed to process tainted keys on upstream authority: %v\n", err)
 
 		nextDuration := taintBackoff.NextBackOff()
 		if nextDuration == backoff.Stop {
@@ -645,10 +655,14 @@ func (m *Manager) notifyTaintedAuthorities(ctx context.Context, taintedAuthoriti
 }
 
 func (m *Manager) processTaintedUpstreamAuthorities(ctx context.Context, taintedAuthorities []*x509.Certificate) error {
+	fmt.Println("Processing tainted keys on upstream authority")
+
 	// Nothing to rotate if no upstream authority is used
 	if m.upstreamClient == nil {
 		return errors.New("processing of tainted upstream authorities must not be reached when not using an upstream authority; please report this bug")
 	}
+
+	fmt.Printf("tainted authorities len: %d\n", len(taintedAuthorities))
 
 	if len(taintedAuthorities) == 0 {
 		// No tainted keys found
@@ -659,6 +673,7 @@ func (m *Manager) processTaintedUpstreamAuthorities(ctx context.Context, tainted
 
 	currentSlotCA := m.currentX509CA.x509CA
 	if ok := isX509AuthorityTainted(currentSlotCA, taintedAuthorities); ok {
+		fmt.Println("Current root CA is tainted, preparing rotation")
 		m.c.Log.Info("Current root CA is signed by a tainted upstream authority, preparing rotation")
 		if ok := m.shouldPrepareX509CA(taintedAuthorities); ok {
 			if err := m.PrepareX509CA(ctx); err != nil {
@@ -770,6 +785,7 @@ func (m *Manager) fetchOptionalBundle(ctx context.Context) (*common.Bundle, erro
 }
 
 func (m *Manager) upstreamSignX509CA(ctx context.Context, signer crypto.Signer) (*ca.X509CA, error) {
+	fmt.Println("------Upstream Sign X509 CA")
 	template, err := m.c.CredBuilder.BuildUpstreamSignedX509CACSR(ctx, credtemplate.UpstreamSignedX509CAParams{
 		PublicKey: signer.Public(),
 	})
@@ -777,6 +793,7 @@ func (m *Manager) upstreamSignX509CA(ctx context.Context, signer crypto.Signer) 
 		return nil, err
 	}
 
+	fmt.Println("------Create CSR")
 	csr, err := x509.CreateCertificateRequest(rand.Reader, template, signer)
 	if err != nil {
 		return nil, err
@@ -789,10 +806,13 @@ func (m *Manager) upstreamSignX509CA(ctx context.Context, signer crypto.Signer) 
 		Clock:         m.c.Clock,
 	}
 
+	fmt.Println("------MInting X509 CA")
 	caChain, err := m.upstreamClient.MintX509CA(ctx, csr, m.caTTL, validator.ValidateUpstreamX509CA)
 	if err != nil {
 		return nil, err
 	}
+
+	fmt.Println("------BEfore return")
 
 	return &ca.X509CA{
 		Signer:        signer,
@@ -905,12 +925,14 @@ func (u *bundleUpdater) SyncX509Roots(ctx context.Context, roots []*x509certific
 		TrustDomainId: u.trustDomainID,
 		RootCas:       make([]*common.Certificate, 0, len(roots)),
 	}
+	fmt.Println("??????????????? sync roots")
 
 	x509Authorities, err := u.fetchX509Authorities(ctx)
 	if err != nil {
 		return err
 	}
 
+	fmt.Println("??????????????? after fetch")
 	newAuthorities := make(map[string]struct{}, len(roots))
 	var taintedAuthorities []*x509.Certificate
 	for _, root := range roots {
