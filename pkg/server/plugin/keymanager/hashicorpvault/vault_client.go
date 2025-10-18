@@ -137,7 +137,7 @@ func NewClientConfig(cp *ClientParams, logger hclog.Logger) (*ClientConfig, erro
 func (c *ClientConfig) NewAuthenticatedClient(ctx context.Context, method AuthMethod) (client *Client, err error) {
 	client = &Client{}
 
-	err = c.completeClient(client, method)
+	err = c.completeClient(ctx, client, method)
 	if err != nil {
 		return nil, err
 	}
@@ -169,7 +169,7 @@ func (c *ClientConfig) handleRenewToken(ctx context.Context, client *Client, met
 	initBackoff := backoff.NewBackoff(c.clk, bootstrapBackoffInterval, backoff.WithMaxElapsedTime(bootstrapBackoffMaxElapsedTime))
 
 	for {
-		renew, err := NewRenew(client.getClient(), client.secret, c.Logger)
+		renew, err := NewRenew(client.getClient(), client.getSecret(), c.Logger)
 		if err != nil {
 			c.Logger.Error("unable to create renew", err)
 		}
@@ -187,7 +187,7 @@ func (c *ClientConfig) handleRenewToken(ctx context.Context, client *Client, met
 		}
 
 		// Create a new client and re-authenticate
-		if err := c.completeClient(client, method); err != nil {
+		if err := c.completeClient(ctx, client, method); err != nil {
 			c.Logger.Error("unable to re-authenticate client", err)
 			return err
 		}
@@ -206,7 +206,7 @@ func (c *ClientConfig) handleRenewToken(ctx context.Context, client *Client, met
 	}
 }
 
-func (c *ClientConfig) completeClient(client *Client, method AuthMethod) error {
+func (c *ClientConfig) completeClient(ctx context.Context, client *Client, method AuthMethod) error {
 	config := vapi.DefaultConfig()
 	config.Address = c.clientParams.VaultAddr
 	if c.clientParams.MaxRetries != nil {
@@ -227,7 +227,7 @@ func (c *ClientConfig) completeClient(client *Client, method AuthMethod) error {
 
 	client.initializeClient(vc, c.clientParams)
 
-	sec, err := c.lookupSecret(client, method)
+	sec, err := c.lookupSecret(ctx, client, method)
 	if err != nil {
 		return err
 	}
@@ -241,10 +241,10 @@ func (c *ClientConfig) completeClient(client *Client, method AuthMethod) error {
 	return nil
 }
 
-func (c *ClientConfig) lookupSecret(client *Client, method AuthMethod) (*vapi.Secret, error) {
+func (c *ClientConfig) lookupSecret(ctx context.Context, client *Client, method AuthMethod) (*vapi.Secret, error) {
 	switch method {
 	case TOKEN:
-		sec, err := client.LookupSelf(c.clientParams.Token)
+		sec, err := client.LookupSelf(ctx, c.clientParams.Token)
 		if err != nil {
 			return nil, err
 		}
@@ -255,7 +255,7 @@ func (c *ClientConfig) lookupSecret(client *Client, method AuthMethod) (*vapi.Se
 
 	case CERT:
 		path := fmt.Sprintf("auth/%v/login", c.clientParams.CertAuthMountPoint)
-		sec, err := client.Auth(path, map[string]any{
+		sec, err := client.Auth(ctx, path, map[string]any{
 			"name": c.clientParams.CertAuthRoleName,
 		})
 		if err != nil {
@@ -272,7 +272,7 @@ func (c *ClientConfig) lookupSecret(client *Client, method AuthMethod) (*vapi.Se
 			"role_id":   c.clientParams.AppRoleID,
 			"secret_id": c.clientParams.AppRoleSecretID,
 		}
-		sec, err := client.Auth(path, body)
+		sec, err := client.Auth(ctx, path, body)
 		if err != nil {
 			return nil, err
 		}
@@ -291,7 +291,7 @@ func (c *ClientConfig) lookupSecret(client *Client, method AuthMethod) (*vapi.Se
 			"role": c.clientParams.K8sAuthRoleName,
 			"jwt":  string(b),
 		}
-		sec, err := client.Auth(path, body)
+		sec, err := client.Auth(ctx, path, body)
 		if err != nil {
 			return nil, err
 		}
@@ -382,12 +382,12 @@ func (c *Client) SetToken(v string) {
 }
 
 // Auth authenticates to vault server with TLS certificate method
-func (c *Client) Auth(path string, body map[string]any) (*vapi.Secret, error) {
+func (c *Client) Auth(ctx context.Context, path string, body map[string]any) (*vapi.Secret, error) {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
 
 	c.vaultClient.ClearToken()
-	secret, err := c.vaultClient.Logical().Write(path, body)
+	secret, err := c.vaultClient.Logical().WriteWithContext(ctx, path, body)
 	if err != nil {
 		return nil, status.Errorf(codes.Unauthenticated, "authentication failed %v: %v", path, err)
 	}
@@ -400,7 +400,7 @@ func (c *Client) Auth(path string, body map[string]any) (*vapi.Secret, error) {
 	return secret, nil
 }
 
-func (c *Client) LookupSelf(token string) (*vapi.Secret, error) {
+func (c *Client) LookupSelf(ctx context.Context, token string) (*vapi.Secret, error) {
 	if token == "" {
 		return nil, status.Error(codes.InvalidArgument, "token is empty")
 	}
@@ -409,7 +409,7 @@ func (c *Client) LookupSelf(token string) (*vapi.Secret, error) {
 	c.mtx.RLock()
 	defer c.mtx.RUnlock()
 
-	secret, err := c.vaultClient.Logical().Read("auth/token/lookup-self")
+	secret, err := c.vaultClient.Logical().ReadWithContext(ctx, "auth/token/lookup-self")
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "token lookup failed: %v", err)
 	}
@@ -460,35 +460,21 @@ func (c *Client) getClient() *vapi.Client {
 	return c.vaultClient
 }
 
-type TransitKeyType string
-
-const (
-	TransitKeyTypeRSA2048   TransitKeyType = "rsa-2048"
-	TransitKeyTypeRSA4096   TransitKeyType = "rsa-4096"
-	TransitKeyTypeECDSAP256 TransitKeyType = "ecdsa-p256"
-	TransitKeyTypeECDSAP384 TransitKeyType = "ecdsa-p384"
-)
-
-type TransitHashAlgorithm string
-
-const (
-	TransitHashAlgorithmSHA256 TransitHashAlgorithm = "sha2-256"
-	TransitHashAlgorithmSHA384 TransitHashAlgorithm = "sha2-384"
-	TransitHashAlgorithmSHA512 TransitHashAlgorithm = "sha2-512"
-	TransitHashAlgorithmNone   TransitHashAlgorithm = "none"
-)
-
-type TransitSignatureAlgorithm string
-
-const (
-	TransitSignatureSignatureAlgorithmPSS      TransitSignatureAlgorithm = "pss"
-	TransitSignatureSignatureAlgorithmPKCS1v15 TransitSignatureAlgorithm = "pkcs1v15"
-)
+func (c *Client) getSecret() *vapi.Secret {
+	c.mtx.RLock()
+	defer c.mtx.RUnlock()
+	return c.secret
+}
 
 // CreateKey creates a new key in the specified transit secret engine
 // See: https://developer.hashicorp.com/vault/api-docs/secret/transit#create-key
 func (c *Client) CreateKey(ctx context.Context, keyName string, keyType TransitKeyType) error {
-	if c.vaultClient == nil {
+	c.mtx.RLock()
+	vc := c.vaultClient
+	transitPath := c.clientParams.TransitEnginePath
+	c.mtx.RUnlock()
+
+	if vc == nil {
 		return vaultClientNotInitializedError
 	}
 	arguments := map[string]any{
@@ -496,7 +482,7 @@ func (c *Client) CreateKey(ctx context.Context, keyName string, keyType TransitK
 		"exportable": "false", // SPIRE keys are never exportable
 	}
 
-	_, err := c.vaultClient.Logical().WriteWithContext(ctx, fmt.Sprintf("/%s/keys/%s", c.clientParams.TransitEnginePath, keyName), arguments)
+	_, err := vc.Logical().WriteWithContext(ctx, fmt.Sprintf("/%s/keys/%s", transitPath, keyName), arguments)
 	if err != nil {
 		return status.Errorf(codes.Internal, "failed to create transit engine key: %v", err)
 	}
@@ -507,7 +493,12 @@ func (c *Client) CreateKey(ctx context.Context, keyName string, keyType TransitK
 // DeleteKey deletes a key in the specified transit secret engine
 // See: https://developer.hashicorp.com/vault/api-docs/secret/transit#update-key-configuration and https://developer.hashicorp.com/vault/api-docs/secret/transit#delete-key
 func (c *Client) DeleteKey(ctx context.Context, keyName string) error {
-	if c.vaultClient == nil {
+	c.mtx.RLock()
+	vc := c.vaultClient
+	transitPath := c.clientParams.TransitEnginePath
+	c.mtx.RUnlock()
+
+	if vc == nil {
 		return vaultClientNotInitializedError
 	}
 
@@ -516,12 +507,12 @@ func (c *Client) DeleteKey(ctx context.Context, keyName string) error {
 	}
 
 	// First, we need to enable deletion of the key. This is disabled by default.
-	_, err := c.vaultClient.Logical().WriteWithContext(ctx, fmt.Sprintf("/%s/keys/%s/config", c.clientParams.TransitEnginePath, keyName), arguments)
+	_, err := vc.Logical().WriteWithContext(ctx, fmt.Sprintf("/%s/keys/%s/config", transitPath, keyName), arguments)
 	if err != nil {
 		return status.Errorf(codes.Internal, "failed to enable deletion of transit engine key: %v", err)
 	}
 
-	_, err = c.vaultClient.Logical().DeleteWithContext(ctx, fmt.Sprintf("/%s/keys/%s", c.clientParams.TransitEnginePath, keyName))
+	_, err = vc.Logical().DeleteWithContext(ctx, fmt.Sprintf("/%s/keys/%s", transitPath, keyName))
 	if err != nil {
 		return status.Errorf(codes.Internal, "failed to delete transit engine key: %v", err)
 	}
@@ -532,7 +523,12 @@ func (c *Client) DeleteKey(ctx context.Context, keyName string) error {
 // SignData signs the data using the transit engine key with the key name.
 // See: https://developer.hashicorp.com/vault/api-docs/secret/transit#sign-data
 func (c *Client) SignData(ctx context.Context, keyName string, data []byte, hashAlgo TransitHashAlgorithm, signatureAlgo TransitSignatureAlgorithm) ([]byte, error) {
-	if c.vaultClient == nil {
+	c.mtx.RLock()
+	vc := c.vaultClient
+	transitPath := c.clientParams.TransitEnginePath
+	c.mtx.RUnlock()
+
+	if vc == nil {
 		return nil, vaultClientNotInitializedError
 	}
 
@@ -545,7 +541,7 @@ func (c *Client) SignData(ctx context.Context, keyName string, data []byte, hash
 		"prehashed":             "true",
 	}
 
-	sigResp, err := c.vaultClient.Logical().WriteWithContext(ctx, fmt.Sprintf("/%s/sign/%s/%s", c.clientParams.TransitEnginePath, keyName, hashAlgo), body)
+	sigResp, err := vc.Logical().WriteWithContext(ctx, fmt.Sprintf("/%s/sign/%s/%s", transitPath, keyName, hashAlgo), body)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "transit engine sign call failed: %v", err)
 	}
@@ -577,13 +573,18 @@ func (c *Client) SignData(ctx context.Context, keyName string, data []byte, hash
 // GetKeys returns all the keys of the transit engine.
 // See: https://developer.hashicorp.com/vault/api-docs/secret/transit#list-keys
 func (c *Client) GetKeys(ctx context.Context) ([]*keyEntry, error) {
-	if c.vaultClient == nil {
+	c.mtx.RLock()
+	vc := c.vaultClient
+	transitPath := c.clientParams.TransitEnginePath
+	c.mtx.RUnlock()
+
+	if vc == nil {
 		return nil, vaultClientNotInitializedError
 	}
 
 	var keyEntries []*keyEntry
 
-	listResp, err := c.vaultClient.Logical().ListWithContext(ctx, fmt.Sprintf("/%s/keys", c.clientParams.TransitEnginePath))
+	listResp, err := vc.Logical().ListWithContext(ctx, fmt.Sprintf("/%s/keys", transitPath))
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "transit engine list keys call failed: %v", err)
 	}
@@ -726,3 +727,28 @@ func spireKeyIDFromKeyName(keyName string) (string, bool) {
 	spireKeyID := keyName[spireKeyIDIndex:]
 	return spireKeyID, true
 }
+
+type TransitKeyType string
+
+const (
+	TransitKeyTypeRSA2048   TransitKeyType = "rsa-2048"
+	TransitKeyTypeRSA4096   TransitKeyType = "rsa-4096"
+	TransitKeyTypeECDSAP256 TransitKeyType = "ecdsa-p256"
+	TransitKeyTypeECDSAP384 TransitKeyType = "ecdsa-p384"
+)
+
+type TransitHashAlgorithm string
+
+const (
+	TransitHashAlgorithmSHA256 TransitHashAlgorithm = "sha2-256"
+	TransitHashAlgorithmSHA384 TransitHashAlgorithm = "sha2-384"
+	TransitHashAlgorithmSHA512 TransitHashAlgorithm = "sha2-512"
+	TransitHashAlgorithmNone   TransitHashAlgorithm = "none"
+)
+
+type TransitSignatureAlgorithm string
+
+const (
+	TransitSignatureSignatureAlgorithmPSS      TransitSignatureAlgorithm = "pss"
+	TransitSignatureSignatureAlgorithmPKCS1v15 TransitSignatureAlgorithm = "pkcs1v15"
+)
