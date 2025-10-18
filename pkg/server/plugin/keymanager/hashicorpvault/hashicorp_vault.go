@@ -348,7 +348,6 @@ func (p *Plugin) getEnvOrDefault(envKey, fallback string) string {
 func (p *Plugin) scheduleDeleteTask(ctx context.Context) {
 	scheduleBackoff := backoff.NewBackoff(p.hooks.clk, scheduleMinBackOff, backoff.WithMaxInterval(scheduleMaxBackoff))
 	for {
-
 		select {
 		case <-ctx.Done():
 			return

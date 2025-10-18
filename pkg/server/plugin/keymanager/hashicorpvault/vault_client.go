@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/andres-erbsen/clock"
@@ -46,6 +47,8 @@ const (
 var (
 	bootstrapBackoffInterval       = 5 * time.Second
 	bootstrapBackoffMaxElapsedTime = 1 * time.Minute
+
+	vaultClientNotInitializedError = status.Error(codes.Internal, "vault client is not initialized")
 )
 
 type AuthMethod int
@@ -64,7 +67,6 @@ type ClientConfig struct {
 	// vault client parameters
 	clientParams *ClientParams
 	clk          clock.Clock
-	shouldRenew  bool
 }
 
 type ClientParams struct {
@@ -111,17 +113,6 @@ type ClientParams struct {
 	TransitEnginePath string
 }
 
-type Client struct {
-	vaultClient  *vapi.Client
-	clientParams *ClientParams
-	secret       *vapi.Secret
-	renewable    bool
-	// For testing only
-	hooks struct {
-		renewCh chan error
-	}
-}
-
 // NewClientConfig returns a new *ClientConfig with default parameters.
 func NewClientConfig(cp *ClientParams, logger hclog.Logger) (*ClientConfig, error) {
 	cc := &ClientConfig{
@@ -146,7 +137,7 @@ func NewClientConfig(cp *ClientParams, logger hclog.Logger) (*ClientConfig, erro
 func (c *ClientConfig) NewAuthenticatedClient(ctx context.Context, method AuthMethod) (client *Client, err error) {
 	client = &Client{}
 
-	err = c.completeClient(ctx, client, method)
+	err = c.completeClient(client, method)
 	if err != nil {
 		return nil, err
 	}
@@ -165,8 +156,9 @@ func (c *ClientConfig) NewAuthenticatedClient(ctx context.Context, method AuthMe
 	go func() {
 		err := c.handleRenewToken(ctx, client, method)
 		if err != nil && !errors.Is(err, context.Canceled) {
+			// This must never happens, but just in case log the error to help debugging.
 			c.Logger.Error("error handling token renewal", err)
-			client.vaultClient = nil // to indicate that client is no longer valid,
+			client.setClient(nil) // to indicate that client is no longer valid,
 		}
 	}()
 
@@ -177,7 +169,7 @@ func (c *ClientConfig) handleRenewToken(ctx context.Context, client *Client, met
 	initBackoff := backoff.NewBackoff(c.clk, bootstrapBackoffInterval, backoff.WithMaxElapsedTime(bootstrapBackoffMaxElapsedTime))
 
 	for {
-		renew, err := NewRenew(client.vaultClient, client.secret, c.Logger)
+		renew, err := NewRenew(client.getClient(), client.secret, c.Logger)
 		if err != nil {
 			c.Logger.Error("unable to create renew", err)
 		}
@@ -195,7 +187,7 @@ func (c *ClientConfig) handleRenewToken(ctx context.Context, client *Client, met
 		}
 
 		// Create a new client and re-authenticate
-		if err := c.completeClient(ctx, client, method); err != nil {
+		if err := c.completeClient(client, method); err != nil {
 			c.Logger.Error("unable to re-authenticate client", err)
 			return err
 		}
@@ -214,7 +206,7 @@ func (c *ClientConfig) handleRenewToken(ctx context.Context, client *Client, met
 	}
 }
 
-func (c *ClientConfig) completeClient(ctx context.Context, client *Client, method AuthMethod) error {
+func (c *ClientConfig) completeClient(client *Client, method AuthMethod) error {
 	config := vapi.DefaultConfig()
 	config.Address = c.clientParams.VaultAddr
 	if c.clientParams.MaxRetries != nil {
@@ -233,10 +225,9 @@ func (c *ClientConfig) completeClient(ctx context.Context, client *Client, metho
 		vc.SetNamespace(c.clientParams.Namespace)
 	}
 
-	client.vaultClient = vc
-	client.clientParams = c.clientParams
+	client.initializeClient(vc, c.clientParams)
 
-	sec, err := c.lookupSecret(ctx, client, method)
+	sec, err := c.lookupSecret(client, method)
 	if err != nil {
 		return err
 	}
@@ -245,12 +236,12 @@ func (c *ClientConfig) completeClient(ctx context.Context, client *Client, metho
 		return status.Error(codes.InvalidArgument, "secret is nil")
 	}
 
-	client.secret = sec
+	client.setSecret(sec)
 
 	return nil
 }
 
-func (c *ClientConfig) lookupSecret(ctx context.Context, client *Client, method AuthMethod) (*vapi.Secret, error) {
+func (c *ClientConfig) lookupSecret(client *Client, method AuthMethod) (*vapi.Secret, error) {
 	switch method {
 	case TOKEN:
 		sec, err := client.LookupSelf(c.clientParams.Token)
@@ -368,13 +359,33 @@ func (c *ClientConfig) configureTLS(vc *vapi.Config) error {
 	return nil
 }
 
+type Client struct {
+	vaultClient  *vapi.Client
+	clientParams *ClientParams
+	secret       *vapi.Secret
+
+	renewable bool
+	mtx       sync.RWMutex
+
+	// For testing only
+	hooks struct {
+		renewCh chan error
+	}
+}
+
 // SetToken wraps vapi.Client.SetToken()
 func (c *Client) SetToken(v string) {
+	c.mtx.Lock()
+	defer c.mtx.Unlock()
+
 	c.vaultClient.SetToken(v)
 }
 
 // Auth authenticates to vault server with TLS certificate method
 func (c *Client) Auth(path string, body map[string]any) (*vapi.Secret, error) {
+	c.mtx.Lock()
+	defer c.mtx.Unlock()
+
 	c.vaultClient.ClearToken()
 	secret, err := c.vaultClient.Logical().Write(path, body)
 	if err != nil {
@@ -394,6 +405,9 @@ func (c *Client) LookupSelf(token string) (*vapi.Secret, error) {
 		return nil, status.Error(codes.InvalidArgument, "token is empty")
 	}
 	c.SetToken(token)
+
+	c.mtx.RLock()
+	defer c.mtx.RUnlock()
 
 	secret, err := c.vaultClient.Logical().Read("auth/token/lookup-self")
 	if err != nil {
@@ -419,6 +433,31 @@ func (c *Client) LookupSelf(token string) (*vapi.Secret, error) {
 		// other parameters are not relevant for token renewal
 	}
 	return secret, nil
+}
+
+func (c *Client) setClient(vaultClient *vapi.Client) {
+	c.mtx.Lock()
+	defer c.mtx.Unlock()
+	c.vaultClient = vaultClient
+}
+
+func (c *Client) initializeClient(vaultClient *vapi.Client, params *ClientParams) {
+	c.mtx.Lock()
+	defer c.mtx.Unlock()
+	c.vaultClient = vaultClient
+	c.clientParams = params
+}
+
+func (c *Client) setSecret(secret *vapi.Secret) {
+	c.mtx.Lock()
+	defer c.mtx.Unlock()
+	c.secret = secret
+}
+
+func (c *Client) getClient() *vapi.Client {
+	c.mtx.RLock()
+	defer c.mtx.RUnlock()
+	return c.vaultClient
 }
 
 type TransitKeyType string
@@ -449,6 +488,9 @@ const (
 // CreateKey creates a new key in the specified transit secret engine
 // See: https://developer.hashicorp.com/vault/api-docs/secret/transit#create-key
 func (c *Client) CreateKey(ctx context.Context, keyName string, keyType TransitKeyType) error {
+	if c.vaultClient == nil {
+		return vaultClientNotInitializedError
+	}
 	arguments := map[string]any{
 		"type":       keyType,
 		"exportable": "false", // SPIRE keys are never exportable
@@ -465,6 +507,10 @@ func (c *Client) CreateKey(ctx context.Context, keyName string, keyType TransitK
 // DeleteKey deletes a key in the specified transit secret engine
 // See: https://developer.hashicorp.com/vault/api-docs/secret/transit#update-key-configuration and https://developer.hashicorp.com/vault/api-docs/secret/transit#delete-key
 func (c *Client) DeleteKey(ctx context.Context, keyName string) error {
+	if c.vaultClient == nil {
+		return vaultClientNotInitializedError
+	}
+
 	arguments := map[string]any{
 		"deletion_allowed": "true",
 	}
@@ -486,6 +532,10 @@ func (c *Client) DeleteKey(ctx context.Context, keyName string) error {
 // SignData signs the data using the transit engine key with the key name.
 // See: https://developer.hashicorp.com/vault/api-docs/secret/transit#sign-data
 func (c *Client) SignData(ctx context.Context, keyName string, data []byte, hashAlgo TransitHashAlgorithm, signatureAlgo TransitSignatureAlgorithm) ([]byte, error) {
+	if c.vaultClient == nil {
+		return nil, vaultClientNotInitializedError
+	}
+
 	encodedData := base64.StdEncoding.EncodeToString(data)
 
 	body := map[string]any{
@@ -527,6 +577,10 @@ func (c *Client) SignData(ctx context.Context, keyName string, data []byte, hash
 // GetKeys returns all the keys of the transit engine.
 // See: https://developer.hashicorp.com/vault/api-docs/secret/transit#list-keys
 func (c *Client) GetKeys(ctx context.Context) ([]*keyEntry, error) {
+	if c.vaultClient == nil {
+		return nil, vaultClientNotInitializedError
+	}
+
 	var keyEntries []*keyEntry
 
 	listResp, err := c.vaultClient.Logical().ListWithContext(ctx, fmt.Sprintf("/%s/keys", c.clientParams.TransitEnginePath))
