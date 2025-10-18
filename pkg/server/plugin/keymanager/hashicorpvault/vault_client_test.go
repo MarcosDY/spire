@@ -145,7 +145,6 @@ func TestNewAuthenticatedClientTokenAuth(t *testing.T) {
 			}
 
 			require.NoError(t, err)
-
 			require.Equal(t, tt.expectRenewable, client.renewable)
 
 			if cp.Namespace != "" {

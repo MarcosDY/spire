@@ -135,41 +135,47 @@ func NewClientConfig(cp *ClientParams, logger hclog.Logger) (*ClientConfig, erro
 
 // NewAuthenticatedClient returns a new authenticated vault client with given authentication method
 func (c *ClientConfig) NewAuthenticatedClient(ctx context.Context, method AuthMethod) (client *Client, err error) {
-	client = &Client{}
-
-	err = c.completeClient(ctx, client, method)
+	vc, sec, err := c.createAuthenticatedVaultClient(ctx, method)
 	if err != nil {
 		return nil, err
 	}
 
-	if client.secret.Auth.LeaseDuration == 0 {
+	client = &Client{
+		vaultClient:  vc,
+		clientParams: c.clientParams,
+		secret:       sec,
+	}
+
+	if sec.Auth.LeaseDuration == 0 {
 		c.Logger.Debug("Token will never expire")
 		return client, nil
 	}
 
-	if !client.secret.Auth.Renewable {
+	if !sec.Auth.Renewable {
 		c.Logger.Debug("Token is not renewable")
 		return client, nil
 	}
 
 	client.renewable = true
-	go func() {
-		err := c.handleRenewToken(ctx, client, method)
-		if err != nil && !errors.Is(err, context.Canceled) {
-			// This must never happens, but just in case log the error to help debugging.
-			c.Logger.Error("error handling token renewal", err)
-			client.setClient(nil) // to indicate that client is no longer valid,
-		}
-	}()
+	go c.handleRenewToken(ctx, client, method)
 
 	return client, nil
 }
 
-func (c *ClientConfig) handleRenewToken(ctx context.Context, client *Client, method AuthMethod) error {
+func (c *ClientConfig) handleRenewToken(ctx context.Context, client *Client, method AuthMethod) {
 	initBackoff := backoff.NewBackoff(c.clk, bootstrapBackoffInterval, backoff.WithMaxElapsedTime(bootstrapBackoffMaxElapsedTime))
 
 	for {
-		renew, err := NewRenew(client.getClient(), client.getSecret(), c.Logger)
+		// Get current state safely
+		currentVC := client.getClient()
+		currentSecret := client.getSecret()
+
+		// if currentVC == nil || currentSecret == nil {
+		// c.Logger.Error("Client or secret is nil, cannot renew")
+		// return
+		// }
+
+		renew, err := NewRenew(currentVC, currentSecret, c.Logger)
 		if err != nil {
 			c.Logger.Error("unable to create renew", err)
 		}
@@ -178,7 +184,7 @@ func (c *ClientConfig) handleRenewToken(ctx context.Context, client *Client, met
 			// Renew finalized without error finalize routine
 			err = renew.Run(ctx)
 			if err == nil || errors.Is(err, context.Canceled) {
-				return nil
+				return
 			}
 			c.Logger.Error("token renewal failed, re-authenticating", err)
 			if client.hooks.renewCh != nil {
@@ -186,27 +192,31 @@ func (c *ClientConfig) handleRenewToken(ctx context.Context, client *Client, met
 			}
 		}
 
-		// Create a new client and re-authenticate
-		if err := c.completeClient(ctx, client, method); err != nil {
+		// Create NEW  vault client and authenticate
+		vc, sec, err := c.createAuthenticatedVaultClient(ctx, method)
+		if err != nil {
 			c.Logger.Error("unable to re-authenticate client", err)
-			return err
+		} else {
+			client.setClient(vc)
+			client.setSecret(sec)
 		}
 
 		// Backoff before retrying
 		nextDuration := initBackoff.NextBackOff()
 		if nextDuration == backoff.Stop {
 			c.Logger.Error("backoff reached stop condition, giving up")
-			return err
+			client.setClient(nil) // Mark as invalid only after all retries exhausted
+			return
 		}
 		select {
 		case <-ctx.Done():
-			return nil
+			return
 		case <-c.clk.After(nextDuration):
 		}
 	}
 }
 
-func (c *ClientConfig) completeClient(ctx context.Context, client *Client, method AuthMethod) error {
+func (c *ClientConfig) createAuthenticatedVaultClient(ctx context.Context, method AuthMethod) (*vapi.Client, *vapi.Secret, error) {
 	config := vapi.DefaultConfig()
 	config.Address = c.clientParams.VaultAddr
 	if c.clientParams.MaxRetries != nil {
@@ -214,31 +224,32 @@ func (c *ClientConfig) completeClient(ctx context.Context, client *Client, metho
 	}
 
 	if err := c.configureTLS(config); err != nil {
-		return err
+		return nil, nil, err
 	}
 	vc, err := vapi.NewClient(config)
 	if err != nil {
-		return status.Errorf(codes.Internal, "unable to create Vault client: %v", err)
+		return nil, nil, status.Errorf(codes.Internal, "unable to create Vault client: %v", err)
 	}
 
 	if c.clientParams.Namespace != "" {
 		vc.SetNamespace(c.clientParams.Namespace)
 	}
 
-	client.initializeClient(vc, c.clientParams)
+	tempClient := &Client{
+		vaultClient:  vc,
+		clientParams: c.clientParams,
+	}
 
-	sec, err := c.lookupSecret(ctx, client, method)
+	sec, err := c.lookupSecret(ctx, tempClient, method)
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
 
 	if sec == nil || sec.Auth == nil {
-		return status.Error(codes.InvalidArgument, "secret is nil")
+		return nil, nil, status.Error(codes.InvalidArgument, "secret is nil")
 	}
 
-	client.setSecret(sec)
-
-	return nil
+	return vc, sec, nil
 }
 
 func (c *ClientConfig) lookupSecret(ctx context.Context, client *Client, method AuthMethod) (*vapi.Secret, error) {
@@ -439,13 +450,6 @@ func (c *Client) setClient(vaultClient *vapi.Client) {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
 	c.vaultClient = vaultClient
-}
-
-func (c *Client) initializeClient(vaultClient *vapi.Client, params *ClientParams) {
-	c.mtx.Lock()
-	defer c.mtx.Unlock()
-	c.vaultClient = vaultClient
-	c.clientParams = params
 }
 
 func (c *Client) setSecret(secret *vapi.Secret) {
