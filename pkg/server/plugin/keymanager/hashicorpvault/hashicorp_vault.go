@@ -9,6 +9,7 @@ import (
 	"os"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/andres-erbsen/clock"
@@ -181,6 +182,12 @@ func (p *Plugin) Configure(ctx context.Context, req *configv1.ConfigureRequest) 
 	}
 
 	serverID := config.KeyIdentifierValue
+	if serverID == "" {
+		serverID, err = getOrCreateServerID(config.KeyIdentifierFile)
+		if err != nil {
+			return nil, err
+		}
+	}
 	p.logger.Debug("Loaded server id", telemetry.ServerID, serverID)
 
 	if config.InsecureSkipVerify {
@@ -253,11 +260,20 @@ func buildConfig(coreConfig catalog.CoreConfig, hclText string, status *pluginco
 		return nil
 	}
 
-	if newConfig.KeyIdentifierValue == "" {
-		if serverID, err := getOrCreateServerID(newConfig.KeyIdentifierFile); err != nil {
-			status.ReportErrorf("unable to decode configuration: %v", err)
-		} else {
-			newConfig.KeyIdentifierValue = serverID
+	if newConfig.KeyIdentifierFile == "" && newConfig.KeyIdentifierValue == "" {
+		status.ReportError("configuration requires a key identifier file or a key identifier value")
+	}
+
+	if newConfig.KeyIdentifierFile != "" && newConfig.KeyIdentifierValue != "" {
+		status.ReportError("configuration can't have a key identifier file and a key identifier value at the same time")
+	}
+
+	if newConfig.KeyIdentifierValue != "" {
+		if !validateCharacters(newConfig.KeyIdentifierValue) {
+			status.ReportError("Key identifier must contain only letters, numbers, underscores (_), and dashes (-)")
+		}
+		if len(newConfig.KeyIdentifierValue) > 63 {
+			status.ReportError("Key identifier must not be longer than 63 characters")
 		}
 	}
 
@@ -634,4 +650,13 @@ func keysToMap(keyEntries []*keyEntry, log hclog.Logger) map[string]keyEntry {
 	}
 
 	return m
+}
+
+func validateCharacters(str string) bool {
+	for _, r := range str {
+		if !unicode.IsLower(r) && !unicode.IsNumber(r) && r != '-' && r != '_' {
+			return false
+		}
+	}
+	return true
 }
