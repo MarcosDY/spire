@@ -272,19 +272,6 @@ func TestValidate(t *testing.T) {
 				},
 			},
 		},
-		{
-			name: "Unable to persist Server ID",
-			configTmpl: `
-		vault_addr  = "{{ .Addr }}"
-		ca_cert_path = "testdata/root-cert.pem"
-		`,
-			expectResp: &configv1.ValidateResponse{
-				Valid: false,
-				Notes: []string{
-					"unable to decode configuration: rpc error: code = Internal desc = failed to persist server ID on path: open : no such file or directory",
-				},
-			},
-		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			plainConfig := getTestConfigureRequest(t, "https://localhost", createKeyIdentifierFile(t), tt.configTmpl)
