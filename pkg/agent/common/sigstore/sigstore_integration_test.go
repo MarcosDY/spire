@@ -25,7 +25,7 @@ func TestVerifyRealImageGHCR(t *testing.T) {
 
 	verifier := NewVerifier(config)
 
-	ctx := t.Conext()
+	ctx := t.Context()
 	require.NoError(t, verifier.Init(ctx))
 
 	selectors, err := verifier.Verify(ctx, imageID)
