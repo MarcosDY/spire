@@ -45,15 +45,16 @@ docker-up registry
 docker run --network="kind" \
     -v "${PWD}/conf/docker-registry/certs/domain.crt:/etc/ssl/certs/domain.crt" \
     gcr.io/go-containerregistry/crane:latest \
-    copy ghcr.io/spiffe/spire-agent:1.14.0 "${REGISTRY_HTTP_ADDR}/workload:signed"
+    copy ghcr.io/spiffe/spire-agent@sha256:643ec60add4a1d3fbb82f154aed8825fdd138d074dc4f0d7f3f5100d686059a4 "${REGISTRY_HTTP_ADDR}/workload:signed"
 
-# Copy the cosign signature tag separately, after the image is fully committed.
-# Cosign stores signatures as OCI tags with the format sha256-<hex-digest>.sig.
+# Copy the cosign referrers fallback tag separately, after the image is fully committed.
+# Cosign 3.x stores signatures as OCI referrers; the fallback tag for registries without
+# the Referrers API is sha256-<hex-digest> (no .sig suffix).
 signed_digest=$(docker run --rm --network="kind" \
     -v "${PWD}/conf/docker-registry/certs/domain.crt:/etc/ssl/certs/domain.crt" \
     gcr.io/go-containerregistry/crane:latest \
     digest "${REGISTRY_HTTP_ADDR}/workload:signed")
-sig_tag="sha256-${signed_digest#sha256:}.sig"
+sig_tag="sha256-${signed_digest#sha256:}"
 docker run --network="kind" \
     -v "${PWD}/conf/docker-registry/certs/domain.crt:/etc/ssl/certs/domain.crt" \
     gcr.io/go-containerregistry/crane:latest \
