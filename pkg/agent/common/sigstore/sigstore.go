@@ -180,6 +180,8 @@ func (v *ImageVerifier) Verify(ctx context.Context, imageID string) ([]string, e
 		IgnoreSCT:          v.config.IgnoreSCT,
 		IgnoreTlog:         v.config.IgnoreTlog,
 		RegistryClientOpts: []cosignremote.Option{cosignremote.WithRemoteOptions(authOption)},
+		// needed for cosign v3 signatures (OCI referrers)
+		ExperimentalOCI11: true,
 	}
 
 	signatures, err := v.verifySignatures(ctx, imageRef, checkOptions)
