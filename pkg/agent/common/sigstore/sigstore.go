@@ -87,6 +87,11 @@ type sigstoreFunctions struct {
 	getRekorPublicKeys      getTLogPublicKeysFn
 	getCTLogPublicKeys      getTLogPublicKeysFn
 	getTrustedRoot          getTrustedRootFn
+	remoteIndex             remoteIndexFn
+	resolveDigest           resolveDigestFn
+	cosignRemoteSignatures  cosignRemoteSignaturesFn
+	cosignVerifySignature   cosignVerifySignatureFn
+	cosignRemoteBundle      cosignRemoteBundleFn
 }
 
 type cosignVerifyImageSignaturesFn func(context.Context, name.Reference, *cosign.CheckOpts) ([]oci.Signature, bool, error)
@@ -95,6 +100,11 @@ type getRekorClientFn func(string, ...client.Option) (*rekorclient.Rekor, error)
 type getCertPoolFn func() (*x509.CertPool, error)
 type getTLogPublicKeysFn func(context.Context) (*cosign.TrustedTransparencyLogPubKeys, error)
 type getTrustedRootFn func() (sgroot.TrustedMaterial, error)
+type remoteIndexFn func(name.Reference, ...remote.Option) (gcv1.ImageIndex, error)
+type resolveDigestFn func(name.Reference, ...cosignremote.Option) (name.Digest, error)
+type cosignRemoteSignaturesFn func(name.Reference, ...cosignremote.Option) (oci.Signatures, error)
+type cosignVerifySignatureFn func(context.Context, oci.Signature, gcv1.Hash, *cosign.CheckOpts) (bool, error)
+type cosignRemoteBundleFn func(name.Reference, ...cosignremote.Option) (*sgbundle.Bundle, error)
 
 func NewVerifier(config *Config) *ImageVerifier {
 	verifier := &ImageVerifier{
@@ -108,9 +118,12 @@ func NewVerifier(config *Config) *ImageVerifier {
 			getFulcioIntermediates:  fulcioroots.GetIntermediates,
 			getRekorPublicKeys:      cosign.GetRekorPubs,
 			getCTLogPublicKeys:      cosign.GetCTLogPubs,
-			getTrustedRoot: func() (sgroot.TrustedMaterial, error) {
-				return sgroot.FetchTrustedRoot()
-			},
+			getTrustedRoot:          buildGetTrustedRootFn(config.TrustedRootPath),
+			remoteIndex:             remote.Index,
+			resolveDigest:           cosignremote.ResolveDigest,
+			cosignRemoteSignatures:  cosignremote.Signatures,
+			cosignVerifySignature:   cosign.VerifyImageSignature,
+			cosignRemoteBundle:      cosignremote.Bundle,
 		},
 	}
 
@@ -173,13 +186,20 @@ func (v *ImageVerifier) Init(ctx context.Context) error {
 		v.sgCertIdentities = append(v.sgCertIdentities, certID)
 	}
 
-	// Build the bundle verifier once. Tlog + integrated-timestamp options are always required:
-	// bundles embed the tlog entry inline (no network call) and it provides the timestamp
-	// needed to validate the short-lived Fulcio certificate.
-	v.sgVerifier, err = sgverify.NewVerifier(v.trustedRoot,
-		sgverify.WithTransparencyLog(1),
-		sgverify.WithIntegratedTimestamps(1),
-	)
+	// Build the bundle verifier once respecting IgnoreTlog.
+	// When IgnoreTlog=false: require full tlog inclusion proof AND use the embedded integrated
+	// timestamp to validate the short-lived Fulcio certificate (no network call needed; the tlog
+	// entry is embedded in the bundle).
+	// When IgnoreTlog=true: skip tlog entirely and verify the cert against the current system
+	// time. This only works while the Fulcio cert is still valid (~10 min), which is intentional
+	// — callers that skip tlog for air-gapped deployments should use long-lived certificates.
+	sgOpts := []sgverify.VerifierOption{sgverify.WithIntegratedTimestamps(1)}
+	if v.config.IgnoreTlog {
+		sgOpts = []sgverify.VerifierOption{sgverify.WithCurrentTime()}
+	} else {
+		sgOpts = append(sgOpts, sgverify.WithTransparencyLog(1))
+	}
+	v.sgVerifier, err = sgverify.NewVerifier(v.trustedRoot, sgOpts...)
 	if err != nil {
 		return fmt.Errorf("failed to create bundle verifier: %w", err)
 	}
@@ -249,7 +269,7 @@ func (v *ImageVerifier) Verify(ctx context.Context, imageID string) ([]string, e
 		v.config.Logger.Debug("Standard verification failed, trying OCI referrers fallback tag",
 			telemetry.ImageID, imageRef.Name(), "error", sigErr)
 		var err error
-		fallbackDetails, err = v.verifyViaOCIFallbackTag(ctx, imageRef, checkOptions, authOption)
+		fallbackDetails, err = v.verifyViaOCIFallbackTag(ctx, imageRef, checkOptions)
 		if err != nil {
 			if errors.Is(err, errFallbackTagNotFound) {
 				// No OCI referrers fallback tag means the image uses the legacy .sig-tag format;
@@ -311,15 +331,26 @@ func (v *ImageVerifier) verifySignatures(ctx context.Context, imageRef name.Refe
 // Referrers API (e.g. ghcr.io), which prevents go-containerregistry from reaching its own
 // fallback-tag logic (it only falls back on 404/400/406). Handles both legacy cosign signature
 // format and Sigstore Bundle v0.3 (cosign v3 default).
-func (v *ImageVerifier) verifyViaOCIFallbackTag(ctx context.Context, imageRef name.Reference, checkOptions *cosign.CheckOpts, authOpt remote.Option) ([]*signatureDetails, error) {
-	digest, err := cosignremote.ResolveDigest(imageRef, checkOptions.RegistryClientOpts...)
+//
+// authOpt is resolved here from v.authOptions rather than being passed from Verify() to avoid
+// threading the same value through two separate parameters (it is already embedded in
+// checkOptions.RegistryClientOpts as a cosignremote.Option, but remote.Index needs the raw
+// remote.Option type which cannot be extracted back out of a cosignremote.Option).
+func (v *ImageVerifier) verifyViaOCIFallbackTag(ctx context.Context, imageRef name.Reference, checkOptions *cosign.CheckOpts) ([]*signatureDetails, error) {
+	registryURL := imageRef.Context().RegistryStr()
+	authOpt, exists := v.authOptions[registryURL]
+	if !exists {
+		authOpt = remote.WithAuthFromKeychain(authn.DefaultKeychain)
+	}
+
+	digest, err := v.sigstoreFunctions.resolveDigest(imageRef, checkOptions.RegistryClientOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve image digest: %w", err)
 	}
 
 	h, err := gcv1.NewHash(digest.Identifier())
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to parse image digest: %w", err)
 	}
 
 	// OCI Distribution Spec referrers fallback tag: "sha256:<hash>" -> "sha256-<hash>"
@@ -329,7 +360,7 @@ func (v *ImageVerifier) verifyViaOCIFallbackTag(ctx context.Context, imageRef na
 		return nil, fmt.Errorf("failed to parse fallback tag reference: %w", err)
 	}
 
-	idx, err := remote.Index(fallbackRef, authOpt)
+	idx, err := v.sigstoreFunctions.remoteIndex(fallbackRef, authOpt)
 	if err != nil {
 		// If the fallback tag itself does not exist the registry returns 404 MANIFEST_UNKNOWN.
 		// This means the image was signed with the legacy .sig-tag format, not OCI referrers.
@@ -343,7 +374,7 @@ func (v *ImageVerifier) verifyViaOCIFallbackTag(ctx context.Context, imageRef na
 
 	manifest, err := idx.IndexManifest()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get index manifest: %w", err)
 	}
 
 	var allDetails []*signatureDetails
@@ -358,7 +389,7 @@ func (v *ImageVerifier) verifyViaOCIFallbackTag(ctx context.Context, imageRef na
 
 		if m.ArtifactType == cosignSigArtifactType {
 			// Legacy cosign v2 signature format
-			sigs, err := cosignremote.Signatures(sigRef, checkOptions.RegistryClientOpts...)
+			sigs, err := v.sigstoreFunctions.cosignRemoteSignatures(sigRef, checkOptions.RegistryClientOpts...)
 			if err != nil {
 				v.config.Logger.Debug("Failed to fetch signatures from manifest", "error", err)
 				continue
@@ -369,9 +400,16 @@ func (v *ImageVerifier) verifyViaOCIFallbackTag(ctx context.Context, imageRef na
 				continue
 			}
 			for _, sig := range sigList {
-				ok, err := cosign.VerifyImageSignature(ctx, sig, h, checkOptions)
+				ok, err := v.sigstoreFunctions.cosignVerifySignature(ctx, sig, h, checkOptions)
 				if err != nil {
 					v.config.Logger.Debug("Legacy signature verification failed", "error", err)
+					continue
+				}
+				// Only collect details for signatures whose tlog bundle was verified.
+				// Collecting details for unverified signatures would produce selectors for
+				// signatures that failed tlog verification, masking the bundleVerified check below.
+				if !ok && !v.config.IgnoreTlog {
+					v.config.Logger.Debug("Legacy signature tlog bundle not verified, skipping")
 					continue
 				}
 				details, err := extractSignatureDetails(sig, v.config.IgnoreTlog)
@@ -386,7 +424,7 @@ func (v *ImageVerifier) verifyViaOCIFallbackTag(ctx context.Context, imageRef na
 			}
 		} else {
 			// Sigstore Bundle v0.3 format (cosign v3 default)
-			bundle, err := cosignremote.Bundle(sigRef, checkOptions.RegistryClientOpts...)
+			bundle, err := v.sigstoreFunctions.cosignRemoteBundle(sigRef, checkOptions.RegistryClientOpts...)
 			if err != nil {
 				v.config.Logger.Debug("Not a sigstore bundle manifest", "artifactType", m.ArtifactType, "error", err)
 				continue
@@ -402,7 +440,7 @@ func (v *ImageVerifier) verifyViaOCIFallbackTag(ctx context.Context, imageRef na
 	}
 
 	if len(allDetails) == 0 {
-		return nil, fmt.Errorf("failed to verify signatures: no signatures found")
+		return nil, errors.New("failed to verify signatures: no signatures found")
 	}
 	if !bundleVerified && !v.config.IgnoreTlog {
 		return nil, fmt.Errorf("rekor bundle not verified for image: %s", imageRef.Name())
@@ -412,7 +450,8 @@ func (v *ImageVerifier) verifyViaOCIFallbackTag(ctx context.Context, imageRef na
 }
 
 // verifyBundle verifies a Sigstore Bundle v0.3 using the pre-built verifier and identities.
-func (v *ImageVerifier) verifyBundle(_ context.Context, bundle *sgbundle.Bundle, h gcv1.Hash, checkOptions *cosign.CheckOpts) (*signatureDetails, error) {
+func (v *ImageVerifier) verifyBundle(ctx context.Context, bundle *sgbundle.Bundle, h gcv1.Hash, checkOptions *cosign.CheckOpts) (*signatureDetails, error) {
+	_ = ctx // reserved for future use (e.g. network calls in sgVerifier)
 	policyOpts := make([]sgverify.PolicyOption, len(v.sgCertIdentities))
 	for i, certID := range v.sgCertIdentities {
 		policyOpts[i] = sgverify.WithCertificateIdentity(certID)
@@ -698,6 +737,23 @@ func extractDetailsFromBundle(result *sgverify.VerificationResult, bundle *sgbun
 	return details, nil
 }
 
+// buildGetTrustedRootFn returns a getTrustedRootFn that loads from a local file when trustedRootPath
+// is set (custom/private Sigstore instance), or fetches from the public TUF repository otherwise.
+func buildGetTrustedRootFn(trustedRootPath string) getTrustedRootFn {
+	if trustedRootPath != "" {
+		return func() (sgroot.TrustedMaterial, error) {
+			tr, err := sgroot.NewTrustedRootFromPath(trustedRootPath)
+			if err != nil {
+				return nil, fmt.Errorf("failed to load trusted root from %q: %w", trustedRootPath, err)
+			}
+			return tr, nil
+		}
+	}
+	return func() (sgroot.TrustedMaterial, error) {
+		return sgroot.FetchTrustedRoot()
+	}
+}
+
 func cosignIdentityToSGVerify(identity cosign.Identity) (sgverify.CertificateIdentity, error) {
 	sanMatcher, err := sgverify.NewSANMatcher(identity.Subject, identity.SubjectRegExp)
 	if err != nil {
@@ -707,5 +763,7 @@ func cosignIdentityToSGVerify(identity cosign.Identity) (sgverify.CertificateIde
 	if err != nil {
 		return sgverify.CertificateIdentity{}, fmt.Errorf("invalid issuer matcher: %w", err)
 	}
+	// Empty Extensions{} means no extra OCI extension constraints are required beyond SAN and
+	// issuer. cosign.Identity has no extension fields so this is intentionally unconstrained.
 	return sgverify.NewCertificateIdentity(sanMatcher, issuerMatcher, sgcert.Extensions{})
 }

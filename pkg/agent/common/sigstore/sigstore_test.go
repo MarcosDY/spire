@@ -11,18 +11,23 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"testing"
 	"time"
 
 	"github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
+	"github.com/google/go-containerregistry/pkg/v1/remote"
+	"github.com/google/go-containerregistry/pkg/v1/remote/transport"
 	"github.com/google/go-containerregistry/pkg/v1/types"
 	"github.com/hashicorp/go-hclog"
 	"github.com/sigstore/cosign/v3/pkg/cosign"
 	"github.com/sigstore/cosign/v3/pkg/cosign/bundle"
 	"github.com/sigstore/cosign/v3/pkg/oci"
+	cosignremote "github.com/sigstore/cosign/v3/pkg/oci/remote"
 	"github.com/sigstore/rekor/pkg/client"
 	rekorclient "github.com/sigstore/rekor/pkg/generated/client"
+	sgbundle "github.com/sigstore/sigstore-go/pkg/bundle"
 	sgroot "github.com/sigstore/sigstore-go/pkg/root"
 	"github.com/sigstore/sigstore/pkg/signature/payload"
 	"github.com/stretchr/testify/assert"
@@ -608,6 +613,131 @@ func TestProcessAllowedIdentities(t *testing.T) {
 	}
 }
 
+func TestVerifyViaOCIFallbackTag(t *testing.T) {
+	t.Parallel()
+
+	// Build a stable digest string and a matching name.Digest for all test cases.
+	const repo = "test-registry.io/test-repo"
+	rawBytes := sha256.Sum256([]byte("test-manifest"))
+	hexHash := hex.EncodeToString(rawBytes[:])
+	digestStr := "sha256:" + hexHash
+	testDigest, err := name.NewDigest(repo + "@" + digestStr)
+	require.NoError(t, err)
+
+	// A dummy referrer descriptor digest, used to build sigRef inside the loop.
+	const referrerHex = "0000000000000000000000000000000000000000000000000000000000000001"
+
+	tests := []struct {
+		name                string
+		configure           func(s *verifierSetup)
+		wantErr             string
+		wantErrIs           error
+		wantSigVerifyCount  int
+		wantBundleCount     int
+		wantSigsCount       int
+		wantDetailsNotEmpty bool
+	}{
+		{
+			name: "fallback tag not found returns errFallbackTagNotFound",
+			configure: func(s *verifierSetup) {
+				s.fakeResolveDigest.digest = testDigest
+				s.fakeRemoteIndex.err = &transport.Error{StatusCode: http.StatusNotFound}
+			},
+			wantErrIs: errFallbackTagNotFound,
+		},
+		{
+			name: "all manifests fail fetching signatures returns no-signatures error",
+			configure: func(s *verifierSetup) {
+				s.fakeResolveDigest.digest = testDigest
+				s.fakeRemoteIndex.idx = &fakeImageIndex{
+					manifest: &v1.IndexManifest{
+						Manifests: []v1.Descriptor{
+							{ArtifactType: cosignSigArtifactType, Digest: v1.Hash{Algorithm: "sha256", Hex: referrerHex}},
+						},
+					},
+				}
+				s.fakeRemoteSignatures.err = errors.New("registry unavailable")
+			},
+			wantErr:         "no signatures found",
+			wantSigsCount:   1,
+			wantBundleCount: 0,
+		},
+		{
+			name: "legacy artifact type routes to cosignVerifySignature not cosignRemoteBundle",
+			configure: func(s *verifierSetup) {
+				s.verifier.config.IgnoreTlog = true
+				s.fakeResolveDigest.digest = testDigest
+				s.fakeRemoteIndex.idx = &fakeImageIndex{
+					manifest: &v1.IndexManifest{
+						Manifests: []v1.Descriptor{
+							{ArtifactType: cosignSigArtifactType, Digest: v1.Hash{Algorithm: "sha256", Hex: referrerHex}},
+						},
+					},
+				}
+				sig := &fakeSignature{
+					payload:         createFakePayload(),
+					base64Signature: "base64sig",
+					cert:            createTestCert(),
+				}
+				s.fakeRemoteSignatures.sigs = &fakeSignaturesImpl{sigs: []oci.Signature{sig}}
+				s.fakeSingleSigVerify.ok = true
+			},
+			wantSigVerifyCount:  1,
+			wantBundleCount:     0,
+			wantSigsCount:       1,
+			wantDetailsNotEmpty: true,
+		},
+		{
+			name: "bundle artifact type routes to cosignRemoteBundle not cosignRemoteSignatures",
+			configure: func(s *verifierSetup) {
+				s.fakeResolveDigest.digest = testDigest
+				s.fakeRemoteIndex.idx = &fakeImageIndex{
+					manifest: &v1.IndexManifest{
+						Manifests: []v1.Descriptor{
+							{ArtifactType: "application/vnd.dev.sigstore.bundle.v0.3+json", Digest: v1.Hash{Algorithm: "sha256", Hex: referrerHex}},
+						},
+					},
+				}
+				// Return an error from Bundle so verification fails; the routing is what we test.
+				s.fakeRemoteBundle.err = errors.New("bundle fetch failed")
+			},
+			wantErr:            "no signatures found",
+			wantSigVerifyCount: 0,
+			wantSigsCount:      0,
+			wantBundleCount:    1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			s := setupVerifier()
+			checkOptions := &cosign.CheckOpts{IgnoreTlog: s.verifier.config.IgnoreTlog}
+			tt.configure(&s)
+			// Re-apply IgnoreTlog in case configure changed it after checkOptions was built.
+			checkOptions.IgnoreTlog = s.verifier.config.IgnoreTlog
+
+			details, err := s.verifier.verifyViaOCIFallbackTag(context.Background(), testDigest, checkOptions)
+
+			if tt.wantErrIs != nil {
+				require.ErrorIs(t, err, tt.wantErrIs)
+				return
+			}
+			if tt.wantErr != "" {
+				require.ErrorContains(t, err, tt.wantErr)
+			} else {
+				require.NoError(t, err)
+			}
+			if tt.wantDetailsNotEmpty {
+				assert.NotEmpty(t, details)
+			}
+			assert.Equal(t, tt.wantSigVerifyCount, s.fakeSingleSigVerify.CallCount, "cosignVerifySignature call count")
+			assert.Equal(t, tt.wantBundleCount, s.fakeRemoteBundle.CallCount, "cosignRemoteBundle call count")
+			assert.Equal(t, tt.wantSigsCount, s.fakeRemoteSignatures.CallCount, "cosignRemoteSignatures call count")
+		})
+	}
+}
+
 type fakeCosignVerifySignatureFn struct {
 	Responses []fakeResponse
 	CallCount int
@@ -718,6 +848,94 @@ func (f *fakeGetTrustedRootFn) Get() (sgroot.TrustedMaterial, error) {
 	return f.Response.TrustedRoot, f.Response.Err
 }
 
+type fakeRemoteIndexFn struct {
+	idx       v1.ImageIndex
+	err       error
+	CallCount int
+}
+
+func (f *fakeRemoteIndexFn) Index(_ name.Reference, _ ...remote.Option) (v1.ImageIndex, error) {
+	f.CallCount++
+	return f.idx, f.err
+}
+
+type fakeResolveDigestFn struct {
+	digest name.Digest
+	err    error
+}
+
+func (f *fakeResolveDigestFn) Resolve(_ name.Reference, _ ...cosignremote.Option) (name.Digest, error) {
+	return f.digest, f.err
+}
+
+type fakeRemoteSignaturesFn struct {
+	sigs      oci.Signatures
+	err       error
+	CallCount int
+}
+
+func (f *fakeRemoteSignaturesFn) Signatures(_ name.Reference, _ ...cosignremote.Option) (oci.Signatures, error) {
+	f.CallCount++
+	return f.sigs, f.err
+}
+
+type fakeSingleSigVerifyFn struct {
+	ok        bool
+	err       error
+	CallCount int
+}
+
+func (f *fakeSingleSigVerifyFn) Verify(_ context.Context, _ oci.Signature, _ v1.Hash, _ *cosign.CheckOpts) (bool, error) {
+	f.CallCount++
+	return f.ok, f.err
+}
+
+type fakeRemoteBundleFn struct {
+	bndl      *sgbundle.Bundle
+	err       error
+	CallCount int
+}
+
+func (f *fakeRemoteBundleFn) Bundle(_ name.Reference, _ ...cosignremote.Option) (*sgbundle.Bundle, error) {
+	f.CallCount++
+	return f.bndl, f.err
+}
+
+// fakeImageIndex implements v1.ImageIndex with only IndexManifest wired.
+type fakeImageIndex struct {
+	manifest *v1.IndexManifest
+	err      error
+}
+
+func (f *fakeImageIndex) MediaType() (types.MediaType, error)       { return "", nil }
+func (f *fakeImageIndex) Digest() (v1.Hash, error)                  { return v1.Hash{}, nil }
+func (f *fakeImageIndex) Size() (int64, error)                      { return 0, nil }
+func (f *fakeImageIndex) RawManifest() ([]byte, error)              { return nil, nil }
+func (f *fakeImageIndex) Image(v1.Hash) (v1.Image, error)           { return nil, nil }
+func (f *fakeImageIndex) ImageIndex(v1.Hash) (v1.ImageIndex, error) { return nil, nil }
+func (f *fakeImageIndex) IndexManifest() (*v1.IndexManifest, error) {
+	return f.manifest, f.err
+}
+
+// fakeSignaturesImpl implements oci.Signatures (which embeds v1.Image) with only Get wired.
+type fakeSignaturesImpl struct {
+	sigs []oci.Signature
+	err  error
+}
+
+func (f *fakeSignaturesImpl) Get() ([]oci.Signature, error)           { return f.sigs, f.err }
+func (f *fakeSignaturesImpl) Layers() ([]v1.Layer, error)             { return nil, nil }
+func (f *fakeSignaturesImpl) MediaType() (types.MediaType, error)     { return "", nil }
+func (f *fakeSignaturesImpl) Size() (int64, error)                    { return 0, nil }
+func (f *fakeSignaturesImpl) ConfigName() (v1.Hash, error)            { return v1.Hash{}, nil }
+func (f *fakeSignaturesImpl) ConfigFile() (*v1.ConfigFile, error)     { return nil, nil }
+func (f *fakeSignaturesImpl) RawConfigFile() ([]byte, error)          { return nil, nil }
+func (f *fakeSignaturesImpl) Digest() (v1.Hash, error)                { return v1.Hash{}, nil }
+func (f *fakeSignaturesImpl) Manifest() (*v1.Manifest, error)         { return nil, nil }
+func (f *fakeSignaturesImpl) RawManifest() ([]byte, error)            { return nil, nil }
+func (f *fakeSignaturesImpl) LayerByDigest(v1.Hash) (v1.Layer, error) { return nil, nil }
+func (f *fakeSignaturesImpl) LayerByDiffID(v1.Hash) (v1.Layer, error) { return nil, nil }
+
 type fakeSignature struct {
 	payload         []byte
 	base64Signature string
@@ -791,6 +1009,11 @@ type verifierSetup struct {
 	fakeGetCTLogPubs             *fakeGetCTLogPubsFn
 	fakeGetRekorClient           *fakeGetRekorClientFn
 	fakeGetTrustedRoot           *fakeGetTrustedRootFn
+	fakeRemoteIndex              *fakeRemoteIndexFn
+	fakeResolveDigest            *fakeResolveDigestFn
+	fakeRemoteSignatures         *fakeRemoteSignaturesFn
+	fakeSingleSigVerify          *fakeSingleSigVerifyFn
+	fakeRemoteBundle             *fakeRemoteBundleFn
 }
 
 func setupVerifier() verifierSetup {
@@ -807,6 +1030,11 @@ func setupVerifier() verifierSetup {
 	fakeGetCTLogPubsFn := &fakeGetCTLogPubsFn{}
 	fakeGetRekorClientFn := &fakeGetRekorClientFn{}
 	fakeGetTrustedRootFn := &fakeGetTrustedRootFn{}
+	fakeRemoteIndexFn := &fakeRemoteIndexFn{}
+	fakeResolveDigestFn := &fakeResolveDigestFn{}
+	fakeRemoteSignaturesFn := &fakeRemoteSignaturesFn{}
+	fakeSingleSigVerifyFn := &fakeSingleSigVerifyFn{}
+	fakeRemoteBundleFn := &fakeRemoteBundleFn{}
 
 	verifier := &ImageVerifier{
 		config: config,
@@ -819,6 +1047,11 @@ func setupVerifier() verifierSetup {
 			getRekorPublicKeys:      fakeGetRekorPubsFn.Get,
 			getCTLogPublicKeys:      fakeGetCTLogPubsFn.Get,
 			getTrustedRoot:          fakeGetTrustedRootFn.Get,
+			remoteIndex:             fakeRemoteIndexFn.Index,
+			resolveDigest:           fakeResolveDigestFn.Resolve,
+			cosignRemoteSignatures:  fakeRemoteSignaturesFn.Signatures,
+			cosignVerifySignature:   fakeSingleSigVerifyFn.Verify,
+			cosignRemoteBundle:      fakeRemoteBundleFn.Bundle,
 		},
 	}
 
@@ -832,6 +1065,11 @@ func setupVerifier() verifierSetup {
 		fakeGetCTLogPubs:             fakeGetCTLogPubsFn,
 		fakeGetRekorClient:           fakeGetRekorClientFn,
 		fakeGetTrustedRoot:           fakeGetTrustedRootFn,
+		fakeRemoteIndex:              fakeRemoteIndexFn,
+		fakeResolveDigest:            fakeResolveDigestFn,
+		fakeRemoteSignatures:         fakeRemoteSignaturesFn,
+		fakeSingleSigVerify:          fakeSingleSigVerifyFn,
+		fakeRemoteBundle:             fakeRemoteBundleFn,
 	}
 }
 
