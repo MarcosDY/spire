@@ -673,13 +673,13 @@ func processAllowedIdentities(allowedIdentities map[string][]string) []cosign.Id
 			identity := cosign.Identity{}
 
 			if containsRegexChars(issuer) {
-				identity.IssuerRegExp = issuer
+				identity.IssuerRegExp = normalizeGlobPattern(issuer)
 			} else {
 				identity.Issuer = issuer
 			}
 
 			if containsRegexChars(subject) {
-				identity.SubjectRegExp = subject
+				identity.SubjectRegExp = normalizeGlobPattern(subject)
 			} else {
 				identity.Subject = subject
 			}
@@ -693,6 +693,25 @@ func processAllowedIdentities(allowedIdentities map[string][]string) []cosign.Id
 func containsRegexChars(s string) bool {
 	// check for characters commonly used in regex.
 	return strings.ContainsAny(s, "*+?^${}[]|()")
+}
+
+// normalizeGlobPattern converts a pattern that may use glob-style wildcards into a valid
+// Go regular expression. Specifically, a bare '*' (not already preceded by '.') is replaced
+// with '.*' so that patterns like '*@example.com' or 'refs/tags/*' work as intended.
+// Patterns that already use proper regex (e.g. '.*@example\.com') are left unchanged.
+func normalizeGlobPattern(pattern string) string {
+	if !strings.Contains(pattern, "*") {
+		return pattern
+	}
+	var b strings.Builder
+	b.Grow(len(pattern) + 4)
+	for i := range len(pattern) {
+		if pattern[i] == '*' && (i == 0 || pattern[i-1] != '.') {
+			b.WriteByte('.')
+		}
+		b.WriteByte(pattern[i])
+	}
+	return b.String()
 }
 
 func extractDetailsFromBundle(result *sgverify.VerificationResult, bundle *sgbundle.Bundle, ignoreTlog bool) (*signatureDetails, error) {

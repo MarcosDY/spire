@@ -79,8 +79,8 @@ func TestNewVerifier(t *testing.T) {
 		Subject: "test-subject",
 	}
 	identityRegExp := cosign.Identity{
-		IssuerRegExp:  "test-issuer-2*",
-		SubjectRegExp: "test-subject-2*",
+		IssuerRegExp:  "test-issuer-2.*",
+		SubjectRegExp: "test-subject-2.*",
 	}
 	expectedIdentites := []cosign.Identity{identityPlainValues, identityRegExp}
 
@@ -557,11 +557,11 @@ func TestProcessAllowedIdentities(t *testing.T) {
 		{
 			name: "issuer regex, subject plain",
 			allowedIdentities: map[string][]string{
-				"test-issuer/*": {"refs/tags/1.0.0"},
+				"test-issuer/.*": {"refs/tags/1.0.0"},
 			},
 			expected: []cosign.Identity{
 				{
-					IssuerRegExp: "test-issuer/*",
+					IssuerRegExp: "test-issuer/.*",
 					Subject:      "refs/tags/1.0.0",
 				},
 			},
@@ -574,7 +574,7 @@ func TestProcessAllowedIdentities(t *testing.T) {
 			expected: []cosign.Identity{
 				{
 					Issuer:        "test-issuer",
-					SubjectRegExp: "refs/tags/*",
+					SubjectRegExp: "refs/tags/.*",
 				},
 			},
 		},
