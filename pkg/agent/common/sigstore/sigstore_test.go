@@ -23,6 +23,7 @@ import (
 	"github.com/sigstore/cosign/v3/pkg/oci"
 	"github.com/sigstore/rekor/pkg/client"
 	rekorclient "github.com/sigstore/rekor/pkg/generated/client"
+	sgroot "github.com/sigstore/sigstore-go/pkg/root"
 	"github.com/sigstore/sigstore/pkg/signature/payload"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -92,6 +93,7 @@ func TestNewVerifier(t *testing.T) {
 	assert.NotNil(t, verifier.sigstoreFunctions.getFulcioIntermediates)
 	assert.NotNil(t, verifier.sigstoreFunctions.getRekorPublicKeys)
 	assert.NotNil(t, verifier.sigstoreFunctions.getCTLogPublicKeys)
+	assert.NotNil(t, verifier.sigstoreFunctions.getTrustedRoot)
 }
 
 func TestInitialize(t *testing.T) {
@@ -104,6 +106,8 @@ func TestInitialize(t *testing.T) {
 	expectedCTLogPubs := &cosign.TrustedTransparencyLogPubKeys{}
 	expectedRekorClient := &rekorclient.Rekor{}
 
+	expectedTrustedRoot := &sgroot.BaseTrustedMaterial{}
+
 	verifierSetup.fakeGetFulcioRoots.Response.Roots = expectedRoots
 	verifierSetup.fakeGetFulcioRoots.Response.Err = nil
 	verifierSetup.fakeGetFulcioIntermediates.Response.Intermediates = expectedIntermediates
@@ -114,6 +118,8 @@ func TestInitialize(t *testing.T) {
 	verifierSetup.fakeGetCTLogPubs.Response.Err = nil
 	verifierSetup.fakeGetRekorClient.Response.Client = expectedRekorClient
 	verifierSetup.fakeGetRekorClient.Response.Err = nil
+	verifierSetup.fakeGetTrustedRoot.Response.TrustedRoot = expectedTrustedRoot
+	verifierSetup.fakeGetTrustedRoot.Response.Err = nil
 
 	// Act
 	err := verifierSetup.verifier.Init(ctx)
@@ -125,12 +131,17 @@ func TestInitialize(t *testing.T) {
 	assert.Equal(t, expectedRekorPubs, verifierSetup.verifier.rekorPublicKeys)
 	assert.Equal(t, expectedCTLogPubs, verifierSetup.verifier.ctLogPublicKeys)
 	assert.Equal(t, expectedRekorClient, verifierSetup.verifier.rekorClient)
+	assert.Equal(t, expectedTrustedRoot, verifierSetup.verifier.trustedRoot)
+	assert.NotNil(t, verifierSetup.verifier.sgVerifier)
+	// No allowed identities configured in this test, so sgCertIdentities stays nil.
+	assert.Nil(t, verifierSetup.verifier.sgCertIdentities)
 
 	assert.Equal(t, 1, verifierSetup.fakeGetFulcioRoots.CallCount)
 	assert.Equal(t, 1, verifierSetup.fakeGetFulcioIntermediates.CallCount)
 	assert.Equal(t, 1, verifierSetup.fakeGetRekorPubs.CallCount)
 	assert.Equal(t, 1, verifierSetup.fakeGetCTLogPubs.CallCount)
 	assert.Equal(t, 1, verifierSetup.fakeGetRekorClient.CallCount)
+	assert.Equal(t, 1, verifierSetup.fakeGetTrustedRoot.CallCount)
 }
 
 func TestVerify(t *testing.T) {
@@ -694,6 +705,19 @@ func (f *fakeGetRekorClientFn) Get(_ string, _ ...client.Option) (*rekorclient.R
 	return f.Response.Client, f.Response.Err
 }
 
+type fakeGetTrustedRootFn struct {
+	Response struct {
+		TrustedRoot sgroot.TrustedMaterial
+		Err         error
+	}
+	CallCount int
+}
+
+func (f *fakeGetTrustedRootFn) Get() (sgroot.TrustedMaterial, error) {
+	f.CallCount++
+	return f.Response.TrustedRoot, f.Response.Err
+}
+
 type fakeSignature struct {
 	payload         []byte
 	base64Signature string
@@ -766,6 +790,7 @@ type verifierSetup struct {
 	fakeGetRekorPubs             *fakeGetRekorPubsFn
 	fakeGetCTLogPubs             *fakeGetCTLogPubsFn
 	fakeGetRekorClient           *fakeGetRekorClientFn
+	fakeGetTrustedRoot           *fakeGetTrustedRootFn
 }
 
 func setupVerifier() verifierSetup {
@@ -781,6 +806,7 @@ func setupVerifier() verifierSetup {
 	fakeGetRekorPubsFn := &fakeGetRekorPubsFn{}
 	fakeGetCTLogPubsFn := &fakeGetCTLogPubsFn{}
 	fakeGetRekorClientFn := &fakeGetRekorClientFn{}
+	fakeGetTrustedRootFn := &fakeGetTrustedRootFn{}
 
 	verifier := &ImageVerifier{
 		config: config,
@@ -792,6 +818,7 @@ func setupVerifier() verifierSetup {
 			getFulcioIntermediates:  fakeGetFulcioIntermediatesFn.Get,
 			getRekorPublicKeys:      fakeGetRekorPubsFn.Get,
 			getCTLogPublicKeys:      fakeGetCTLogPubsFn.Get,
+			getTrustedRoot:          fakeGetTrustedRootFn.Get,
 		},
 	}
 
@@ -804,6 +831,7 @@ func setupVerifier() verifierSetup {
 		fakeGetRekorPubs:             fakeGetRekorPubsFn,
 		fakeGetCTLogPubs:             fakeGetCTLogPubsFn,
 		fakeGetRekorClient:           fakeGetRekorClientFn,
+		fakeGetTrustedRoot:           fakeGetTrustedRootFn,
 	}
 }
 
