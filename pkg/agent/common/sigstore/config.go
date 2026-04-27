@@ -5,6 +5,7 @@ import "github.com/hashicorp/go-hclog"
 // Config holds configuration for the ImageVerifier.
 type Config struct {
 	RekorURL            string
+	TrustedRootPath     string
 	RegistryCredentials map[string]*RegistryCredential
 
 	AllowedIdentities  map[string][]string
@@ -32,6 +33,11 @@ type HCLConfig struct {
 
 	// RekorURL is the URL for the Rekor transparency log server to use for verifying entries.
 	RekorURL *string `hcl:"rekor_url,omitempty" json:"rekor_url,omitempty"`
+
+	// TrustedRootPath is the path to a trusted_root.json file for a private Sigstore instance.
+	// Required when using a custom RekorURL so that bundle (cosign v3) verification can validate
+	// signatures against the correct Rekor log keys. When unset, the public Sigstore TUF root is used.
+	TrustedRootPath *string `hcl:"trusted_root_path,omitempty" json:"trusted_root_path,omitempty"`
 
 	// IgnoreSCT specifies whether to bypass the requirement for a Signed Certificate Timestamp (SCT) during verification.
 	// An SCT is proof of inclusion in a Certificate Transparency log.
@@ -69,6 +75,10 @@ func NewConfigFromHCL(hclConfig *HCLConfig, log hclog.Logger) *Config {
 
 	if hclConfig.RekorURL != nil {
 		config.RekorURL = *hclConfig.RekorURL
+	}
+
+	if hclConfig.TrustedRootPath != nil {
+		config.TrustedRootPath = *hclConfig.TrustedRootPath
 	}
 
 	if hclConfig.IgnoreSCT != nil {

@@ -81,7 +81,7 @@ data:
               ]
               allowed_identities = {
                 "https://token.actions.githubusercontent.com" = [
-                  "https://github.com/spiffe/spire/.github/workflows/release_build.yaml@refs/tags/v1.14.0"
+                  "https://github.com/spiffe/spire/.github/workflows/nightly_build.yaml@refs/heads/myacob/upgrade-cosign"
                 ]
               }
               rekor_url = "https://rekor.sigstore.dev/"
