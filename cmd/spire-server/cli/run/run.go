@@ -107,6 +107,7 @@ type serverConfig struct {
 }
 
 type experimentalConfig struct {
+	AgentSpiffeIdAsSelector bool                        `hcl:"agent_spiffe_id_as_selector"`
 	AuthOpaPolicyEngine     *authpolicy.OpaEngineConfig `hcl:"auth_opa_policy_engine"`
 	CacheReloadInterval     string                      `hcl:"cache_reload_interval"`
 	FullCacheReloadInterval string                      `hcl:"full_cache_reload_interval"`
@@ -116,6 +117,7 @@ type experimentalConfig struct {
 	SQLTransactionTimeout   string                      `hcl:"sql_transaction_timeout"`
 	RequirePQKEM            bool                        `hcl:"require_pq_kem"`
 	WITKeyType              string                      `hcl:"wit_key_type"`
+	WITIssuer               string                      `hcl:"wit_issuer"`
 
 	Flags fflag.RawConfig `hcl:"feature_flags"`
 
@@ -581,6 +583,8 @@ func NewServerConfig(c *Config, logOptions []log.Option, allowUnknownConfig bool
 		sc.CATTL = ttl
 	}
 
+	sc.Experimental.AgentSpiffeIdAsSelector = c.Server.Experimental.AgentSpiffeIdAsSelector
+
 	// If the configured TTLs can lead to surprises, then do our best to log an
 	// accurate message and guide the user to resolution
 	type ttlCheck struct {
@@ -673,6 +677,7 @@ func NewServerConfig(c *Config, logOptions []log.Option, allowUnknownConfig bool
 	}
 
 	sc.JWTIssuer = c.Server.JWTIssuer
+	sc.WITIssuer = c.Server.Experimental.WITIssuer
 
 	if subject := c.Server.CASubject; subject != nil {
 		sc.CASubject = pkix.Name{

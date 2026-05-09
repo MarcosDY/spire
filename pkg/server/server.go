@@ -328,6 +328,7 @@ func (s *Server) newCredBuilder(cat catalog.Catalog) (*credtemplate.Builder, err
 		X509SVIDTTL:         s.config.X509SVIDTTL,
 		JWTSVIDTTL:          s.config.JWTSVIDTTL,
 		JWTIssuer:           s.config.JWTIssuer,
+		WITIssuer:           s.config.WITIssuer,
 		CredentialComposers: cat.GetCredentialComposers(),
 		TLSPolicy:           s.config.TLSPolicy,
 	})
@@ -449,6 +450,7 @@ func (s *Server) newEndpointsServer(ctx context.Context, catalog catalog.Catalog
 		BundleManager:                bundleManager,
 		AdminIDs:                     s.config.AdminIDs,
 		MaxAttestedNodeInfoStaleness: s.config.MaxAttestedNodeInfoStaleness,
+		AgentSpiffeIdAsSelector:      s.config.Experimental.AgentSpiffeIdAsSelector,
 	}
 	if s.config.Federation.BundleEndpoint != nil {
 		config.BundleEndpoint.Address = s.config.Federation.BundleEndpoint.Address
