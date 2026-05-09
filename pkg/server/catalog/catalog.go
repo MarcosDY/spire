@@ -90,8 +90,8 @@ type dsConfigurer struct {
 	ds *ds_sql.Plugin
 }
 
-func (c *dsConfigurer) Configure(ctx context.Context, _ catalog.CoreConfig, configuration string) error {
-	return c.ds.Configure(ctx, configuration)
+func (c *dsConfigurer) Configure(ctx context.Context, _ catalog.CoreConfig, configuration string, format catalog.ConfigFormat) error {
+	return c.ds.Configure(ctx, configuration, format)
 }
 
 func (c *dsConfigurer) Validate(ctx context.Context, coreConfig catalog.CoreConfig, configuration string) (*configv1.ValidateResponse, error) {
@@ -268,7 +268,7 @@ func loadSQLDataStore(ctx context.Context, config Config, coreConfig catalog.Cor
 		return nil, fmt.Errorf("pluggability for the DataStore is deprecated; only the built-in %q plugin is supported", ds_sql.PluginName)
 	}
 	if sqlConfig.DataSource == nil {
-		sqlConfig.DataSource = catalog.FixedData("")
+		sqlConfig.DataSource = catalog.FixedData{Data: "", Format: catalog.ConfigFormatHCL}
 	}
 
 	dsLog := config.Log.WithField(telemetry.SubsystemName, sqlConfig.Name)

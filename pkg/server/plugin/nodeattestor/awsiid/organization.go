@@ -32,10 +32,10 @@ var (
 )
 
 type orgValidationConfig struct {
-	AccountID      string `hcl:"management_account_id"`
-	AccountRole    string `hcl:"assume_org_role"`
-	AccountRegion  string `hcl:"management_account_region"`
-	AccountListTTL string `hcl:"org_account_map_ttl"`
+	AccountID      string `hcl:"management_account_id" yaml:"managementAccountID"`
+	AccountRole    string `hcl:"assume_org_role" yaml:"assumeOrgRole"`
+	AccountRegion  string `hcl:"management_account_region" yaml:"managementAccountRegion"`
+	AccountListTTL string `hcl:"org_account_map_ttl" yaml:"orgAccountMapTTL"`
 }
 
 type orgValidator struct {

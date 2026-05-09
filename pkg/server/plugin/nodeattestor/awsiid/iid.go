@@ -30,7 +30,6 @@ import (
 	iamtypes "github.com/aws/aws-sdk-go-v2/service/iam/types"
 	"github.com/fullsailor/pkcs7"
 	"github.com/hashicorp/go-hclog"
-	"github.com/hashicorp/hcl"
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	nodeattestorv1 "github.com/spiffe/spire-plugin-sdk/proto/spire/plugin/server/nodeattestor/v1"
 	configv1 "github.com/spiffe/spire-plugin-sdk/proto/spire/service/common/config/v1"
@@ -38,6 +37,7 @@ import (
 	"github.com/spiffe/spire/pkg/common/catalog"
 	caws "github.com/spiffe/spire/pkg/common/plugin/aws"
 	"github.com/spiffe/spire/pkg/common/pluginconf"
+	"github.com/spiffe/spire/pkg/common/plugindecode"
 	nodeattestorbase "github.com/spiffe/spire/pkg/server/plugin/nodeattestor/base"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -119,22 +119,22 @@ type IIDAttestorPlugin struct {
 // IIDAttestorConfig holds hcl configuration for IID attestor plugin
 type IIDAttestorConfig struct {
 	SessionConfig                   `hcl:",squash"`
-	SkipBlockDevice                 bool                 `hcl:"skip_block_device"`
-	DisableInstanceProfileSelectors bool                 `hcl:"disable_instance_profile_selectors"`
-	LocalValidAcctIDs               []string             `hcl:"account_ids_for_local_validation"`
-	AgentPathTemplate               string               `hcl:"agent_path_template"`
-	AssumeRole                      string               `hcl:"assume_role"`
-	Partition                       string               `hcl:"partition"`
-	ValidateOrgAccountID            *orgValidationConfig `hcl:"verify_organization"`
-	ValidateEKSClusterMembership    *eksValidationConfig `hcl:"validate_eks_cluster_membership"`
+	SkipBlockDevice                 bool                 `hcl:"skip_block_device" yaml:"skipBlockDevice"`
+	DisableInstanceProfileSelectors bool                 `hcl:"disable_instance_profile_selectors" yaml:"disableInstanceProfileSelectors"`
+	LocalValidAcctIDs               []string             `hcl:"account_ids_for_local_validation" yaml:"accountIdsForLocalValidation"`
+	AgentPathTemplate               string               `hcl:"agent_path_template" yaml:"agentPathTemplate"`
+	AssumeRole                      string               `hcl:"assume_role" yaml:"assumeRole"`
+	Partition                       string               `hcl:"partition" yaml:"partition"`
+	ValidateOrgAccountID            *orgValidationConfig `hcl:"verify_organization" yaml:"verifyOrganization,omitempty"`
+	ValidateEKSClusterMembership    *eksValidationConfig `hcl:"validate_eks_cluster_membership" yaml:"validateEksClusterMembership,omitempty"`
 	pathTemplate                    *agentpathtemplate.Template
 	trustDomain                     spiffeid.TrustDomain
 	getAWSCACertificate             func(string, PublicKeyType) (*x509.Certificate, error)
 }
 
-func (p *IIDAttestorPlugin) buildConfig(coreConfig catalog.CoreConfig, hclText string, status *pluginconf.Status) *IIDAttestorConfig {
+func (p *IIDAttestorPlugin) buildConfig(coreConfig catalog.CoreConfig, text string, format catalog.ConfigFormat, status *pluginconf.Status) *IIDAttestorConfig {
 	newConfig := new(IIDAttestorConfig)
-	if err := hcl.Decode(newConfig, hclText); err != nil {
+	if err := plugindecode.DecodeConfig(text, format, newConfig); err != nil {
 		status.ReportErrorf("unable to decode configuration: %v", err)
 		return nil
 	}
