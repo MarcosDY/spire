@@ -14,10 +14,10 @@ import (
 
 // SessionConfig is a common config for AWS session config.
 type SessionConfig struct {
-	AccessKeyID     string `hcl:"access_key_id"`
-	SecretAccessKey string `hcl:"secret_access_key"`
-	AssumeRole      string `hcl:"assume_role"`
-	Partition       string `hcl:"partition"`
+	AccessKeyID     string `hcl:"access_key_id" yaml:"accessKeyID"`
+	SecretAccessKey string `hcl:"secret_access_key" yaml:"secretAccessKey"`
+	AssumeRole      string `hcl:"assume_role" yaml:"assumeRole"`
+	Partition       string `hcl:"partition" yaml:"partition"`
 }
 
 func (cfg *SessionConfig) Validate(defaultAccessKeyID, defaultSecretAccessKey string) error {

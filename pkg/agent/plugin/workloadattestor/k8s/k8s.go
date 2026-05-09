@@ -19,7 +19,6 @@ import (
 
 	"github.com/andres-erbsen/clock"
 	"github.com/hashicorp/go-hclog"
-	"github.com/hashicorp/hcl"
 	hcltoken "github.com/hashicorp/hcl/hcl/token"
 	workloadattestorv1 "github.com/spiffe/spire-plugin-sdk/proto/spire/plugin/agent/workloadattestor/v1"
 	configv1 "github.com/spiffe/spire-plugin-sdk/proto/spire/service/common/config/v1"
@@ -27,6 +26,7 @@ import (
 	"github.com/spiffe/spire/pkg/common/catalog"
 	"github.com/spiffe/spire/pkg/common/pemutil"
 	"github.com/spiffe/spire/pkg/common/pluginconf"
+	"github.com/spiffe/spire/pkg/common/plugindecode"
 	"github.com/spiffe/spire/pkg/common/telemetry"
 	"github.com/valyala/fastjson"
 	"golang.org/x/sync/singleflight"
@@ -63,81 +63,81 @@ type HCLConfig struct {
 	// KubeletReadOnlyPort defines the read only port for the kubelet
 	// (typically 10255). This option is mutually exclusive with
 	// KubeletSecurePort.
-	KubeletReadOnlyPort int `hcl:"kubelet_read_only_port"`
+	KubeletReadOnlyPort int `hcl:"kubelet_read_only_port" yaml:"kubeletReadOnlyPort"`
 
 	// KubeletSecurePort defines the secure port for the kubelet (typically
 	// 10250). This option is mutually exclusive with KubeletReadOnlyPort.
-	KubeletSecurePort int `hcl:"kubelet_secure_port"`
+	KubeletSecurePort int `hcl:"kubelet_secure_port" yaml:"kubeletSecurePort"`
 
 	// MaxPollAttempts is the maximum number of polling attempts for the
 	// container hosting the workload process.
-	MaxPollAttempts int `hcl:"max_poll_attempts"`
+	MaxPollAttempts int `hcl:"max_poll_attempts" yaml:"maxPollAttempts"`
 
 	// PollRetryInterval is the time in between polling attempts.
-	PollRetryInterval string `hcl:"poll_retry_interval"`
+	PollRetryInterval string `hcl:"poll_retry_interval" yaml:"pollRetryInterval"`
 
 	// KubeletCAPath is the path to the CA certificate for authenticating the
 	// kubelet over the secure port. Required when using the secure port unless
 	// SkipKubeletVerification is set. Defaults to the cluster trust bundle.
-	KubeletCAPath string `hcl:"kubelet_ca_path"`
+	KubeletCAPath string `hcl:"kubelet_ca_path" yaml:"kubeletCAPath"`
 
 	// SkipKubeletVerification controls whether the plugin will
 	// verify the certificate presented by the kubelet.
-	SkipKubeletVerification bool `hcl:"skip_kubelet_verification"`
+	SkipKubeletVerification bool `hcl:"skip_kubelet_verification" yaml:"skipKubeletVerification"`
 
 	// TokenPath is the path to the bearer token used to authenticate to the
 	// secure port. Defaults to the default service account token path unless
 	// PrivateKeyPath and CertificatePath are specified.
-	TokenPath string `hcl:"token_path"`
+	TokenPath string `hcl:"token_path" yaml:"tokenPath"`
 
 	// CertificatePath is the path to a certificate key used for client
 	// authentication with the kubelet. Must be used with PrivateKeyPath.
-	CertificatePath string `hcl:"certificate_path"`
+	CertificatePath string `hcl:"certificate_path" yaml:"certificatePath"`
 
 	// PrivateKeyPath is the path to a private key used for client
 	// authentication with the kubelet. Must be used with CertificatePath.
-	PrivateKeyPath string `hcl:"private_key_path"`
+	PrivateKeyPath string `hcl:"private_key_path" yaml:"privateKeyPath"`
 
 	// UseAnonymousAuthentication controls whether communication to the
 	// kubelet over the secure port is unauthenticated. This option is mutually
 	// exclusive with other authentication configuration fields TokenPath,
 	// CertificatePath, and PrivateKeyPath.
-	UseAnonymousAuthentication bool `hcl:"use_anonymous_authentication"`
+	UseAnonymousAuthentication bool `hcl:"use_anonymous_authentication" yaml:"useAnonymousAuthentication"`
 
 	// NodeNameEnv is the environment variable used to determine the node name
 	// for contacting the kubelet. It defaults to "MY_NODE_NAME". If the
 	// environment variable is not set, and NodeName is not specified, the
 	// plugin will default to localhost (which requires host networking).
-	NodeNameEnv string `hcl:"node_name_env"`
+	NodeNameEnv string `hcl:"node_name_env" yaml:"nodeNameEnv"`
 
 	// NodeName is the node name used when contacting the kubelet. If set, it
 	// takes precedence over NodeNameEnv.
-	NodeName string `hcl:"node_name"`
+	NodeName string `hcl:"node_name" yaml:"nodeName"`
 
 	// ReloadInterval controls how often TLS and token configuration is loaded
 	// from the disk.
-	ReloadInterval string `hcl:"reload_interval"`
+	ReloadInterval string `hcl:"reload_interval" yaml:"reloadInterval"`
 
 	// DisableContainerSelectors disables the gathering of selectors for the
 	// specific container running the workload. This allows attestation to
 	// succeed with just pod related selectors when the workload pod is known
 	// but the container may not be in a ready state at the time of attestation
 	// (e.g. when a postStart hook has yet to complete).
-	DisableContainerSelectors bool `hcl:"disable_container_selectors"`
+	DisableContainerSelectors bool `hcl:"disable_container_selectors" yaml:"disableContainerSelectors"`
 
 	// UseNewContainerLocator, if true, uses the new container locator
 	// mechanism instead of the legacy cgroup matchers. Defaults to true if
 	// unset. This configurable will be removed in a future release.
-	UseNewContainerLocator *bool `hcl:"use_new_container_locator"`
+	UseNewContainerLocator *bool `hcl:"use_new_container_locator" yaml:"useNewContainerLocator,omitempty"`
 
 	// VerboseContainerLocatorLogs, if true, dumps extra information to the log
 	// about mountinfo and cgroup information used to locate the container.
-	VerboseContainerLocatorLogs bool `hcl:"verbose_container_locator_logs"`
+	VerboseContainerLocatorLogs bool `hcl:"verbose_container_locator_logs" yaml:"verboseContainerLocatorLogs"`
 
 	// Sigstore contains sigstore specific configs.
-	Sigstore *sigstore.HCLConfig `hcl:"sigstore,omitempty"`
+	Sigstore *sigstore.HCLConfig `hcl:"sigstore,omitempty" yaml:"sigstore,omitempty"`
 
-	UnusedKeyPositions map[string][]hcltoken.Pos `hcl:",unusedKeyPositions"`
+	UnusedKeyPositions map[string][]hcltoken.Pos `hcl:",unusedKeyPositions" yaml:"-"`
 }
 
 // k8sConfig holds the configuration distilled from HCL
@@ -162,10 +162,10 @@ type k8sConfig struct {
 	LastReload time.Time
 }
 
-func (p *Plugin) buildConfig(coreConfig catalog.CoreConfig, hclText string, status *pluginconf.Status) *k8sConfig {
+func (p *Plugin) buildConfig(coreConfig catalog.CoreConfig, text string, format catalog.ConfigFormat, status *pluginconf.Status) *k8sConfig {
 	// Parse HCL config payload into config struct
 	newConfig := new(HCLConfig)
-	if err := hcl.Decode(newConfig, hclText); err != nil {
+	if err := plugindecode.DecodeConfig(text, format, newConfig); err != nil {
 		status.ReportErrorf("unable to decode configuration: %v", err)
 		return nil
 	}

@@ -2,15 +2,36 @@ package catalog
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/hashicorp/hcl"
 	"github.com/hashicorp/hcl/hcl/ast"
 	"github.com/hashicorp/hcl/hcl/printer"
 	"github.com/hashicorp/hcl/hcl/token"
+	configv1 "github.com/spiffe/spire-plugin-sdk/proto/spire/service/common/config/v1"
+	yamlpkg "sigs.k8s.io/yaml"
 )
+
+// ConfigFormat identifies the serialization format of a plugin configuration string.
+type ConfigFormat int
+
+const (
+	ConfigFormatHCL  ConfigFormat = iota
+	ConfigFormatYAML
+)
+
+func (f ConfigFormat) ToProto() configv1.ConfigFormat {
+	switch f {
+	case ConfigFormatYAML:
+		return configv1.ConfigFormat_CONFIG_FORMAT_YAML
+	default:
+		return configv1.ConfigFormat_CONFIG_FORMAT_HCL
+	}
+}
 
 type PluginConfigs []PluginConfig
 
@@ -53,33 +74,35 @@ func (c *PluginConfig) IsExternal() bool {
 }
 
 type DataSource interface {
-	Load() (string, error)
+	Load() (string, ConfigFormat, error)
 	IsDynamic() bool
 }
 
-type FixedData string
-
-func (d FixedData) Load() (string, error) {
-	return string(d), nil
+type FixedData struct {
+	Data   string
+	Format ConfigFormat
 }
 
-func (d FixedData) IsDynamic() bool {
-	return false
+func (d FixedData) Load() (string, ConfigFormat, error) {
+	return d.Data, d.Format, nil
 }
 
-type FileData string
+func (d FixedData) IsDynamic() bool { return false }
 
-func (d FileData) Load() (string, error) {
-	data, err := os.ReadFile(string(d))
+type FileData struct {
+	Path   string
+	Format ConfigFormat
+}
+
+func (d FileData) Load() (string, ConfigFormat, error) {
+	data, err := os.ReadFile(d.Path)
 	if err != nil {
-		return "", err
+		return "", d.Format, err
 	}
-	return string(data), nil
+	return string(data), d.Format, nil
 }
 
-func (d FileData) IsDynamic() bool {
-	return true
-}
+func (d FileData) IsDynamic() bool { return true }
 
 type hclPluginConfig struct {
 	PluginCmd      string   `hcl:"plugin_cmd"`
@@ -262,12 +285,12 @@ func pluginConfigFromHCL(pluginType, pluginName string, hclPluginConfig hclPlugi
 			return PluginConfig{}, err
 		}
 		if data := buf.String(); data != "" {
-			dataSource = FixedData(data)
+			dataSource = FixedData{Data: data, Format: ConfigFormatHCL}
 		}
 	}
 
 	if hclPluginConfig.PluginDataFile != nil {
-		dataSource = FileData(*hclPluginConfig.PluginDataFile)
+		dataSource = FileData{Path: *hclPluginConfig.PluginDataFile, Format: ConfigFormatHCL}
 	}
 
 	return PluginConfig{
@@ -278,6 +301,79 @@ func pluginConfigFromHCL(pluginType, pluginName string, hclPluginConfig hclPlugi
 		Checksum:   hclPluginConfig.PluginChecksum,
 		DataSource: dataSource,
 		Disabled:   !hclPluginConfig.IsEnabled(),
+	}, nil
+}
+
+type yamlPluginConfig struct {
+	PluginCmd      string         `yaml:"pluginCmd"`
+	PluginArgs     []string       `yaml:"pluginArgs"`
+	PluginChecksum string         `yaml:"pluginChecksum"`
+	PluginData     map[string]any `yaml:"pluginData"`
+	PluginDataFile *string        `yaml:"pluginDataFile"`
+	Enabled        *bool          `yaml:"enabled"`
+}
+
+func (c yamlPluginConfig) IsEnabled() bool {
+	if c.Enabled == nil {
+		return true
+	}
+	return *c.Enabled
+}
+
+// PluginConfigsFromYAML parses the plugins section from a YAML config.
+// YAML structure: plugins.<pluginType>.<pluginName>: <yamlPluginConfig>
+func PluginConfigsFromYAML(raw json.RawMessage) (PluginConfigs, error) {
+	if raw == nil {
+		return nil, nil
+	}
+
+	var pluginsMap map[string]map[string]yamlPluginConfig
+	if err := json.Unmarshal(raw, &pluginsMap); err != nil {
+		return nil, fmt.Errorf("failed to decode YAML plugins config: %w", err)
+	}
+
+	var pluginConfigs PluginConfigs
+	for pluginType, pluginsForType := range pluginsMap {
+		for pluginName, ypc := range pluginsForType {
+			pc, err := pluginConfigFromYAML(pluginType, pluginName, ypc)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create plugin config for %q/%q: %w", pluginType, pluginName, err)
+			}
+			pluginConfigs = append(pluginConfigs, pc)
+		}
+	}
+	return pluginConfigs, nil
+}
+
+func pluginConfigFromYAML(pluginType, pluginName string, ypc yamlPluginConfig) (PluginConfig, error) {
+	if ypc.PluginData != nil && ypc.PluginDataFile != nil {
+		return PluginConfig{}, errors.New("only one of [pluginData, pluginDataFile] can be used")
+	}
+
+	var dataSource DataSource
+
+	if len(ypc.PluginData) > 0 {
+		yamlBytes, err := yamlpkg.Marshal(ypc.PluginData)
+		if err != nil {
+			return PluginConfig{}, fmt.Errorf("failed to re-marshal plugin data: %w", err)
+		}
+		if data := strings.TrimSpace(string(yamlBytes)); data != "" {
+			dataSource = FixedData{Data: data, Format: ConfigFormatYAML}
+		}
+	}
+
+	if ypc.PluginDataFile != nil {
+		dataSource = FileData{Path: *ypc.PluginDataFile, Format: ConfigFormatYAML}
+	}
+
+	return PluginConfig{
+		Name:       pluginName,
+		Type:       pluginType,
+		Path:       ypc.PluginCmd,
+		Args:       ypc.PluginArgs,
+		Checksum:   ypc.PluginChecksum,
+		DataSource: dataSource,
+		Disabled:   !ypc.IsEnabled(),
 	}, nil
 }
 

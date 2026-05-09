@@ -38,6 +38,19 @@ type newAgentConfigCase struct {
 	test               func(*testing.T, *agent.Config)
 }
 
+func TestParseFile_YAML(t *testing.T) {
+	path := "../../../../test/fixture/config/agent_good_posix.yaml"
+	c, err := ParseFile(path, false)
+	require.NoError(t, err)
+	require.NotNil(t, c.Agent)
+	require.Equal(t, "127.0.0.1", c.Agent.ServerAddress)
+	require.Equal(t, 8081, c.Agent.ServerPort)
+	require.Equal(t, "example.org", c.Agent.TrustDomain)
+	require.Equal(t, "INFO", c.Agent.LogLevel)
+	require.True(t, c.Agent.AllowUnauthenticatedVerifiers)
+	require.NotNil(t, c.PluginsRaw)
+}
+
 func TestMergeInput(t *testing.T) {
 	cases := []mergeInputCase{
 		{

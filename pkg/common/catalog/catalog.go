@@ -302,10 +302,12 @@ func ValidatePluginConfigs(ctx context.Context, config Config, repo Repository) 
 
 func GetPluginConfigString(c PluginConfig) (string, error) {
 	if c.DataSource == nil {
-		return FixedData("").Load()
+		data, _, err := FixedData{}.Load()
+		return data, err
 	}
 
-	return c.DataSource.Load()
+	data, _, err := c.DataSource.Load()
+	return data, err
 }
 
 func makePluginLog(log logrus.FieldLogger, pluginConfig PluginConfig) logrus.FieldLogger {

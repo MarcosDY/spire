@@ -12,7 +12,6 @@ import (
 	"sync"
 
 	"github.com/google/go-tpm/legacy/tpm2"
-	"github.com/hashicorp/hcl"
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	nodeattestorv1 "github.com/spiffe/spire-plugin-sdk/proto/spire/plugin/server/nodeattestor/v1"
 	configv1 "github.com/spiffe/spire-plugin-sdk/proto/spire/service/common/config/v1"
@@ -20,6 +19,7 @@ import (
 	"github.com/spiffe/spire/pkg/common/idutil"
 	common_devid "github.com/spiffe/spire/pkg/common/plugin/tpmdevid"
 	"github.com/spiffe/spire/pkg/common/pluginconf"
+	"github.com/spiffe/spire/pkg/common/plugindecode"
 	"github.com/spiffe/spire/pkg/common/util"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -41,8 +41,8 @@ func builtin(p *Plugin) catalog.BuiltIn {
 }
 
 type Config struct {
-	DevIDBundlePath       string `hcl:"devid_ca_path"`
-	EndorsementBundlePath string `hcl:"endorsement_ca_path"`
+	DevIDBundlePath       string `hcl:"devid_ca_path" yaml:"devIDBundlePath"`
+	EndorsementBundlePath string `hcl:"endorsement_ca_path" yaml:"endorsementBundlePath"`
 }
 
 type config struct {
@@ -52,9 +52,9 @@ type config struct {
 	ekRoots    *x509.CertPool
 }
 
-func buildConfig(coreConfig catalog.CoreConfig, hclText string, status *pluginconf.Status) *config {
+func buildConfig(coreConfig catalog.CoreConfig, text string, format catalog.ConfigFormat, status *pluginconf.Status) *config {
 	hclConfig := new(Config)
-	if err := hcl.Decode(hclConfig, hclText); err != nil {
+	if err := plugindecode.DecodeConfig(text, format, hclConfig); err != nil {
 		status.ReportError("plugin configuration is malformed")
 		return nil
 	}

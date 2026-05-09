@@ -78,7 +78,7 @@ func TestParseConfigGood(t *testing.T) {
 			Name:       "plugin_name_server",
 			Path:       "./pluginServerCmd",
 			Checksum:   "pluginServerChecksum",
-			DataSource: catalog.FixedData(data),
+			DataSource: catalog.FixedData{Data: data, Format: catalog.ConfigFormatHCL},
 			Disabled:   false,
 		},
 		{
@@ -86,7 +86,7 @@ func TestParseConfigGood(t *testing.T) {
 			Name:       "plugin_disabled",
 			Path:       "./pluginServerCmd",
 			Checksum:   "pluginServerChecksum",
-			DataSource: catalog.FixedData(data),
+			DataSource: catalog.FixedData{Data: data, Format: catalog.ConfigFormatHCL},
 			Disabled:   true,
 		},
 		{
@@ -94,7 +94,7 @@ func TestParseConfigGood(t *testing.T) {
 			Name:       "plugin_enabled",
 			Path:       "./pluginServerCmd",
 			Checksum:   "pluginServerChecksum",
-			DataSource: catalog.FileData("plugin.conf"),
+			DataSource: catalog.FileData{Path: "plugin.conf", Format: catalog.ConfigFormatHCL},
 			Disabled:   false,
 		},
 	}
@@ -102,6 +102,20 @@ func TestParseConfigGood(t *testing.T) {
 	pluginConfigs, err := catalog.PluginConfigsFromHCLNode(c.Plugins)
 	require.NoError(t, err)
 	require.Equal(t, expectedPluginConfigs, pluginConfigs)
+}
+
+func TestParseFile_YAML(t *testing.T) {
+	path := "../../../../test/fixture/config/server_good_posix.yaml"
+	c, err := ParseFile(path, false)
+	require.NoError(t, err)
+	require.NotNil(t, c.Server)
+	require.Equal(t, "127.0.0.1", c.Server.BindAddress)
+	require.Equal(t, 8081, c.Server.BindPort)
+	require.Equal(t, "example.org", c.Server.TrustDomain)
+	require.Equal(t, "INFO", c.Server.LogLevel)
+	require.True(t, c.Server.AuditLogEnabled)
+	require.NotNil(t, c.Server.Federation)
+	require.NotNil(t, c.PluginsRaw)
 }
 
 func TestMergeInput(t *testing.T) {
@@ -2000,6 +2014,28 @@ func TestMinCATTL(t *testing.T) {
 		} else {
 			assert.Equal(t, v.expect, printMinCATTL(v.jwtSVIDTTL))
 		}
+	}
+}
+
+func TestDetectFormat(t *testing.T) {
+	tests := []struct {
+		path   string
+		expect catalog.ConfigFormat
+	}{
+		{"spire.yaml", catalog.ConfigFormatYAML},
+		{"spire.yml", catalog.ConfigFormatYAML},
+		{"SPIRE.YAML", catalog.ConfigFormatYAML},
+		{"SPIRE.YML", catalog.ConfigFormatYAML},
+		{"spire.conf", catalog.ConfigFormatHCL},
+		{"spire.hcl", catalog.ConfigFormatHCL},
+		{"spire", catalog.ConfigFormatHCL},
+		{"/etc/spire/server.yaml", catalog.ConfigFormatYAML},
+		{"/etc/spire/server.conf", catalog.ConfigFormatHCL},
+	}
+	for _, tt := range tests {
+		t.Run(tt.path, func(t *testing.T) {
+			require.Equal(t, tt.expect, detectFormat(tt.path))
+		})
 	}
 }
 

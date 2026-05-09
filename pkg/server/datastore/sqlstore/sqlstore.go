@@ -27,6 +27,7 @@ import (
 	configv1 "github.com/spiffe/spire-plugin-sdk/proto/spire/service/common/config/v1"
 	"github.com/spiffe/spire/pkg/common/bundleutil"
 	"github.com/spiffe/spire/pkg/common/catalog"
+	"github.com/spiffe/spire/pkg/common/plugindecode"
 	"github.com/spiffe/spire/pkg/common/protoutil"
 	"github.com/spiffe/spire/pkg/common/telemetry"
 	"github.com/spiffe/spire/pkg/common/x509util"
@@ -75,20 +76,20 @@ const (
 // Configuration for the sql datastore implementation.
 // Pointer values are used to distinguish between "unset" and "zero" values.
 type configuration struct {
-	DatabaseTypeNode   ast.Node `hcl:"database_type" json:"database_type"`
-	ConnectionString   string   `hcl:"connection_string" json:"connection_string"`
-	RoConnectionString string   `hcl:"ro_connection_string" json:"ro_connection_string"`
-	RootCAPath         string   `hcl:"root_ca_path" json:"root_ca_path"`
-	ClientCertPath     string   `hcl:"client_cert_path" json:"client_cert_path"`
-	ClientKeyPath      string   `hcl:"client_key_path" json:"client_key_path"`
-	ConnMaxLifetime    *string  `hcl:"conn_max_lifetime" json:"conn_max_lifetime"`
-	MaxOpenConns       *int     `hcl:"max_open_conns" json:"max_open_conns"`
-	MaxIdleConns       *int     `hcl:"max_idle_conns" json:"max_idle_conns"`
-	DisableMigration   bool     `hcl:"disable_migration" json:"disable_migration"`
+	DatabaseTypeNode   ast.Node `hcl:"database_type"        json:"database_type"        yaml:"databaseType"`
+	ConnectionString   string   `hcl:"connection_string"    json:"connection_string"    yaml:"connectionString"`
+	RoConnectionString string   `hcl:"ro_connection_string" json:"ro_connection_string" yaml:"roConnectionString"`
+	RootCAPath         string   `hcl:"root_ca_path"         json:"root_ca_path"         yaml:"rootCaPath"`
+	ClientCertPath     string   `hcl:"client_cert_path"     json:"client_cert_path"     yaml:"clientCertPath"`
+	ClientKeyPath      string   `hcl:"client_key_path"      json:"client_key_path"      yaml:"clientKeyPath"`
+	ConnMaxLifetime    *string  `hcl:"conn_max_lifetime"    json:"conn_max_lifetime"    yaml:"connMaxLifetime"`
+	MaxOpenConns       *int     `hcl:"max_open_conns"       json:"max_open_conns"       yaml:"maxOpenConns"`
+	MaxIdleConns       *int     `hcl:"max_idle_conns"       json:"max_idle_conns"       yaml:"maxIdleConns"`
+	DisableMigration   bool     `hcl:"disable_migration"    json:"disable_migration"    yaml:"disableMigration"`
 
 	databaseTypeConfig *dbTypeConfig
 	// Undocumented flags
-	LogSQL bool `hcl:"log_sql" json:"log_sql"`
+	LogSQL bool `hcl:"log_sql" json:"log_sql" yaml:"logSQL"`
 }
 
 type dbTypeConfig struct {
@@ -849,11 +850,11 @@ checkAuthorities:
 	return nil
 }
 
-// Configure parses HCL config payload into config struct, opens new DB based on the result, and
+// Configure parses config payload into config struct, opens new DB based on the result, and
 // prunes all orphaned records
-func (ds *Plugin) Configure(ctx context.Context, hclConfiguration string) error {
+func (ds *Plugin) Configure(ctx context.Context, configText string, format catalog.ConfigFormat) error {
 	config := &configuration{}
-	if err := hcl.Decode(config, hclConfiguration); err != nil {
+	if err := plugindecode.DecodeConfig(configText, format, config); err != nil {
 		return err
 	}
 
@@ -872,7 +873,8 @@ func (ds *Plugin) Configure(ctx context.Context, hclConfiguration string) error 
 }
 
 func (ds *Plugin) Validate(ctx context.Context, coreConfig catalog.CoreConfig, configuration string) (*configv1.ValidateResponse, error) {
-	config, err := buildConfig(configuration)
+	// TODO: thread format through Validate interface in a follow-up
+	config, err := buildConfig(configuration, catalog.ConfigFormatHCL)
 	if err != nil {
 		return &configv1.ValidateResponse{
 			Notes: []string{err.Error()},
@@ -890,9 +892,9 @@ func (ds *Plugin) Validate(ctx context.Context, coreConfig catalog.CoreConfig, c
 	}, nil
 }
 
-func buildConfig(hclConfiguration string) (*configuration, error) {
+func buildConfig(configText string, format catalog.ConfigFormat) (*configuration, error) {
 	config := &configuration{}
-	if err := hcl.Decode(config, hclConfiguration); err != nil {
+	if err := plugindecode.DecodeConfig(configText, format, config); err != nil {
 		return nil, err
 	}
 

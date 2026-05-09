@@ -14,6 +14,7 @@ import (
 
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/spiffe/spire-api-sdk/proto/spire/api/types"
+	"github.com/spiffe/spire/pkg/common/catalog"
 	"github.com/spiffe/spire/pkg/common/util"
 	"github.com/spiffe/spire/pkg/server/datastore"
 	sql "github.com/spiffe/spire/pkg/server/datastore/sqlstore"
@@ -44,7 +45,7 @@ func New(tb testing.TB) *DataStore {
 	err := ds.Configure(ctx, fmt.Sprintf(`
 		database_type = "sqlite3"
 		connection_string = "file:%s"
-	`, dbPath))
+	`, dbPath), catalog.ConfigFormatHCL)
 	require.NoError(tb, err)
 
 	tb.Cleanup(func() {
