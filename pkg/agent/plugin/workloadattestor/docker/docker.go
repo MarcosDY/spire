@@ -10,13 +10,13 @@ import (
 	"github.com/docker/docker/api/types/image"
 	dockerclient "github.com/docker/docker/client"
 	"github.com/hashicorp/go-hclog"
-	"github.com/hashicorp/hcl"
 	"github.com/hashicorp/hcl/hcl/token"
 	workloadattestorv1 "github.com/spiffe/spire-plugin-sdk/proto/spire/plugin/agent/workloadattestor/v1"
 	configv1 "github.com/spiffe/spire-plugin-sdk/proto/spire/service/common/config/v1"
 	"github.com/spiffe/spire/pkg/agent/common/sigstore"
 	"github.com/spiffe/spire/pkg/common/catalog"
 	"github.com/spiffe/spire/pkg/common/pluginconf"
+	"github.com/spiffe/spire/pkg/common/plugindecode"
 	"github.com/spiffe/spire/pkg/common/telemetry"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -84,22 +84,22 @@ type dockerPluginConfig struct {
 	OSConfig `hcl:",squash"`
 
 	// DockerVersion is the API version of the docker daemon. If not specified, the version is negotiated by the client.
-	DockerVersion string `hcl:"docker_version" json:"docker_version"`
+	DockerVersion string `hcl:"docker_version" json:"docker_version" yaml:"dockerVersion"`
 
-	UnusedKeyPositions map[string][]token.Pos `hcl:",unusedKeyPositions"`
+	UnusedKeyPositions map[string][]token.Pos `hcl:",unusedKeyPositions" yaml:"-"`
 
 	// Sigstore contains sigstore specific configs.
-	Sigstore *sigstore.HCLConfig `hcl:"sigstore,omitempty" json:"sigstore"`
+	Sigstore *sigstore.HCLConfig `hcl:"sigstore,omitempty" json:"sigstore" yaml:"sigstore,omitempty"`
 
 	containerHelper *containerHelper
 	dockerOpts      []dockerclient.Opt
 	sigstoreConfig  *sigstore.Config
 }
 
-func (p *Plugin) buildConfig(coreConfig catalog.CoreConfig, hclText string, status *pluginconf.Status) *dockerPluginConfig {
+func (p *Plugin) buildConfig(coreConfig catalog.CoreConfig, text string, format catalog.ConfigFormat, status *pluginconf.Status) *dockerPluginConfig {
 	var err error
 	newConfig := &dockerPluginConfig{}
-	if err = hcl.Decode(newConfig, hclText); err != nil {
+	if err = plugindecode.DecodeConfig(text, format, newConfig); err != nil {
 		status.ReportErrorf("unable to decode configuration: %v", err)
 		return nil
 	}

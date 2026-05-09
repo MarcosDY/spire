@@ -2,6 +2,7 @@ package run
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -37,6 +38,7 @@ import (
 	"github.com/spiffe/spire/pkg/common/log"
 	"github.com/spiffe/spire/pkg/common/telemetry"
 	"github.com/spiffe/spire/pkg/common/tlspolicy"
+	"sigs.k8s.io/yaml"
 )
 
 const (
@@ -57,72 +59,73 @@ const (
 
 // Config contains all available configurables, arranged by section
 type Config struct {
-	Agent              *agentConfig           `hcl:"agent"`
-	Plugins            ast.Node               `hcl:"plugins"`
-	Telemetry          telemetry.FileConfig   `hcl:"telemetry"`
-	HealthChecks       health.Config          `hcl:"health_checks"`
+	Agent              *agentConfig           `hcl:"agent"        yaml:"agent"`
+	Plugins            ast.Node               `hcl:"plugins"      yaml:"-"    json:"-"`
+	PluginsRaw         json.RawMessage        `yaml:"plugins"     json:"plugins"`
+	Telemetry          telemetry.FileConfig   `hcl:"telemetry"    yaml:"telemetry"`
+	HealthChecks       health.Config          `hcl:"health_checks" yaml:"healthChecks"`
 	UnusedKeyPositions map[string][]token.Pos `hcl:",unusedKeyPositions"`
 }
 
 type agentConfig struct {
-	DataDir                       string    `hcl:"data_dir"`
-	AdminSocketPath               string    `hcl:"admin_socket_path"`
-	InsecureBootstrap             bool      `hcl:"insecure_bootstrap"`
-	RebootstrapMode               string    `hcl:"rebootstrap_mode"`
-	RebootstrapDelay              string    `hcl:"rebootstrap_delay"`
-	JoinToken                     string    `hcl:"join_token"`
-	JoinTokenFile                 string    `hcl:"join_token_file"`
-	LogFile                       string    `hcl:"log_file"`
-	LogFormat                     string    `hcl:"log_format"`
-	LogLevel                      string    `hcl:"log_level"`
-	LogSourceLocation             bool      `hcl:"log_source_location"`
-	SDS                           sdsConfig `hcl:"sds"`
-	ServerAddress                 string    `hcl:"server_address"`
-	ServerPort                    int       `hcl:"server_port"`
-	SocketPath                    string    `hcl:"socket_path"`
-	WorkloadX509SVIDKeyType       string    `hcl:"workload_x509_svid_key_type"`
-	TrustBundleFormat             string    `hcl:"trust_bundle_format"`
-	TrustBundlePath               string    `hcl:"trust_bundle_path"`
-	TrustBundleUnixSocket         string    `hcl:"trust_bundle_unix_socket"`
-	TrustBundleURL                string    `hcl:"trust_bundle_url"`
-	TrustDomain                   string    `hcl:"trust_domain"`
-	AllowUnauthenticatedVerifiers bool      `hcl:"allow_unauthenticated_verifiers"`
-	AllowedForeignJWTClaims       []string  `hcl:"allowed_foreign_jwt_claims"`
-	AvailabilityTarget            string    `hcl:"availability_target"`
-	X509SVIDCacheMaxSize          int       `hcl:"x509_svid_cache_max_size"`
-	JWTSVIDCacheMaxSize           int       `hcl:"jwt_svid_cache_max_size"`
+	DataDir                       string    `hcl:"data_dir"                        yaml:"dataDir"`
+	AdminSocketPath               string    `hcl:"admin_socket_path"               yaml:"adminSocketPath"`
+	InsecureBootstrap             bool      `hcl:"insecure_bootstrap"              yaml:"insecureBootstrap"`
+	RebootstrapMode               string    `hcl:"rebootstrap_mode"                yaml:"rebootstrapMode"`
+	RebootstrapDelay              string    `hcl:"rebootstrap_delay"               yaml:"rebootstrapDelay"`
+	JoinToken                     string    `hcl:"join_token"                      yaml:"joinToken"`
+	JoinTokenFile                 string    `hcl:"join_token_file"                 yaml:"joinTokenFile"`
+	LogFile                       string    `hcl:"log_file"                        yaml:"logFile"`
+	LogFormat                     string    `hcl:"log_format"                      yaml:"logFormat"`
+	LogLevel                      string    `hcl:"log_level"                       yaml:"logLevel"`
+	LogSourceLocation             bool      `hcl:"log_source_location"             yaml:"logSourceLocation"`
+	SDS                           sdsConfig `hcl:"sds"                             yaml:"sds"`
+	ServerAddress                 string    `hcl:"server_address"                  yaml:"serverAddress"`
+	ServerPort                    int       `hcl:"server_port"                     yaml:"serverPort"`
+	SocketPath                    string    `hcl:"socket_path"                     yaml:"socketPath"`
+	WorkloadX509SVIDKeyType       string    `hcl:"workload_x509_svid_key_type"     yaml:"workloadX509SvidKeyType"`
+	TrustBundleFormat             string    `hcl:"trust_bundle_format"             yaml:"trustBundleFormat"`
+	TrustBundlePath               string    `hcl:"trust_bundle_path"               yaml:"trustBundlePath"`
+	TrustBundleUnixSocket         string    `hcl:"trust_bundle_unix_socket"        yaml:"trustBundleUnixSocket"`
+	TrustBundleURL                string    `hcl:"trust_bundle_url"                yaml:"trustBundleUrl"`
+	TrustDomain                   string    `hcl:"trust_domain"                    yaml:"trustDomain"`
+	AllowUnauthenticatedVerifiers bool      `hcl:"allow_unauthenticated_verifiers" yaml:"allowUnauthenticatedVerifiers"`
+	AllowedForeignJWTClaims       []string  `hcl:"allowed_foreign_jwt_claims"      yaml:"allowedForeignJwtClaims"`
+	AvailabilityTarget            string    `hcl:"availability_target"             yaml:"availabilityTarget"`
+	X509SVIDCacheMaxSize          int       `hcl:"x509_svid_cache_max_size"        yaml:"x509SvidCacheMaxSize"`
+	JWTSVIDCacheMaxSize           int       `hcl:"jwt_svid_cache_max_size"         yaml:"jwtSvidCacheMaxSize"`
 
-	AuthorizedDelegates []string `hcl:"authorized_delegates"`
+	AuthorizedDelegates []string `hcl:"authorized_delegates" yaml:"authorizedDelegates"`
 
 	ConfigPath string
 	ExpandEnv  bool
 
 	// Undocumented configurables
-	ProfilingEnabled bool               `hcl:"profiling_enabled"`
-	ProfilingPort    int                `hcl:"profiling_port"`
-	ProfilingFreq    int                `hcl:"profiling_freq"`
-	ProfilingNames   []string           `hcl:"profiling_names"`
-	Experimental     experimentalConfig `hcl:"experimental"`
+	ProfilingEnabled bool               `hcl:"profiling_enabled" yaml:"profilingEnabled"`
+	ProfilingPort    int                `hcl:"profiling_port"    yaml:"profilingPort"`
+	ProfilingFreq    int                `hcl:"profiling_freq"    yaml:"profilingFreq"`
+	ProfilingNames   []string           `hcl:"profiling_names"   yaml:"profilingNames"`
+	Experimental     experimentalConfig `hcl:"experimental"      yaml:"experimental"`
 
 	UnusedKeyPositions map[string][]token.Pos `hcl:",unusedKeyPositions"`
 }
 
 type sdsConfig struct {
-	DefaultSVIDName             string `hcl:"default_svid_name"`
-	DefaultBundleName           string `hcl:"default_bundle_name"`
-	DefaultAllBundlesName       string `hcl:"default_all_bundles_name"`
-	DisableSPIFFECertValidation bool   `hcl:"disable_spiffe_cert_validation"`
+	DefaultSVIDName             string `hcl:"default_svid_name"              yaml:"defaultSvidName"`
+	DefaultBundleName           string `hcl:"default_bundle_name"            yaml:"defaultBundleName"`
+	DefaultAllBundlesName       string `hcl:"default_all_bundles_name"       yaml:"defaultAllBundlesName"`
+	DisableSPIFFECertValidation bool   `hcl:"disable_spiffe_cert_validation" yaml:"disableSpiffeCertValidation"`
 }
 
 type experimentalConfig struct {
-	SyncInterval             string `hcl:"sync_interval"`
-	JWTSVIDCacheHitTimeout   string `hcl:"jwt_svid_cache_hit_timeout"`
-	NamedPipeName            string `hcl:"named_pipe_name"`
-	AdminNamedPipeName       string `hcl:"admin_named_pipe_name"`
-	UseSyncAuthorizedEntries *bool  `hcl:"use_sync_authorized_entries"`
-	RequirePQKEM             bool   `hcl:"require_pq_kem"`
+	SyncInterval             string `hcl:"sync_interval"               yaml:"syncInterval"`
+	JWTSVIDCacheHitTimeout   string `hcl:"jwt_svid_cache_hit_timeout"  yaml:"jwtSvidCacheHitTimeout"`
+	NamedPipeName            string `hcl:"named_pipe_name"             yaml:"namedPipeName"`
+	AdminNamedPipeName       string `hcl:"admin_named_pipe_name"       yaml:"adminNamedPipeName"`
+	UseSyncAuthorizedEntries *bool  `hcl:"use_sync_authorized_entries" yaml:"useSyncAuthorizedEntries"`
+	RequirePQKEM             bool   `hcl:"require_pq_kem"              yaml:"requirePqKem"`
 
-	Flags fflag.RawConfig `hcl:"feature_flags"`
+	Flags fflag.RawConfig `hcl:"feature_flags" yaml:"featureFlags"`
 }
 
 type Command struct {
@@ -298,6 +301,15 @@ func (c *agentConfig) validate() error {
 	return c.validateOS()
 }
 
+func detectFormat(path string) catalog.ConfigFormat {
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".yaml", ".yml":
+		return catalog.ConfigFormatYAML
+	default:
+		return catalog.ConfigFormatHCL
+	}
+}
+
 func ParseFile(path string, expandEnv bool) (*Config, error) {
 	c := &Config{}
 
@@ -305,17 +317,13 @@ func ParseFile(path string, expandEnv bool) (*Config, error) {
 		path = defaultConfigPath
 	}
 
-	// Return a friendly error if the file is missing
 	byteData, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
 		absPath, err := filepath.Abs(path)
 		if err != nil {
-			msg := "could not determine CWD; config file not found at %s: use -config"
-			return nil, fmt.Errorf(msg, path)
+			return nil, fmt.Errorf("could not determine CWD; config file not found at %s: use -config", path)
 		}
-
-		msg := "could not find config file %s: please use the -config flag"
-		return nil, fmt.Errorf(msg, absPath)
+		return nil, fmt.Errorf("could not find config file %s: please use the -config flag", absPath)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("unable to read configuration at %q: %w", path, err)
@@ -327,8 +335,15 @@ func ParseFile(path string, expandEnv bool) (*Config, error) {
 		data = config.ExpandEnv(data)
 	}
 
-	if err := hcl.Decode(&c, data); err != nil {
-		return nil, fmt.Errorf("unable to decode configuration at %q: %w", path, err)
+	switch detectFormat(path) {
+	case catalog.ConfigFormatYAML:
+		if err := yaml.Unmarshal([]byte(data), c); err != nil {
+			return nil, fmt.Errorf("unable to decode YAML configuration at %q: %w", path, err)
+		}
+	default:
+		if err := hcl.Decode(c, data); err != nil {
+			return nil, fmt.Errorf("unable to decode configuration at %q: %w", path, err)
+		}
 	}
 
 	return c, nil
@@ -560,10 +575,17 @@ func NewAgentConfig(c *Config, logOptions []log.Option, allowUnknownConfig bool)
 
 	ac.AllowedForeignJWTClaims = c.Agent.AllowedForeignJWTClaims
 
-	ac.PluginConfigs, err = catalog.PluginConfigsFromHCLNode(c.Plugins)
-	if err != nil {
-		return nil, err
+	var pluginConfigs catalog.PluginConfigs
+	if c.PluginsRaw != nil {
+		logger.Warn("YAML configuration support is experimental and may change in future versions")
+		pluginConfigs, err = catalog.PluginConfigsFromYAML(c.PluginsRaw)
+	} else {
+		pluginConfigs, err = catalog.PluginConfigsFromHCLNode(c.Plugins)
 	}
+	if err != nil {
+		return nil, fmt.Errorf("error parsing plugin config: %w", err)
+	}
+	ac.PluginConfigs = pluginConfigs
 
 	ac.Telemetry = c.Telemetry
 	ac.HealthChecks = c.HealthChecks
@@ -613,7 +635,10 @@ func NewAgentConfig(c *Config, logOptions []log.Option, allowUnknownConfig bool)
 }
 
 func validateConfig(c *Config) error {
-	if c.Plugins == nil {
+	if c.Plugins != nil && c.PluginsRaw != nil {
+		return errors.New("plugins section must not be configured in both HCL and YAML formats simultaneously")
+	}
+	if c.Plugins == nil && c.PluginsRaw == nil {
 		return errors.New("plugins section must be configured")
 	}
 

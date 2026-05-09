@@ -8,7 +8,6 @@ import (
 	"sync"
 
 	"github.com/hashicorp/go-hclog"
-	"github.com/hashicorp/hcl"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -18,6 +17,7 @@ import (
 	"github.com/spiffe/spire/pkg/common/coretypes/x509certificate"
 	"github.com/spiffe/spire/pkg/common/pemutil"
 	"github.com/spiffe/spire/pkg/common/pluginconf"
+	"github.com/spiffe/spire/pkg/common/plugindecode"
 )
 
 const (
@@ -40,30 +40,30 @@ func builtin(p *Plugin) catalog.BuiltIn {
 
 type Configuration struct {
 	// A URL of Vault server. (e.g., https://vault.example.com:8443/)
-	VaultAddr string `hcl:"vault_addr" json:"vault_addr"`
+	VaultAddr string `hcl:"vault_addr" json:"vault_addr" yaml:"vaultAddr"`
 	// Name of the mount point where PKI secret engine is mounted. (e.g., /<mount_point>/ca/pem)
-	PKIMountPoint string `hcl:"pki_mount_point" json:"pki_mount_point"`
+	PKIMountPoint string `hcl:"pki_mount_point" json:"pki_mount_point" yaml:"pkiMountPoint"`
 	// Configuration for the Token authentication method
-	TokenAuth *TokenAuthConfig `hcl:"token_auth" json:"token_auth,omitempty"`
+	TokenAuth *TokenAuthConfig `hcl:"token_auth" json:"token_auth,omitempty" yaml:"tokenAuth,omitempty"`
 	// Configuration for the Client Certificate authentication method
-	CertAuth *CertAuthConfig `hcl:"cert_auth" json:"cert_auth,omitempty"`
+	CertAuth *CertAuthConfig `hcl:"cert_auth" json:"cert_auth,omitempty" yaml:"certAuth,omitempty"`
 	// Configuration for the AppRole authentication method
-	AppRoleAuth *AppRoleAuthConfig `hcl:"approle_auth" json:"approle_auth,omitempty"`
+	AppRoleAuth *AppRoleAuthConfig `hcl:"approle_auth" json:"approle_auth,omitempty" yaml:"approleAuth,omitempty"`
 	// Configuration for the Kubernetes authentication method
-	K8sAuth *K8sAuthConfig `hcl:"k8s_auth" json:"k8s_auth,omitempty"`
+	K8sAuth *K8sAuthConfig `hcl:"k8s_auth" json:"k8s_auth,omitempty" yaml:"k8sAuth,omitempty"`
 	// Path to a CA certificate file that the client verifies the server certificate.
 	// Only PEM format is supported.
-	CACertPath string `hcl:"ca_cert_path" json:"ca_cert_path"`
+	CACertPath string `hcl:"ca_cert_path" json:"ca_cert_path" yaml:"caCertPath"`
 	// If true, vault client accepts any server certificates.
 	// It should be used only test environment so on.
-	InsecureSkipVerify bool `hcl:"insecure_skip_verify" json:"insecure_skip_verify"`
+	InsecureSkipVerify bool `hcl:"insecure_skip_verify" json:"insecure_skip_verify" yaml:"insecureSkipVerify"`
 	// Name of the Vault namespace
-	Namespace string `hcl:"namespace" json:"namespace"`
+	Namespace string `hcl:"namespace" json:"namespace" yaml:"namespace"`
 }
 
-func buildConfig(coreConfig catalog.CoreConfig, hclText string, status *pluginconf.Status) *Configuration {
+func buildConfig(coreConfig catalog.CoreConfig, text string, format catalog.ConfigFormat, status *pluginconf.Status) *Configuration {
 	newConfig := new(Configuration)
-	if err := hcl.Decode(newConfig, hclText); err != nil {
+	if err := plugindecode.DecodeConfig(text, format, newConfig); err != nil {
 		status.ReportError("plugin configuration is malformed")
 		return nil
 	}
@@ -80,46 +80,46 @@ func buildConfig(coreConfig catalog.CoreConfig, hclText string, status *pluginco
 // TokenAuthConfig represents parameters for token auth method
 type TokenAuthConfig struct {
 	// Token string to set into "X-Vault-Token" header
-	Token string `hcl:"token" json:"token"`
+	Token string `hcl:"token" json:"token" yaml:"token"`
 }
 
 // CertAuthConfig represents parameters for cert auth method
 type CertAuthConfig struct {
 	// Name of the mount point where Client Certificate Auth method is mounted. (e.g., /auth/<mount_point>/login)
 	// If the value is empty, use default mount point (/auth/cert)
-	CertAuthMountPoint string `hcl:"cert_auth_mount_point" json:"cert_auth_mount_point"`
+	CertAuthMountPoint string `hcl:"cert_auth_mount_point" json:"cert_auth_mount_point" yaml:"certAuthMountPoint"`
 	// Name of the Vault role.
 	// If given, the plugin authenticates against only the named role.
-	CertAuthRoleName string `hcl:"cert_auth_role_name" json:"cert_auth_role_name"`
+	CertAuthRoleName string `hcl:"cert_auth_role_name" json:"cert_auth_role_name" yaml:"certAuthRoleName"`
 	// Path to a client certificate file.
 	// Only PEM format is supported.
-	ClientCertPath string `hcl:"client_cert_path" json:"client_cert_path"`
+	ClientCertPath string `hcl:"client_cert_path" json:"client_cert_path" yaml:"clientCertPath"`
 	// Path to a client private key file.
 	// Only PEM format is supported.
-	ClientKeyPath string `hcl:"client_key_path" json:"client_key_path"`
+	ClientKeyPath string `hcl:"client_key_path" json:"client_key_path" yaml:"clientKeyPath"`
 }
 
 // AppRoleAuthConfig represents parameters for AppRole auth method.
 type AppRoleAuthConfig struct {
 	// Name of the mount point where AppRole auth method is mounted. (e.g., /auth/<mount_point>/login)
 	// If the value is empty, use default mount point (/auth/approle)
-	AppRoleMountPoint string `hcl:"approle_auth_mount_point" json:"approle_auth_mount_point"`
+	AppRoleMountPoint string `hcl:"approle_auth_mount_point" json:"approle_auth_mount_point" yaml:"approleAuthMountPoint"`
 	// An identifier that selects the AppRole
-	RoleID string `hcl:"approle_id" json:"approle_id"`
+	RoleID string `hcl:"approle_id" json:"approle_id" yaml:"approleID"`
 	// A credential that is required for login.
-	SecretID string `hcl:"approle_secret_id" json:"approle_secret_id"`
+	SecretID string `hcl:"approle_secret_id" json:"approle_secret_id" yaml:"approleSecretID"`
 }
 
 // K8sAuthConfig represents parameters for Kubernetes auth method.
 type K8sAuthConfig struct {
 	// Name of the mount point where Kubernetes auth method is mounted. (e.g., /auth/<mount_point>/login)
 	// If the value is empty, use default mount point (/auth/kubernetes)
-	K8sAuthMountPoint string `hcl:"k8s_auth_mount_point" json:"k8s_auth_mount_point"`
+	K8sAuthMountPoint string `hcl:"k8s_auth_mount_point" json:"k8s_auth_mount_point" yaml:"k8sAuthMountPoint"`
 	// Name of the Vault role.
 	// The plugin authenticates against the named role.
-	K8sAuthRoleName string `hcl:"k8s_auth_role_name" json:"k8s_auth_role_name"`
+	K8sAuthRoleName string `hcl:"k8s_auth_role_name" json:"k8s_auth_role_name" yaml:"k8sAuthRoleName"`
 	// Path to the Kubernetes Service Account Token to use authentication with the Vault.
-	TokenPath string `hcl:"token_path" json:"token_path"`
+	TokenPath string `hcl:"token_path" json:"token_path" yaml:"tokenPath"`
 }
 
 type Plugin struct {

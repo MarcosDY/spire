@@ -12,7 +12,6 @@ import (
 	"sync"
 
 	"github.com/hashicorp/go-hclog"
-	"github.com/hashicorp/hcl"
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/spiffe/spire-plugin-sdk/pluginsdk"
 	identityproviderv1 "github.com/spiffe/spire-plugin-sdk/proto/spire/hostservice/server/identityprovider/v1"
@@ -22,6 +21,7 @@ import (
 	"github.com/spiffe/spire/pkg/common/catalog"
 	"github.com/spiffe/spire/pkg/common/plugin/x509pop"
 	"github.com/spiffe/spire/pkg/common/pluginconf"
+	"github.com/spiffe/spire/pkg/common/plugindecode"
 	"github.com/spiffe/spire/pkg/common/util"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -47,13 +47,13 @@ func builtin(p *Plugin) catalog.BuiltIn {
 }
 
 type Config struct {
-	Mode              string   `hcl:"mode"`
-	SVIDPrefix        *string  `hcl:"spiffe_prefix"`
-	CABundlePath      string   `hcl:"ca_bundle_path"`
-	CABundlePaths     []string `hcl:"ca_bundle_paths"`
-	AgentPathTemplate string   `hcl:"agent_path_template"`
-	MaxIntermediates  *int     `hcl:"max_intermediates"`
-	MaxRSAKeySize     *int     `hcl:"max_rsa_key_size"`
+	Mode              string   `hcl:"mode" yaml:"mode"`
+	SVIDPrefix        *string  `hcl:"spiffe_prefix" yaml:"spiffePrefix"`
+	CABundlePath      string   `hcl:"ca_bundle_path" yaml:"caBundlePath"`
+	CABundlePaths     []string `hcl:"ca_bundle_paths" yaml:"caBundlePaths"`
+	AgentPathTemplate string   `hcl:"agent_path_template" yaml:"agentPathTemplate"`
+	MaxIntermediates  *int     `hcl:"max_intermediates" yaml:"maxIntermediates"`
+	MaxRSAKeySize     *int     `hcl:"max_rsa_key_size" yaml:"maxRSAKeySize"`
 }
 
 type configuration struct {
@@ -66,9 +66,9 @@ type configuration struct {
 	maxRSAKeySize    int
 }
 
-func buildConfig(coreConfig catalog.CoreConfig, hclText string, status *pluginconf.Status) *configuration {
+func buildConfig(coreConfig catalog.CoreConfig, text string, format catalog.ConfigFormat, status *pluginconf.Status) *configuration {
 	hclConfig := new(Config)
-	if err := hcl.Decode(hclConfig, hclText); err != nil {
+	if err := plugindecode.DecodeConfig(text, format, hclConfig); err != nil {
 		status.ReportErrorf("unable to decode configuration: %v", err)
 		return nil
 	}

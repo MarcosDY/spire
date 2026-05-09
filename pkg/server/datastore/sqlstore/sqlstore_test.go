@@ -24,6 +24,7 @@ import (
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/spiffe/spire-api-sdk/proto/spire/api/types"
 	"github.com/spiffe/spire/pkg/common/bundleutil"
+	"github.com/spiffe/spire/pkg/common/catalog"
 	"github.com/spiffe/spire/pkg/common/protoutil"
 	"github.com/spiffe/spire/pkg/common/telemetry"
 	"github.com/spiffe/spire/pkg/common/util"
@@ -133,7 +134,7 @@ func (s *PluginSuite) newPlugin() *Plugin {
 			database_type = "sqlite3"
 			log_sql = true
 			connection_string = "%s"
-		`, dbPath))
+		`, dbPath), catalog.ConfigFormatHCL)
 		s.Require().NoError(err)
 
 		// assert that WAL journal mode is enabled
@@ -158,7 +159,7 @@ func (s *PluginSuite) newPlugin() *Plugin {
 			log_sql = true
 			connection_string = "%s"
 			ro_connection_string = "%s"
-		`, TestConnString, TestROConnString))
+		`, TestConnString, TestROConnString), catalog.ConfigFormatHCL)
 		s.Require().NoError(err)
 	case "postgres":
 		s.T().Logf("CONN STRING: %q", TestConnString)
@@ -169,7 +170,7 @@ func (s *PluginSuite) newPlugin() *Plugin {
 			log_sql = true
 			connection_string = "%s"
 			ro_connection_string = "%s"
-		`, TestConnString, TestROConnString))
+		`, TestConnString, TestROConnString), catalog.ConfigFormatHCL)
 		s.Require().NoError(err)
 	default:
 		s.Require().FailNowf("Unsupported external test dialect %q", TestDialect)
@@ -182,7 +183,7 @@ func (s *PluginSuite) TestInvalidPluginConfiguration() {
 	err := s.ds.Configure(ctx, `
 		database_type = "wrong"
 		connection_string = "bad"
-	`)
+	`, catalog.ConfigFormatHCL)
 	s.RequireErrorContains(err, "datastore-sql: unsupported database_type: wrong")
 }
 
@@ -209,7 +210,7 @@ func (s *PluginSuite) TestInvalidAWSConfiguration() {
 	}
 	for _, testCase := range testCases {
 		s.T().Run(testCase.name, func(t *testing.T) {
-			err := s.ds.Configure(ctx, testCase.config)
+			err := s.ds.Configure(ctx, testCase.config, catalog.ConfigFormatHCL)
 			s.RequireErrorContains(err, testCase.expectedErr)
 		})
 	}
@@ -219,18 +220,18 @@ func (s *PluginSuite) TestInvalidMySQLConfiguration() {
 	err := s.ds.Configure(ctx, `
 		database_type = "mysql"
 		connection_string = "username:@tcp(127.0.0.1)/spire_test"
-	`)
+	`, catalog.ConfigFormatHCL)
 	s.RequireErrorContains(err, "datastore-sql: invalid mysql config: missing parseTime=true param in connection_string")
 
 	err = s.ds.Configure(ctx, `
 		database_type = "mysql"
 		ro_connection_string = "username:@tcp(127.0.0.1)/spire_test"
-	`)
+	`, catalog.ConfigFormatHCL)
 	s.RequireErrorContains(err, "datastore-sql: connection_string must be set")
 
 	err = s.ds.Configure(ctx, `
 		database_type = "mysql"
-	`)
+	`, catalog.ConfigFormatHCL)
 	s.RequireErrorContains(err, "datastore-sql: connection_string must be set")
 }
 
@@ -5226,7 +5227,7 @@ func (s *PluginSuite) TestMigration() {
 				err := s.ds.Configure(ctx, fmt.Sprintf(`
 					database_type = "sqlite3"
 					connection_string = %q
-				`, dbURI))
+				`, dbURI), catalog.ConfigFormatHCL)
 				if migrationSupported {
 					require.NoError(err)
 				} else {
@@ -5570,7 +5571,7 @@ func (s *PluginSuite) TestConfigure() {
 				log_sql = true
 				connection_string = "%s"
 				%s
-			`, dbPath, tt.giveDBConfig))
+			`, dbPath, tt.giveDBConfig), catalog.ConfigFormatHCL)
 			require.NoError(t, err)
 			defer p.Close()
 
