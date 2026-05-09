@@ -761,6 +761,9 @@ const (
 	// to add clarity
 	Notifier = "notifier"
 
+	// ServerID tags the server ID
+	ServerID = "server_id"
+
 	// ServerCA functionality related to a server CA; should be used with other tags
 	// to add clarity
 	ServerCA = "server_ca"
