@@ -3,10 +3,10 @@ module github.com/spiffe/spire
 go 1.26.3
 
 require (
-	cloud.google.com/go/iam v1.10.0
-	cloud.google.com/go/kms v1.30.0
+	cloud.google.com/go/iam v1.11.0
+	cloud.google.com/go/kms v1.31.0
 	cloud.google.com/go/secretmanager v1.20.0
-	cloud.google.com/go/security v1.23.0
+	cloud.google.com/go/security v1.24.0
 	cloud.google.com/go/storage v1.62.0
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.21.1
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.13.1
@@ -88,7 +88,7 @@ require (
 	golang.org/x/sync v0.20.0
 	golang.org/x/sys v0.44.0
 	golang.org/x/time v0.15.0
-	google.golang.org/api v0.278.0
+	google.golang.org/api v0.279.0
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260427160629-7cedc36a6bc4
 	google.golang.org/grpc v1.81.0
 	google.golang.org/protobuf v1.36.12-0.20260120151049-f2248ac996af
