@@ -28,7 +28,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/acmpca v1.47.0
 	github.com/aws/aws-sdk-go-v2/service/autoscaling v1.67.0
 	github.com/aws/aws-sdk-go-v2/service/ec2 v1.307.0
-	github.com/aws/aws-sdk-go-v2/service/eks v1.84.0
+	github.com/aws/aws-sdk-go-v2/service/eks v1.85.0
 	github.com/aws/aws-sdk-go-v2/service/iam v1.54.1
 	github.com/aws/aws-sdk-go-v2/service/kms v1.53.1
 	github.com/aws/aws-sdk-go-v2/service/organizations v1.51.1
@@ -92,11 +92,11 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260526163538-3dc84a4a5aaa
 	google.golang.org/grpc v1.81.1
 	google.golang.org/protobuf v1.36.12-0.20260120151049-f2248ac996af
-	k8s.io/api v0.36.1
-	k8s.io/apimachinery v0.36.1
-	k8s.io/client-go v0.36.1
-	k8s.io/kube-aggregator v0.36.1
-	k8s.io/mount-utils v0.36.1
+	k8s.io/api v0.36.2
+	k8s.io/apimachinery v0.36.2
+	k8s.io/client-go v0.36.2
+	k8s.io/kube-aggregator v0.36.2
+	k8s.io/mount-utils v0.36.2
 	sigs.k8s.io/controller-runtime v0.24.1
 )
 
