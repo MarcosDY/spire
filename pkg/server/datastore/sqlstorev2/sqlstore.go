@@ -154,6 +154,17 @@ func (ds *Plugin) openConnection(ctx context.Context, config *sqlcommon.Configur
 		supportsCTE:      supportsCTE,
 	}
 
+	// Run migrations on the read-write connection only. The read-only
+	// connection points at the same schema and must not attempt DDL.
+	if !isReadOnly {
+		if err := migrateDB(newDB.DB, config.DBTypeConfig.DatabaseType, config.DisableMigration, ds.log); err != nil {
+			if newDB.raw != nil {
+				newDB.raw.Close()
+			}
+			return err
+		}
+	}
+
 	// Close the prior handle if reconfiguring.
 	if current != nil && current.raw != nil {
 		current.raw.Close()
@@ -193,7 +204,10 @@ func gormConfig(cfg *sqlcommon.Configuration, log logrus.FieldLogger) *gorm.Conf
 	if cfg.LogSQL {
 		lg = newLogrusGormLogger(log.WithField(telemetry.SubsystemName, "gorm"))
 	}
-	return &gorm.Config{Logger: lg}
+	return &gorm.Config{
+		Logger:                                   lg,
+		DisableForeignKeyConstraintWhenMigrating: true,
+	}
 }
 
 // queryVersion runs the dialect version query on the raw *sql.DB.
