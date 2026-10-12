@@ -48,6 +48,13 @@ test-mysql() {
 
     log-info "running tests against ${SERVICE}..."
     ./mysql.test || fail-now "tests failed"
+    # -test.v output is checked because the tests skip, rather than fail,
+    # when the linker flags that point them at the database are missing.
+    ./mysql-v2.test -test.run ExternalDB -test.v | tee mysql-v2.out
+    [ "${PIPESTATUS[0]}" -eq 0 ] || fail-now "gorm v2 tests failed"
+    if grep -q -- "--- SKIP" mysql-v2.out || ! grep -q -- "--- PASS" mysql-v2.out; then
+        fail-now "gorm v2 external database tests did not run"
+    fi
     docker-stop "${SERVICE}"
 }
 

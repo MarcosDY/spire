@@ -10,6 +10,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// The following are set by the linker during integration tests to run the
+// external-database tests against various SQL backends.
+var (
+	TestDialect    string
+	TestConnString string
+)
+
 func TestNewAndClose(t *testing.T) {
 	log, _ := test.NewNullLogger()
 	ds := New(log)
