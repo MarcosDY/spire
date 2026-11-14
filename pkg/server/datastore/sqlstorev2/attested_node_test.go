@@ -72,6 +72,7 @@ func TestNodeQueriesMatchV1(t *testing.T) {
 		"exact_case": {sel("common", "x"), sel("g", "0"), sel("r", "0"), sel("case", "Mixed")},
 		"duplicates": {sel("g", "1"), sel("g", "1"), sel("common", "x")},
 		"no_match":   {sel("case", "MIXED")},
+		"both_cases": {sel("common", "x"), sel("case", "Mixed"), sel("case", "mixed")},
 	}
 	matches := []datastore.MatchBehavior{datastore.MatchAny, datastore.Superset, datastore.Subset, datastore.Exact}
 
@@ -222,10 +223,12 @@ func TestJoinTokenAttestedNodesAreNotDeleted(t *testing.T) {
 	ctx := context.Background()
 	joinToken := &common.AttestedNode{SpiffeId: "spiffe://example.org/spire/agent/join_token/x", AttestationDataType: "join_token", CertSerialNumber: "1", CertNotAfter: 1}
 	other := &common.AttestedNode{SpiffeId: "spiffe://example.org/spire/agent/x509pop/x", AttestationDataType: "x509pop", CertSerialNumber: "1", CertNotAfter: 1}
-	for _, node := range []*common.AttestedNode{joinToken, other} {
+	untyped := &common.AttestedNode{SpiffeId: "spiffe://example.org/spire/agent/untyped/x", CertSerialNumber: "1", CertNotAfter: 1}
+	for _, node := range []*common.AttestedNode{joinToken, other, untyped} {
 		_, err := ds.CreateAttestedNode(ctx, node)
 		require.NoError(t, err)
 	}
+	require.NoError(t, ds.RawExec("UPDATE attested_node_entries SET data_type = NULL WHERE spiffe_id = '"+untyped.SpiffeId+"'"))
 
 	_, err := ds.DeleteAttestedNode(ctx, joinToken.SpiffeId)
 	spiretest.RequireGRPCStatus(t, err, codes.Unimplemented, "datastore-sql: deleting join token attested nodes is not implemented")
@@ -238,7 +241,7 @@ func TestJoinTokenAttestedNodesAreNotDeleted(t *testing.T) {
 
 	events, err := ds.ListAttestedNodeEvents(ctx, &datastore.ListAttestedNodeEventsRequest{})
 	require.NoError(t, err)
-	require.Equal(t, []string{joinToken.SpiffeId, other.SpiffeId, other.SpiffeId}, eventSpiffeIDs(events), "no event for the refused delete")
+	require.ElementsMatch(t, []string{joinToken.SpiffeId, other.SpiffeId, untyped.SpiffeId, other.SpiffeId, untyped.SpiffeId}, eventSpiffeIDs(events), "no event for the refused delete")
 }
 
 func TestTolerateStaleReadsUseReadOnlyConnection(t *testing.T) {
@@ -287,9 +290,20 @@ func TestNodeReadsNullColumns(t *testing.T) {
 	node := &common.AttestedNode{SpiffeId: "spiffe://example.org/node", AttestationDataType: "t", CertSerialNumber: "1", CertNotAfter: 1, CanReattest: true, AgentVersion: "1.0.0"}
 	_, err := ds.CreateAttestedNode(ctx, node)
 	require.NoError(t, err)
-	require.NoError(t, ds.RawExec("UPDATE attested_node_entries SET can_reattest = NULL, agent_version = NULL, new_serial_number = NULL"))
+	require.NoError(t, ds.SetNodeSelectors(ctx, node.SpiffeId, []*common.Selector{{Type: "a", Value: "1"}}))
+	require.NoError(t, ds.RawExec("UPDATE attested_node_entries SET can_reattest = NULL, agent_version = NULL, new_serial_number = NULL, expires_at = NULL"))
+	require.NoError(t, ds.RawExec("UPDATE node_resolver_map_entries SET type = NULL, value = NULL"))
 
-	expected := &common.AttestedNode{SpiffeId: node.SpiffeId, AttestationDataType: "t", CertSerialNumber: "1", CertNotAfter: 1}
+	selectors, err := ds.GetNodeSelectors(ctx, node.SpiffeId, datastore.RequireCurrent)
+	require.NoError(t, err)
+	spiretest.AssertProtoListEqual(t, []*common.Selector{{}}, selectors)
+	listed, err := ds.ListNodeSelectors(ctx, &datastore.ListNodeSelectorsRequest{})
+	require.NoError(t, err)
+	spiretest.AssertProtoListEqual(t, []*common.Selector{{}}, listed.Selectors[node.SpiffeId])
+
+	// CertNotAfter is 0 for a NULL expires_at, and a selector with a NULL type
+	// is left out, as in v1.
+	expected := &common.AttestedNode{SpiffeId: node.SpiffeId, AttestationDataType: "t", CertSerialNumber: "1"}
 	for _, fetchSelectors := range []bool{false, true} {
 		resp, err := ds.ListAttestedNodes(ctx, &datastore.ListAttestedNodesRequest{FetchSelectors: fetchSelectors})
 		require.NoError(t, err)

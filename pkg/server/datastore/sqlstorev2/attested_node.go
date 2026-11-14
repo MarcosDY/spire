@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -180,11 +181,11 @@ func (ds *Plugin) GetNodeSelectors(ctx context.Context, spiffeID string, dataCon
 		}
 		defer rows.Close()
 		for rows.Next() {
-			s := new(common.Selector)
-			if err := rows.Scan(&s.Type, &s.Value); err != nil {
+			var selectorType, value sql.NullString
+			if err := rows.Scan(&selectorType, &value); err != nil {
 				return sqlcommon.NewWrappedSQLError(err)
 			}
-			selectors = append(selectors, s)
+			selectors = append(selectors, &common.Selector{Type: selectorType.String, Value: value.String})
 		}
 		return sqlcommon.NewWrappedSQLError(rows.Err())
 	}); err != nil {
@@ -211,11 +212,11 @@ func (ds *Plugin) ListNodeSelectors(ctx context.Context, req *datastore.ListNode
 		defer rows.Close()
 		for rows.Next() {
 			var id string
-			s := new(common.Selector)
-			if err := rows.Scan(&id, &s.Type, &s.Value); err != nil {
+			var selectorType, value sql.NullString
+			if err := rows.Scan(&id, &selectorType, &value); err != nil {
 				return sqlcommon.NewWrappedSQLError(err)
 			}
-			resp.Selectors[id] = append(resp.Selectors[id], s)
+			resp.Selectors[id] = append(resp.Selectors[id], &common.Selector{Type: selectorType.String, Value: value.String})
 		}
 		return sqlcommon.NewWrappedSQLError(rows.Err())
 	}); err != nil {
@@ -309,6 +310,16 @@ func filterNodesBySelectors(query *gorm.DB, dbType string, by *datastore.BySelec
 	}
 	matching := selectorRows(inSet)
 	hasAll := selectorRows(inSet).Group("spiffe_id").Having("COUNT(*) = ?", len(selectors))
+	if sqlcommon.IsMySQLDbType(dbType) {
+		// MySQL collations ignore case, so one row can match two requested
+		// selectors; each one is checked on its own instead.
+		matchedEach := make([]string, len(selectors))
+		for i := range selectors {
+			matchedEach[i] = "MAX(CASE WHEN type = ? AND value = ? THEN 1 ELSE 0 END)"
+		}
+		hasAll = selectorRows(inSet).Group("spiffe_id").
+			Having(strings.Join(matchedEach, " + ")+" = ?", append(slices.Clone(args), len(selectors))...)
+	}
 	// NOT EXISTS rather than NOT IN: PostgreSQL rescans a NOT IN subquery per
 	// row once its result outgrows work_mem.
 	outside := query.Session(&gorm.Session{NewDB: true}).Table("node_resolver_map_entries AS o").Select("1").
@@ -585,7 +596,7 @@ func pruneAttestedExpiredNodes(tx *gorm.DB, expiredBefore time.Time, includeNonR
 
 	// TODO: prune join token attested nodes once their deletion is implemented;
 	// skipping them keeps one from failing every batch.
-	query := tx.Where("expires_at < ?", expiredBefore).Where("serial_number <> ''").Where("data_type <> ?", "join_token")
+	query := tx.Where("expires_at < ?", expiredBefore).Where("serial_number <> ''").Where("(data_type IS NULL OR data_type <> ?)", "join_token")
 	if !includeNonReattestable {
 		query = query.Where("can_reattest = ?", true)
 	}
@@ -689,7 +700,7 @@ func modelToAttestedNode(model AttestedNode) *common.AttestedNode {
 		SpiffeId:            model.SpiffeID,
 		AttestationDataType: model.DataType,
 		CertSerialNumber:    model.SerialNumber,
-		CertNotAfter:        model.ExpiresAt.Unix(),
+		CertNotAfter:        nullableDBTimeToUnixTime(&model.ExpiresAt),
 		NewCertSerialNumber: model.NewSerialNumber,
 		NewCertNotAfter:     nullableDBTimeToUnixTime(model.NewExpiresAt),
 		CanReattest:         model.CanReattest,
@@ -705,8 +716,9 @@ func nullableUnixTimeToDBTime(unixTime int64) *time.Time {
 	return &t
 }
 
+// nullableDBTimeToUnixTime returns 0 for a NULL or zero time, as v1 does.
 func nullableDBTimeToUnixTime(t *time.Time) int64 {
-	if t == nil {
+	if t == nil || t.IsZero() {
 		return 0
 	}
 	return t.Unix()

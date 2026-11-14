@@ -178,13 +178,14 @@ func BenchmarkAttestedNodes(b *testing.B) {
 }
 
 // seedBenchNodes fills the node tables with n nodes, each with the selectors
-// common:x, g10:<i%10>, g100:<i%100> and region:<i%3>. A database already
-// holding n nodes is reused.
+// common:x, g10:<i%10>, g100:<i%100> and region:<i%3>; odd nodes are valid. A
+// database already seeded that way is reused.
 func seedBenchNodes(b *testing.B, ds *Plugin, n int) {
 	db := ds.db.DB
-	var have int64
+	var have, valid int64
 	require.NoError(b, db.Model(&AttestedNode{}).Count(&have).Error)
-	if have == int64(n) {
+	require.NoError(b, db.Model(&AttestedNode{}).Where("expires_at > ?", time.Now()).Count(&valid).Error)
+	if have == int64(n) && valid == int64(n/2) {
 		return
 	}
 	require.NoError(b, db.Where("1 = 1").Delete(&NodeSelector{}).Error)
@@ -197,7 +198,7 @@ func seedBenchNodes(b *testing.B, ds *Plugin, n int) {
 		selectors := make([]NodeSelector, 0, 4*batch)
 		for i := start; i < min(start+batch, n); i++ {
 			id := benchNodeID(i)
-			expires := now.Add(time.Hour)
+			expires := now.AddDate(10, 0, 0)
 			if i%2 == 0 {
 				expires = now.Add(-time.Hour)
 			}
