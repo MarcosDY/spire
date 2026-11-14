@@ -212,6 +212,7 @@ func TestWithDescribeExecMode(t *testing.T) {
 		{"postgresql://u@h/db", "postgresql://u@h/db?default_query_exec_mode=cache_describe"},
 		{"host=h dbname=db", "host=h dbname=db default_query_exec_mode=cache_describe"},
 		{"host=h default_query_exec_mode=exec", "host=h default_query_exec_mode=exec"},
+		{"postgres://u@h:bad/db", "postgres://u@h:bad/db"},
 	} {
 		require.Equal(t, tt.expected, withDescribeExecMode(tt.dsn), tt.dsn)
 	}

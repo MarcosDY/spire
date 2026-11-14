@@ -72,7 +72,11 @@ func withDescribeExecMode(dsn string) string {
 	if strings.Contains(dsn, "default_query_exec_mode") {
 		return dsn
 	}
-	if u, err := url.Parse(dsn); err == nil && (u.Scheme == "postgres" || u.Scheme == "postgresql") {
+	if strings.HasPrefix(dsn, "postgres://") || strings.HasPrefix(dsn, "postgresql://") {
+		u, err := url.Parse(dsn)
+		if err != nil {
+			return dsn
+		}
 		q := u.Query()
 		q.Set("default_query_exec_mode", "cache_describe")
 		u.RawQuery = q.Encode()

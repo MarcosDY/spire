@@ -20,8 +20,6 @@ import (
 	"gorm.io/gorm"
 )
 
-// defaultPruneAttestedNodesBatchSize is the number of expired attested nodes
-// pruned per call when the caller does not set a batch size.
 const defaultPruneAttestedNodesBatchSize = 1000
 
 // attestedNodeColumns are the columns a listed node is built from, in the
@@ -45,8 +43,7 @@ func (ds *Plugin) CreateAttestedNode(ctx context.Context, node *common.AttestedN
 	return attestedNode, nil
 }
 
-// FetchAttestedNode fetches an existing attested node by SPIFFE ID. If the
-// node is not found, nil is returned.
+// FetchAttestedNode returns nil if the node does not exist.
 func (ds *Plugin) FetchAttestedNode(ctx context.Context, spiffeID string) (attestedNode *common.AttestedNode, err error) {
 	if err = ds.withReadTx(ctx, func(tx *gorm.DB) (err error) {
 		attestedNode, err = fetchAttestedNode(tx, spiffeID)
@@ -95,7 +92,9 @@ func (ds *Plugin) UpdateAttestedNode(ctx context.Context, n *common.AttestedNode
 	return node, nil
 }
 
-// DeleteAttestedNode deletes the given attested node and its selectors.
+// DeleteAttestedNode deletes the given attested node and its selectors. Join
+// token nodes are refused with Unimplemented until their alias entries can be
+// deleted too.
 func (ds *Plugin) DeleteAttestedNode(ctx context.Context, spiffeID string) (attestedNode *common.AttestedNode, err error) {
 	if err = ds.withWriteTx(ctx, func(tx *gorm.DB) (err error) {
 		attestedNode, err = deleteAttestedNodeAndSelectors(tx, spiffeID)
@@ -111,14 +110,14 @@ func (ds *Plugin) DeleteAttestedNode(ctx context.Context, spiffeID string) (atte
 
 // PruneAttestedExpiredNodes deletes up to batchSize (default if non-positive)
 // nodes that expired before expiredBefore, keeping banned nodes and, unless
-// includeNonReattestable is set, non-reattestable ones.
+// includeNonReattestable is set, non-reattestable ones. Join token nodes are
+// skipped, as DeleteAttestedNode refuses them.
 func (ds *Plugin) PruneAttestedExpiredNodes(ctx context.Context, expiredBefore time.Time, includeNonReattestable bool, batchSize int) error {
 	return ds.withWriteTx(ctx, func(tx *gorm.DB) error {
 		return pruneAttestedExpiredNodes(tx, expiredBefore, includeNonReattestable, batchSize, ds.log)
 	})
 }
 
-// ListAttestedNodeEvents lists attested node events in ID order.
 func (ds *Plugin) ListAttestedNodeEvents(ctx context.Context, req *datastore.ListAttestedNodeEventsRequest) (resp *datastore.ListAttestedNodeEventsResponse, err error) {
 	if req.GreaterThanEventID != 0 && req.LessThanEventID != 0 {
 		return nil, sqlcommon.NewSQLError("can't set both greater and less than event id")
@@ -132,7 +131,6 @@ func (ds *Plugin) ListAttestedNodeEvents(ctx context.Context, req *datastore.Lis
 	return resp, nil
 }
 
-// PruneAttestedNodeEvents deletes attested node events older than olderThan.
 func (ds *Plugin) PruneAttestedNodeEvents(ctx context.Context, olderThan time.Duration) error {
 	return ds.withWriteTx(ctx, func(tx *gorm.DB) error {
 		return pruneAttestedNodeEvents(tx, olderThan)
@@ -161,7 +159,6 @@ func (ds *Plugin) FetchAttestedNodeEvent(ctx context.Context, eventID uint) (eve
 	return event, nil
 }
 
-// SetNodeSelectors replaces the selectors of the node with the given SPIFFE ID.
 func (ds *Plugin) SetNodeSelectors(ctx context.Context, spiffeID string, selectors []*common.Selector) error {
 	return ds.withWriteTx(ctx, func(tx *gorm.DB) error {
 		if err := setNodeSelectors(tx, spiffeID, selectors); err != nil {
@@ -509,8 +506,8 @@ func listAttestedNodes(tx *gorm.DB, dbType string, req *datastore.ListAttestedNo
 }
 
 // scanAttestedNode scans a row whose leading columns are attestedNodeColumns
-// into a model, and any further columns into extra. Every column but id and
-// spiffe_id is nullable.
+// into a model, and any further columns into extra. Columns other than id and
+// spiffe_id may be NULL.
 func scanAttestedNode(rows *sql.Rows, extra ...any) (AttestedNode, error) {
 	var (
 		m                                         AttestedNode
@@ -594,30 +591,38 @@ func pruneAttestedExpiredNodes(tx *gorm.DB, expiredBefore time.Time, includeNonR
 		batchSize = defaultPruneAttestedNodesBatchSize
 	}
 
+	expiredNodes := func() *gorm.DB {
+		query := tx.Model(&AttestedNode{}).Where("expires_at < ?", expiredBefore).Where("serial_number <> ''")
+		if !includeNonReattestable {
+			query = query.Where("can_reattest = ?", true)
+		}
+		return query
+	}
+
 	// TODO: prune join token attested nodes once their deletion is implemented;
 	// skipping them keeps one from failing every batch.
-	query := tx.Where("expires_at < ?", expiredBefore).Where("serial_number <> ''").Where("(data_type IS NULL OR data_type <> ?)", "join_token")
-	if !includeNonReattestable {
-		query = query.Where("can_reattest = ?", true)
+	var skipped int64
+	if err := expiredNodes().Where("data_type = ?", "join_token").Count(&skipped).Error; err != nil {
+		return sqlcommon.NewWrappedSQLError(err)
+	}
+	if skipped > 0 {
+		log.WithField("count", skipped).Warn("Skipped pruning expired join token agents: not implemented")
 	}
 
 	var expired []AttestedNode
-	if err := query.Limit(batchSize).Find(&expired).Error; err != nil {
+	if err := expiredNodes().Where("(data_type IS NULL OR data_type <> ?)", "join_token").Limit(batchSize).Find(&expired).Error; err != nil {
 		return sqlcommon.NewWrappedSQLError(err)
 	}
-
-	var count int
-	defer func() { log.WithField("count", count).Info("Pruned expired agents") }()
 
 	for _, node := range expired {
 		if _, err := deleteAttestedNodeAndSelectors(tx, node.SpiffeID); err != nil {
 			return err
 		}
-		count++
 		if err := createAttestedNodeEvent(tx, &datastore.AttestedNodeEvent{SpiffeID: node.SpiffeID}); err != nil {
 			return err
 		}
 	}
+	log.WithField("count", len(expired)).Info("Pruned expired agents")
 	return nil
 }
 
@@ -716,7 +721,6 @@ func nullableUnixTimeToDBTime(unixTime int64) *time.Time {
 	return &t
 }
 
-// nullableDBTimeToUnixTime returns 0 for a NULL or zero time, as v1 does.
 func nullableDBTimeToUnixTime(t *time.Time) int64 {
 	if t == nil || t.IsZero() {
 		return 0

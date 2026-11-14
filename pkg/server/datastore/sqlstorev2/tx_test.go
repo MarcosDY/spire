@@ -20,13 +20,7 @@ import (
 )
 
 func newTxTestPlugin(t *testing.T) *Plugin {
-	dbPath := sqlitePath(t)
-	ds := newSQLitePlugin(t)
-	require.NoError(t, ds.Configure(context.Background(), fmt.Sprintf(`
-		database_type = "sqlite3"
-		connection_string = "%s"
-	`, dbPath)))
-	return ds
+	return newNodeTestPlugin(t)
 }
 
 func TestWithReadTxRollsBack(t *testing.T) {

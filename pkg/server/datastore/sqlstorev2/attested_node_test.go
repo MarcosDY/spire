@@ -17,6 +17,7 @@ import (
 	"github.com/spiffe/spire/test/spiretest"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 func TestNodeQueriesMatchV1(t *testing.T) {
@@ -88,6 +89,22 @@ func TestNodeQueriesMatchV1(t *testing.T) {
 	anyG1, err := dsV2.CountAttestedNodes(ctx, &datastore.CountAttestedNodesRequest{BySelectorMatch: &datastore.BySelectors{Match: datastore.MatchAny, Selectors: selectorSets["one"]}})
 	require.NoError(t, err)
 	require.EqualValues(t, 20, anyG1)
+	supersetIDs := func(set string) []string {
+		nodes, err := listAllNodes(ctx, dsV2, &datastore.ListAttestedNodesRequest{BySelectorMatch: &datastore.BySelectors{Match: datastore.Superset, Selectors: selectorSets[set]}})
+		require.NoError(t, err)
+		return nodeIDs(nodes)
+	}
+	var g1, bothCases []string
+	for i := 1; i < 60; i += 3 {
+		g1 = append(g1, ids[i])
+	}
+	if TestDialect == "mysql" { // MySQL collations ignore case.
+		for i := 0; i < 60; i += 5 {
+			bothCases = append(bothCases, ids[i])
+		}
+	}
+	require.Equal(t, g1, supersetIDs("duplicates"))
+	require.ElementsMatch(t, bothCases, supersetIDs("both_cases"))
 
 	banned, unbanned, reattest := true, false, true
 	filters := map[string]datastore.ListAttestedNodesRequest{
@@ -147,6 +164,56 @@ func TestNodeQueriesMatchV1(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestSubsetAndExactPagesHoldMatchesOnly(t *testing.T) {
+	ds := newNodeTestPlugin(t)
+	ctx := context.Background()
+	var matching []string
+	for i := range 8 {
+		id := fmt.Sprintf("spiffe://example.org/node/%d", i)
+		_, err := ds.CreateAttestedNode(ctx, &common.AttestedNode{SpiffeId: id, CertNotAfter: 1})
+		require.NoError(t, err)
+		selectors := []*common.Selector{{Type: "a", Value: "1"}}
+		if i%3 == 0 || i == 4 {
+			matching = append(matching, id)
+		} else {
+			selectors = append(selectors, &common.Selector{Type: "b", Value: "1"})
+		}
+		require.NoError(t, ds.SetNodeSelectors(ctx, id, selectors))
+	}
+
+	for _, match := range []datastore.MatchBehavior{datastore.Subset, datastore.Exact} {
+		req := &datastore.ListAttestedNodesRequest{
+			Pagination:      &datastore.Pagination{PageSize: 2},
+			BySelectorMatch: &datastore.BySelectors{Match: match, Selectors: []*common.Selector{{Type: "a", Value: "1"}}},
+		}
+		var pages [][]string
+		for {
+			resp, err := ds.ListAttestedNodes(ctx, req)
+			require.NoError(t, err)
+			if len(resp.Nodes) == 0 {
+				break
+			}
+			pages = append(pages, nodeIDs(resp.Nodes))
+			req.Pagination = resp.Pagination
+		}
+		require.Equal(t, [][]string{matching[:2], matching[2:]}, pages, "match %d", match)
+	}
+}
+
+func TestCreateDuplicateAttestedNode(t *testing.T) {
+	ds := newNodeTestPlugin(t)
+	ctx := context.Background()
+	node := &common.AttestedNode{SpiffeId: "spiffe://example.org/node", CertNotAfter: 1}
+	_, err := ds.CreateAttestedNode(ctx, node)
+	require.NoError(t, err)
+	_, err = ds.CreateAttestedNode(ctx, node)
+	require.Equal(t, codes.AlreadyExists, status.Code(err), err)
+
+	events, err := ds.ListAttestedNodeEvents(ctx, &datastore.ListAttestedNodeEventsRequest{})
+	require.NoError(t, err)
+	require.Equal(t, []string{node.SpiffeId}, eventSpiffeIDs(events))
 }
 
 func TestListAttestedNodesValidation(t *testing.T) {

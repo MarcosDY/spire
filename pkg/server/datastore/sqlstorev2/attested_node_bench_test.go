@@ -108,8 +108,7 @@ func BenchmarkAttestedNodes(b *testing.B) {
 
 	for _, l := range lists {
 		// Both implementations must return the same nodes before their speed
-		// is compared. Pages can differ: v1 fills a page before dropping
-		// Subset and Exact misses, v2 fills it with matches only.
+		// is compared.
 		if verify {
 			r1, err := listAllNodes(ctx, dsV1, l.req())
 			require.NoError(b, err)

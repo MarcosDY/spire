@@ -103,7 +103,7 @@ func (ds *Plugin) withTx(ctx context.Context, op func(tx *gorm.DB) error, readOn
 
 	tx := db.WithContext(ctx).Begin()
 	if err := tx.Error; err != nil {
-		return sqlcommon.NewWrappedSQLError(err)
+		return gormToGRPCStatus(db.dialect, sqlcommon.NewWrappedSQLError(err))
 	}
 
 	defer func() {
@@ -129,7 +129,10 @@ func (ds *Plugin) withTx(ctx context.Context, op func(tx *gorm.DB) error, readOn
 		// writes won't be committed.
 		return sqlcommon.NewWrappedSQLError(tx.Rollback().Error)
 	}
-	return sqlcommon.NewWrappedSQLError(tx.Commit().Error)
+	if err := tx.Commit().Error; err != nil {
+		return gormToGRPCStatus(db.dialect, sqlcommon.NewWrappedSQLError(err))
+	}
+	return nil
 }
 
 // gormToGRPCStatus takes an error, and converts it to a GRPC error. If the
