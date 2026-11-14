@@ -163,3 +163,18 @@ func TestLockForUpdate(t *testing.T) {
 		})
 	}
 }
+
+func TestWithTxRollsBackOnPanic(t *testing.T) {
+	ds := newTxTestPlugin(t)
+	require.PanicsWithValue(t, "boom", func() {
+		_ = ds.withWriteTx(context.Background(), func(tx *gorm.DB) error {
+			require.NoError(t, tx.Create(&JoinToken{Token: "t", Expiry: 1}).Error)
+			panic("boom")
+		})
+	})
+	// An open transaction would keep its connection checked out.
+	require.Zero(t, ds.db.raw.Stats().InUse)
+	var count int
+	require.NoError(t, ds.RawScan(&count, "SELECT COUNT(*) FROM join_tokens"))
+	require.Zero(t, count)
+}

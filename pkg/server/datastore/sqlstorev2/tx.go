@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/spiffe/spire/pkg/server/datastore"
 	"github.com/spiffe/spire/pkg/server/datastore/sqlcommon"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -65,6 +66,25 @@ func (ds *Plugin) withReadTx(ctx context.Context, op func(tx *gorm.DB) error) er
 	return ds.withTx(ctx, op, true, false)
 }
 
+// withReadDB runs op, which must issue a single read statement, outside a
+// transaction to save the BEGIN and ROLLBACK round-trips. Stale reads use the
+// read-only connection when one is configured.
+func (ds *Plugin) withReadDB(ctx context.Context, consistency datastore.DataConsistency, op func(db *gorm.DB) error) error {
+	ds.mu.Lock()
+	db := ds.db
+	if consistency == datastore.TolerateStale && ds.roDb != nil {
+		db = ds.roDb
+	}
+	ds.mu.Unlock()
+	if db == nil {
+		return sqlcommon.NewSQLError("datastore is not configured")
+	}
+	if err := op(db.WithContext(ctx)); err != nil {
+		return gormToGRPCStatus(db.dialect, err)
+	}
+	return nil
+}
+
 func (ds *Plugin) withTx(ctx context.Context, op func(tx *gorm.DB) error, readOnly, lockRows bool) error {
 	ds.mu.Lock()
 	db := ds.db
@@ -85,6 +105,13 @@ func (ds *Plugin) withTx(ctx context.Context, op func(tx *gorm.DB) error, readOn
 	if err := tx.Error; err != nil {
 		return sqlcommon.NewWrappedSQLError(err)
 	}
+
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+			panic(r)
+		}
+	}()
 
 	opTx := tx
 	if lockRows {
